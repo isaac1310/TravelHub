@@ -17,9 +17,11 @@ Open `index.html` in a browser — no build step. Data is saved in
   modal supporting flight / hotel / attraction / transport / other, with dates,
   times, location, and confirmation number. Edit/delete on each card.
 - **Itinerary → Maps** — Leaflet + OpenStreetMap view with lettered pins per
-  day (day chips 16 | 17 | … | All). Locations you type are geocoded via
-  Nominatim on save. Every stop also has an "open in Google Maps" link, which
-  doubles as the fallback when the map library or coordinates are unavailable.
+  day (day chips 16 | 17 | … | All). Locations autocomplete via **Photon**
+  (OpenStreetMap) and are geocoded on save; you can also paste a Google Maps
+  link or `lat, lng` (decimal or DMS) to set an exact pin. Every stop has an
+  "open in Google Maps" link, which doubles as the fallback when the map
+  library or coordinates are unavailable. Flights are not pinned on the map.
 - **Budget** — funds, per-trip budgets, expenses, rollovers, JSON export/import.
 - **Sharing (optional)** — with Supabase configured, the Share button creates a
   link (`?room=…&key=…`). Anyone with the link sees and edits the same data,
@@ -31,11 +33,20 @@ Open `index.html` in a browser — no build step. Data is saved in
 2. In the project's **SQL Editor**, paste and run `supabase-schema.sql`.
 3. Put the **Project URL** and **publishable (anon public) key** from Project
    Settings → API into `config.js` (see `config.example.js` for the shape).
-4. Reload the app — a Share button appears in the top bar.
+4. Reload the app — a **Save** button appears in the top bar.
 
-The publishable key is safe to expose in client code; trip data is protected
-by the per-trip secret embedded in each share link. Without `config.js` the
-app is fully local — no errors, no Share button.
+`config.js` **is committed** in this repo on purpose: the hosted app on GitHub
+Pages needs it to enable Save/sharing, and the publishable key is safe to
+expose in client code. Trip data is protected by the per-trip secret embedded
+in each share link. Without `config.js` the app is fully local — no errors, no
+Save button.
+
+**How Save works:** click **Save** once to store the trip in Supabase (a
+`?room&key` link is copied to your clipboard); after that, edits sync
+automatically (~20s poll + on-change). Open the link on another device to view
+and edit the same trip. Concurrent edits are **last-write-wins** — two people
+editing the same field within a sync window can overwrite each other; large
+documents also make each sync heavier, so keep attachments small.
 
 ## Hosting
 
