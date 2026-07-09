@@ -474,8 +474,10 @@ h1, h2, h3, h4, .brand__name {
 .checklist li svg { width: 18px; height: 18px; color: var(--brand-hover); }
 .checklist label { flex: 1; cursor: pointer; }
 .checklist .done { text-decoration: line-through; color: var(--muted); }
-.checklist__add { display: flex; gap: 0.5rem; }
-.checklist__add input { flex: 1; }
+.checklist__add { display: flex; gap: 0.5rem; align-items: center; }
+.checklist__add input[type="text"] { flex: 1; }
+.shared-list__doc { display: inline-flex; width: 20px; color: var(--muted); }
+.shared-list__doc svg { width: 20px; height: 20px; }
 
 /* ============================================================
    8. BUDGET SCREEN  (re-skinned — original class names preserved)
@@ -1115,7 +1117,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.0.3";
+const APP_VERSION = "v1.0.4";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];
@@ -3166,13 +3168,7 @@ function renderFamily() {
     })
     .join("");
 
-  const checklistItems = state.checklist.length
-    ? state.checklist
-        .map(
-          (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete item" title="Delete"><svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>`
-        )
-        .join("")
-    : `<li class="empty-state">No items yet — add the first one below.</li>`;
+  const listRows = sharedListRowsHtml();
 
   body.innerHTML = `
     <div class="section-head"><div><h2>Who's travelling</h2><p>Your family members and the trips they're on.</p></div></div>
@@ -3181,25 +3177,18 @@ function renderFamily() {
     <div class="section-head"><h2>Trips by travellers</h2></div>
     ${tripRows}
 
-    <div class="section-head" style="margin-top:1.6rem"><div><h2>Shared checklist</h2><p>A packing & to-do list everyone can see.</p></div></div>
+    <div class="section-head" style="margin-top:1.6rem"><div><h2>Shared checklist</h2><p>Notes and documents everyone can see. Attach tickets & confirmations (PDF or images, max ${DOC_MAX_MB} MB) — but avoid passports or IDs, shared trips share these too.</p></div></div>
     <div class="card" style="padding:1.1rem 1.3rem">
-      <ul class="checklist" id="family-checklist">${checklistItems}</ul>
+      <ul class="checklist" id="shared-list">${listRows}</ul>
       <div class="checklist__add">
-        <input type="text" id="checklist-input" placeholder="Add an item (e.g. Passports)" maxlength="80" />
-        <button type="button" class="btn btn--primary" id="checklist-add">Add</button>
-      </div>
-    </div>
-
-    <div class="section-head" style="margin-top:1.6rem"><div><h2>Documents</h2><p>Tickets & confirmations (PDF or images, max ${DOC_MAX_MB} MB each). Shared trips share these too — avoid passports or IDs.</p></div></div>
-    <div class="card" style="padding:1.1rem 1.3rem">
-      ${documentListHtml()}
-      <div class="checklist__add">
-        <label class="btn btn--outline" style="cursor:pointer">
-          Upload document
+        <input type="text" id="checklist-input" placeholder="Add a note (e.g. Passports)" maxlength="80" />
+        <label class="btn btn--outline" style="cursor:pointer;white-space:nowrap" title="Attach a document">
+          📎 Attach
           <input type="file" id="family-doc-upload" accept="application/pdf,image/*" multiple hidden />
         </label>
-        <span class="act__sub" style="align-self:center">${docsUsageLabel()}</span>
+        <button type="button" class="btn btn--primary" id="checklist-add">Add</button>
       </div>
+      ${docsUsageLabel() ? `<p class="act__sub" style="margin:0.6rem 0 0">${docsUsageLabel()}</p>` : ""}
     </div>`;
 
   const input = $("checklist-input");
@@ -3213,23 +3202,41 @@ function renderFamily() {
   $("checklist-add").addEventListener("click", addItem);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
   input.focus();
-  body.querySelectorAll("[data-chk]").forEach((cb) =>
+  bindSharedListActions(body, renderFamily);
+  $("family-doc-upload").addEventListener("change", (e) => addDocumentFiles(e.target, renderFamily));
+}
+
+/* ---------- Unified shared list: notes + documents in one list ---------- */
+const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function sharedListRowsHtml() {
+  const noteRows = state.checklist.map(
+    (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete note" title="Delete">${TRASH_ICON}</button></li>`
+  );
+  const docRows = state.documents.map(
+    (d) => `<li><span class="shared-list__doc">${ICONS.doc}</span><label style="flex:1">${escapeHtml(d.name)} <span style="color:var(--muted);font-size:0.78rem">${Math.max(1, Math.round(d.size / 1024))} KB</span></label><a class="btn btn--small btn--ghost" href="${d.dataUrl}" download="${escapeHtml(d.name)}">Download</a><button type="button" class="icon-btn icon-btn--small" data-doc-del="${escapeHtml(d.id)}" aria-label="Delete document" title="Delete">${TRASH_ICON}</button></li>`
+  );
+  const rows = [...noteRows, ...docRows];
+  return rows.length ? rows.join("") : `<li class="empty-state">Nothing yet — add a note or attach a document below.</li>`;
+}
+
+function bindSharedListActions(scope, rerender) {
+  scope.querySelectorAll("[data-chk]").forEach((cb) =>
     cb.addEventListener("change", () => {
       const item = state.checklist.find((c) => c.id === cb.getAttribute("data-chk"));
       if (item) item.done = cb.checked;
       saveState();
-      renderFamily();
+      rerender();
     })
   );
-  body.querySelectorAll("[data-chk-del]").forEach((btn) =>
+  scope.querySelectorAll("[data-chk-del]").forEach((btn) =>
     btn.addEventListener("click", () => {
       state.checklist = state.checklist.filter((c) => c.id !== btn.getAttribute("data-chk-del"));
       saveState();
-      renderFamily();
+      rerender();
     })
   );
-  $("family-doc-upload").addEventListener("change", (e) => addDocumentFiles(e.target, renderFamily));
-  bindDocumentActions(body, renderFamily);
+  bindDocumentActions(scope, rerender);
 }
 
 /* ---------- Shared documents store (Family + Bookings) ---------- */
