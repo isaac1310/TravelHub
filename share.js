@@ -4,11 +4,16 @@
 
    Share model: the link is the password. Creating a share uploads the
    whole state to a "room" (row) in Supabase; the URL gains ?room=<id>&key=<secret>.
-   Anyone opening that link sees and edits the same data (last write wins,
-   pulled every 20s). */
+   Anyone opening that link sees and edits the same data (last write wins).
+
+   Sync model (notify-first): local edits push automatically (600ms debounce).
+   Incoming changes are only DETECTED by a 5-minute check — the user is
+   notified (dot on the Sync button + toast) and changes apply when they tap
+   Sync. Every save is stamped with lastEditedBy/lastEditedAt. */
 (function () {
-  const POLL_MS = 20000;
+  const CHECK_MS = 60 * 1000; // background poll; also check on load + tab focus
   const SAVE_DEBOUNCE_MS = 600;
+  let checkTimer = null;
 
   let supabase = null;
   let roomId = null;
@@ -19,6 +24,9 @@
   let saveInFlight = false;
   let pendingSave = false;
   let applyingRemote = false;
+  let pendingRemoteInfo = null; // {by, at} — updates available, not yet applied
+  let lastSyncAt = null;        // ms epoch of last successful push or applied pull
+  let lastEditorInfo = null;    // {by, at} of the last applied remote payload
 
   function isConfigured() {
     const c = window.VACATION_CONFIG;
@@ -74,7 +82,7 @@
       const { data, error } = await supabase.rpc("save_shared_budget", {
         p_id: roomId,
         p_secret: roomSecret,
-        p_payload: window.VacationApp.getPayload(),
+        p_payload: stampedPayload(),
       });
       failed = Boolean(error || !data?.ok);
       if (!failed) lastRemoteUpdatedAt = data.updated_at || lastRemoteUpdatedAt;
@@ -85,6 +93,7 @@
     if (!failed) {
       pendingSave = false;
       retryCount = 0;
+      lastSyncAt = Date.now();
       setSyncStatus("Saved", "ok");
       return;
     }
@@ -109,23 +118,98 @@
     saveTimer = setTimeout(() => saveRemote().catch(console.error), SAVE_DEBOUNCE_MS);
   }
 
-  async function pullIfNewer() {
-    if (!sharedMode || saveInFlight || pendingSave) return;
+  /* Clone the state and stamp who/when — local state is never mutated. */
+  function stampedPayload() {
+    return {
+      ...window.VacationApp.getPayload(),
+      lastEditedBy: window.VacationApp.getDeviceName?.() || "",
+      lastEditedAt: new Date().toISOString(),
+    };
+  }
+
+  function updateSyncDot(on) {
+    const dot = document.getElementById("sync-dot");
+    if (dot) dot.hidden = !on;
+  }
+
+  /* Notify-first: detect newer remote data, tell the user, apply NOTHING. */
+  async function checkForUpdates() {
+    if (!sharedMode || !supabase || saveInFlight) return false;
     try {
       const { data, error } = await supabase.rpc("fetch_shared_budget", {
         p_id: roomId,
         p_secret: roomSecret,
       });
-      if (error || !data?.payload) return;
+      if (error || !data?.payload) return false;
       const remoteAt = data.updated_at || "";
-      if (lastRemoteUpdatedAt && remoteAt <= lastRemoteUpdatedAt) return;
-      lastRemoteUpdatedAt = remoteAt;
-      applyRemote(data.payload);
-      setSyncStatus("Synced", "ok");
+      if (lastRemoteUpdatedAt && remoteAt <= lastRemoteUpdatedAt) return false;
+      const by = data.payload.lastEditedBy || "";
+      // Own edits (e.g. pushed from this device) don't warrant a nudge.
+      if (by && by === (window.VacationApp.getDeviceName?.() || "")) return false;
+      pendingRemoteInfo = { by: by || "Someone", at: data.payload.lastEditedAt || remoteAt };
+      updateSyncDot(true);
+      setSyncStatus(`${pendingRemoteInfo.by} made changes — tap Sync`, "pending");
+      window.VacationApp.showUpdateToast?.(pendingRemoteInfo.by);
+      return true;
     } catch (err) {
       console.error(err);
+      return false;
     }
   }
+
+  /* Sync = push local edits first, then FRESH fetch (never a cached copy),
+     apply if newer, and report what changed. */
+  async function syncNow() {
+    if (!sharedMode || !supabase) return;
+    const btn = document.getElementById("btn-sync-now");
+    if (btn) btn.disabled = true;
+    setSyncStatus("Syncing…", "busy");
+    try {
+      if (pendingSave) {
+        clearTimeout(saveTimer);
+        clearTimeout(retryTimer);
+        retryCount = 0;
+        await saveRemote();
+      }
+      const { data, error } = await supabase.rpc("fetch_shared_budget", {
+        p_id: roomId,
+        p_secret: roomSecret,
+      });
+      if (!error && data?.payload) {
+        const remoteAt = data.updated_at || "";
+        if (!lastRemoteUpdatedAt || remoteAt > lastRemoteUpdatedAt) {
+          const prev = structuredClone(window.VacationApp.getPayload());
+          lastRemoteUpdatedAt = remoteAt;
+          lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || remoteAt };
+          applyRemote(data.payload);
+          window.VacationApp.onRemoteChanges?.(prev, data.payload);
+        }
+      }
+      pendingRemoteInfo = null;
+      updateSyncDot(false);
+      lastSyncAt = Date.now();
+      setSyncStatus("Synced just now", "ok");
+    } catch (err) {
+      console.error(err);
+      setSyncStatus("Sync failed", "error");
+    }
+    if (btn) btn.disabled = false;
+  }
+
+  /* Keep the pill honest between events: "Synced Nm ago" (no flash). */
+  setInterval(() => {
+    if (!sharedMode || !lastSyncAt || pendingSave || saveInFlight || pendingRemoteInfo) return;
+    const el = document.getElementById("sync-status");
+    if (!el || el.classList.contains("sync-status--error")) return;
+    const mins = Math.floor((Date.now() - lastSyncAt) / 60000);
+    el.hidden = false;
+    el.className = "sync-status sync-status--ok";
+    el.textContent = "✓ Synced " + (mins < 1 ? "just now" : `${mins}m ago`);
+    if (lastEditorInfo?.by) {
+      const t = lastEditorInfo.at ? new Date(lastEditorInfo.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
+      el.title = `Last change by ${lastEditorInfo.by}${t ? " at " + t : ""}`;
+    }
+  }, 60000);
 
   async function copyLink() {
     const url = getShareUrl();
@@ -148,6 +232,8 @@
     }
     const copy = document.getElementById("btn-copy-link");
     if (copy) copy.hidden = false;
+    const sync = document.getElementById("btn-sync-now");
+    if (sync) sync.hidden = false;
   }
 
   /* Manual "Save now": flush any pending debounce and push immediately,
@@ -166,21 +252,23 @@
     if (sharedMode) { await saveNow(btn); return; } // manual re-save with feedback
     if (!confirm("Save this trip to the cloud so it syncs across devices and can be shared by link?")) return;
     btn.disabled = true;
+    await window.VacationApp.ensureDeviceName?.(); // who is stamping changes
     setSyncStatus("Saving…", "busy");
     try {
       const { data, error } = await supabase.rpc("create_shared_budget", {
-        p_payload: window.VacationApp.getPayload(),
+        p_payload: stampedPayload(),
       });
       if (error) throw error;
       roomId = data.id;
       roomSecret = data.secret;
       sharedMode = true;
       lastRemoteUpdatedAt = new Date().toISOString();
+      lastSyncAt = Date.now();
       const url = new URL(window.location.href);
       url.searchParams.set("room", roomId);
       url.searchParams.set("key", roomSecret);
       window.history.replaceState({}, "", url);
-      setInterval(pullIfNewer, POLL_MS);
+      startUpdateChecks();
       markSavedChrome();
       setSyncStatus("Saved", "ok");
       await copyLink();
@@ -222,6 +310,10 @@
     if (copyBtn) {
       copyBtn.addEventListener("click", () => copyLink().catch(() => {}));
     }
+    const syncBtn = document.getElementById("btn-sync-now");
+    if (syncBtn) {
+      syncBtn.addEventListener("click", () => syncNow().catch(console.error));
+    }
 
     const params = new URLSearchParams(window.location.search);
     const room = params.get("room");
@@ -251,10 +343,13 @@
       roomSecret = key;
       sharedMode = true;
       lastRemoteUpdatedAt = data.updated_at || null;
-      applyRemote(data.payload);
+      lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || "" };
+      applyRemote(data.payload); // initial load: no diff — everything would be "new"
+      lastSyncAt = Date.now();
       markSavedChrome();
       setSyncStatus("Shared trip loaded", "ok");
-      setInterval(pullIfNewer, POLL_MS);
+      startUpdateChecks();
+      window.VacationApp.ensureDeviceName?.(); // non-blocking; needed before their first edit is stamped
     } catch (err) {
       alert(err.message || "Could not load the shared trip.");
       setSyncStatus("", "");
@@ -272,7 +367,28 @@
     }
   }
 
-  window.VacationShare = { notifyLocalChange, isShared: () => sharedMode };
+  /* Check soon after shared mode, on tab focus, and every CHECK_MS. */
+  function startUpdateChecks() {
+    clearInterval(checkTimer);
+    setTimeout(() => checkForUpdates().catch(console.error), 2000);
+    checkTimer = setInterval(() => checkForUpdates().catch(console.error), CHECK_MS);
+    if (!startUpdateChecks.bound) {
+      startUpdateChecks.bound = true;
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible" && sharedMode) {
+          checkForUpdates().catch(console.error);
+        }
+      });
+    }
+  }
+
+  window.VacationShare = {
+    notifyLocalChange,
+    isShared: () => sharedMode,
+    syncNow,
+    checkForUpdates,
+    getSyncInfo: () => ({ lastSyncAt, lastEditor: lastEditorInfo, updatesAvailable: !!pendingRemoteInfo }),
+  };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootstrap);

@@ -690,6 +690,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       .sync-status--error { background: #fbe4e0; color: #c0392b; }
       .sync-status--busy, .sync-status--pending { background: #fbf1dd; color: #9a6a12; }
       .sync-status--flash { animation: syncflash 0.9s ease; }
+      @media (max-width: 560px) {
+        .sync-status { max-width: 96px; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: 1.5; }
+        .appbar__actions { gap: 0.35rem; }
+      }
       @keyframes syncflash { 0% { transform: scale(0.85); } 40% { transform: scale(1.08); } 100% { transform: scale(1); } }
       .act { position: relative; }
       .act__actions { display: inline-flex; gap: 0.3rem; margin-left: 0.5rem; opacity: 0; transition: opacity 0.15s; }
@@ -725,6 +729,27 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       .mapstop-leg { padding-left: 8px; margin: -0.15rem 0; color: var(--muted, #8a7a70); font-size: 0.75rem; border-left: 2px dotted var(--coral, #ef8e7f); margin-left: 13px; }
       .map-pin--hotel { background: var(--coral, #ef8e7f); width: 32px; height: 32px; }
       .map-pin--hotel svg { width: 16px; height: 16px; }
+      /* Change awareness */
+      .icon-btn { position: relative; }
+      .icon-btn__dot {
+        position: absolute; top: 4px; right: 4px; width: 10px; height: 10px; border-radius: 50%;
+        background: var(--coral, #ef8e7f); border: 2px solid #fff;
+      }
+      .nav-dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        background: var(--coral, #ef8e7f); margin-left: 0.45rem; flex: none;
+      }
+      .toast {
+        position: fixed; left: 50%; bottom: 4.6rem; transform: translateX(-50%); z-index: 60;
+        display: flex; align-items: center; gap: 0.6rem;
+        background: #3b2b26; color: #fff; padding: 0.6rem 0.7rem 0.6rem 1rem; border-radius: 999px;
+        box-shadow: 0 10px 30px rgba(59,43,38,0.35); font-size: 0.85rem; max-width: min(92vw, 480px);
+      }
+      .toast .icon-btn--small { background: transparent; color: #fff; }
+      @media (min-width: 800px) { .toast { bottom: 1.6rem; } }
+      .whoami-options { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.9rem; }
+      .change-line { padding: 0.45rem 0; border-bottom: 1px solid var(--line, #e8ddd5); font-size: 0.9rem; }
+      .change-line:last-child { border-bottom: 0; }
       .field--suggest { position: relative; }
       .loc-suggest {
         position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
@@ -787,6 +812,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           </div>
           <div class="appbar__actions">
             <span class="sync-status" id="sync-status" hidden></span>
+            <button type="button" class="icon-btn" id="btn-sync-now" aria-label="Sync — get family changes" title="Sync — pull changes from other devices" hidden>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.5 4.6M4 12a8 8 0 0 1 14.5-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M18.5 3.5v4h-4M5.5 20.5v-4h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="icon-btn__dot" id="sync-dot" hidden></span>
+            </button>
             <button type="button" class="icon-btn" id="btn-copy-link" aria-label="Copy share link" title="Copy share link" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.5 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </button>
@@ -878,6 +907,41 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 
     <!-- ===== Bottom tab bar (mobile) ===== -->
     <nav class="tabbar" id="tabbar" aria-label="Primary"></nav>
+
+    <!-- ===== Change-awareness toast ===== -->
+    <div id="toast" class="toast" hidden>
+      <span id="toast-text"></span>
+      <button type="button" class="btn btn--small btn--primary" id="toast-view">View</button>
+      <button type="button" class="icon-btn icon-btn--small" id="toast-close" aria-label="Dismiss">
+        <svg viewBox="0 0 24 24" fill="none"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+
+    <!-- ===== Who-are-you (device identity for shared trips) ===== -->
+    <dialog id="dialog-whoami" class="dialog">
+      <form id="form-whoami" method="dialog">
+        <h3 class="dialog__title">Who are you?</h3>
+        <p class="dialog__hint">So the family knows who made changes from this device.</p>
+        <div id="whoami-options" class="whoami-options"></div>
+        <label class="field">
+          <span class="field__label">Or type a name</span>
+          <input type="text" name="name" maxlength="40" placeholder="e.g. Grandma" />
+        </label>
+        <div class="dialog__actions">
+          <button type="submit" class="btn btn--primary">That's me</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- ===== What's new (remote changes) ===== -->
+    <dialog id="dialog-changes" class="dialog">
+      <h3 class="dialog__title">What's new</h3>
+      <div id="changes-body"></div>
+      <div class="dialog__actions">
+        <button type="button" class="btn btn--ghost" data-dialog-close>Close</button>
+        <button type="button" class="btn btn--primary" id="btn-changes-clear">Clear</button>
+      </div>
+    </dialog>
 
     <!-- ===== Budget dialogs (unchanged IDs/forms) ===== -->
     <dialog id="dialog-funds" class="dialog">
@@ -1134,7 +1198,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.2.2";
+const APP_VERSION = "v1.3.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];
@@ -1390,6 +1454,8 @@ function normalizeState(data) {
       dataUrl: d.dataUrl,
       uploadedAt: d.uploadedAt || "",
     }));
+  data.lastEditedBy = typeof data.lastEditedBy === "string" ? data.lastEditedBy : "";
+  data.lastEditedAt = typeof data.lastEditedAt === "string" ? data.lastEditedAt : "";
   if (!data.version || data.version < 2) migrateToV2(data);
   return data;
 }
@@ -2719,11 +2785,12 @@ function tripHotelName(trip) {
 function buildNav() {
   const side = $("sidebar-nav");
   const tabs = $("tabbar");
+  const dot = (id) => (typeof navBadges !== "undefined" && navBadges.has(id) ? '<span class="nav-dot" aria-label="Has updates"></span>' : "");
   side.innerHTML = NAV.map(
-    (n) => `<button type="button" class="navitem" data-nav="${n.id}">${n.icon}<span>${n.label}</span></button>`
+    (n) => `<button type="button" class="navitem" data-nav="${n.id}">${n.icon}<span>${n.label}</span>${dot(n.id)}</button>`
   ).join("");
   tabs.innerHTML = NAV.map(
-    (n) => `<button type="button" class="tab" data-nav="${n.id}" aria-label="${n.label}">${n.icon}<span>${n.label}</span></button>`
+    (n) => `<button type="button" class="tab" data-nav="${n.id}" aria-label="${n.label}">${n.icon}<span>${n.label}</span>${dot(n.id)}</button>`
   ).join("");
   document.querySelectorAll("[data-nav]").forEach((el) => {
     el.addEventListener("click", () => { location.hash = "#" + el.getAttribute("data-nav"); });
@@ -2746,6 +2813,9 @@ function renderActiveShellScreen() {
 function router() {
   const id = currentScreenId();
   const meta = NAV.find((n) => n.id === id);
+
+  // Visiting a screen clears its "updates" dot
+  if (typeof navBadges !== "undefined" && navBadges.delete(id)) buildNav();
 
   document.querySelectorAll(".screen").forEach((s) => {
     s.classList.toggle("is-active", s.id === "screen-" + id);
@@ -3510,9 +3580,174 @@ function bindShellEvents() {
     else openTripDialog();
   });
   $("btn-appbar-account").addEventListener("click", () => {
-    alert("Signed in as Itzik — family organiser.\n(Account management is a mockup in this preview.)");
+    const name = getDeviceName();
+    alert(`This device: ${name || "no name set yet"}.\nYour name is stamped on changes you make to a shared trip.`);
+  });
+  $("toast-view").addEventListener("click", () => {
+    $("toast").hidden = true;
+    if (toastAction === "sync") window.VacationShare?.syncNow?.();
+    else openChangesDialog();
+  });
+  $("toast-close").addEventListener("click", () => { $("toast").hidden = true; });
+  $("btn-changes-clear").addEventListener("click", () => {
+    pendingChanges = [];
+    navBadges.clear();
+    buildNav();
+    closeDialog($("dialog-changes"));
   });
   window.addEventListener("hashchange", router);
+}
+
+/* ============================================================
+   CHANGE AWARENESS — who changed what on shared trips
+   ============================================================ */
+const DEVICE_NAME_KEY = "travelhub-device-name";
+let pendingChanges = []; // {screens:[], text, by, at}
+const navBadges = new Set();
+let toastAction = "view"; // "view" opens What's-new; "sync" triggers syncNow
+
+function getDeviceName() {
+  try { return localStorage.getItem(DEVICE_NAME_KEY) || ""; } catch { return ""; }
+}
+
+/* Ask once per device who is using it (travel-party buttons + free text). */
+function ensureDeviceName() {
+  return new Promise((resolve) => {
+    const existing = getDeviceName();
+    if (existing) return resolve(existing);
+    const dlg = $("dialog-whoami");
+    const form = $("form-whoami");
+    const opts = $("whoami-options");
+    form.reset();
+    opts.innerHTML = familyMembers()
+      .map((n) => `<button type="button" class="btn btn--outline" data-whoami="${escapeHtml(n)}">${escapeHtml(n)}</button>`)
+      .join("");
+    const done = (name) => {
+      try { localStorage.setItem(DEVICE_NAME_KEY, name); } catch { /* private mode */ }
+      dlg.close();
+      resolve(name);
+    };
+    opts.querySelectorAll("[data-whoami]").forEach((b) =>
+      b.addEventListener("click", () => done(b.getAttribute("data-whoami")))
+    );
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      done(form.name.value.trim() || "Family member");
+    };
+    openDialog(dlg);
+  });
+}
+
+function changeItemLabel(i) {
+  const d = parseISO(i.date);
+  return `${i.title}${d ? ` (${fmtDay(d)})` : ""}`;
+}
+
+function diffCollection(prevArr, nextArr, fields, label, screens, out, verbs) {
+  const v = verbs || { add: "added", del: "removed", edit: "edited" };
+  const prevMap = new Map(prevArr.map((x) => [x.id, x]));
+  for (const n of nextArr) {
+    const p = prevMap.get(n.id);
+    if (!p) out.push({ screens, text: `${v.add} ${label(n)}` });
+    else if (fields.some((f) => JSON.stringify(p[f]) !== JSON.stringify(n[f]))) {
+      out.push({ screens, text: `${v.edit} ${label(n)}` });
+    }
+  }
+  for (const [id, p] of prevMap) {
+    if (!nextArr.some((n) => n.id === id)) out.push({ screens, text: `${v.del} ${label(p)}` });
+  }
+}
+
+/* Item-level comparison of two state payloads → human-readable change lines. */
+function diffStates(prevRaw, nextRaw) {
+  const prev = normalizeState(structuredClone(prevRaw));
+  const next = normalizeState(structuredClone(nextRaw));
+  const out = [];
+
+  diffCollection(prev.items, next.items,
+    ["type", "title", "details", "date", "endDate", "startTime", "endTime", "location", "confirmation", "notes", "flightNo", "departAirport", "arrivalAirport"],
+    changeItemLabel, ["itinerary", "bookings"], out);
+
+  const prevChk = new Map(prev.checklist.map((c) => [c.id, c]));
+  for (const c of next.checklist) {
+    const p = prevChk.get(c.id);
+    if (!p) out.push({ screens: ["family"], text: `added note “${c.text}”` });
+    else if (p.done !== c.done) out.push({ screens: ["family"], text: `${c.done ? "ticked" : "unticked"} “${c.text}”` });
+    else if (p.text !== c.text) out.push({ screens: ["family"], text: `edited note “${c.text}”` });
+  }
+  for (const [id, p] of prevChk) {
+    if (!next.checklist.some((c) => c.id === id)) out.push({ screens: ["family"], text: `removed note “${p.text}”` });
+  }
+
+  diffCollection(prev.documents, next.documents, ["name"],
+    (d) => `document “${d.name}”`, ["family"], out, { add: "added", del: "removed", edit: "renamed" });
+
+  const prevTrips = new Map(prev.trips.map((t) => [t.id, t]));
+  for (const t of next.trips) {
+    const p = prevTrips.get(t.id);
+    if (!p) { out.push({ screens: ["trips"], text: `added trip ${t.name}` }); continue; }
+    if (p.name !== t.name || p.destination !== t.destination || p.startDate !== t.startDate || p.endDate !== t.endDate) {
+      out.push({ screens: ["trips"], text: `edited trip ${t.name}` });
+    }
+    if (JSON.stringify(p.travelers) !== JSON.stringify(t.travelers)) {
+      out.push({ screens: ["family"], text: `changed travellers on ${t.name}` });
+    }
+    if (Number(p.budget) !== Number(t.budget)) out.push({ screens: ["budget"], text: `changed budget of ${t.name}` });
+    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "status", "amountPaid"],
+      (e) => `expense ${e.label}`, ["budget"], out);
+  }
+  for (const [id, p] of prevTrips) {
+    if (!next.trips.some((t) => t.id === id)) out.push({ screens: ["trips"], text: `removed trip ${p.name}` });
+  }
+  if (Number(prev.currentFunds) !== Number(next.currentFunds)) {
+    out.push({ screens: ["budget"], text: "updated vacation funds" });
+  }
+  return out;
+}
+
+/* Called by share.js after applying a newer remote payload (Sync only). */
+function onRemoteChanges(prevState, payload) {
+  let lines = [];
+  try { lines = diffStates(prevState, payload); } catch (err) { console.error("diff failed", err); }
+  if (!lines.length) return;
+  const by = payload.lastEditedBy || "Someone";
+  const at = payload.lastEditedAt || "";
+  const capped = lines.slice(0, 20).map((l) => ({ ...l, by, at }));
+  if (lines.length > 20) capped.push({ screens: [], text: `… +${lines.length - 20} more`, by, at });
+  pendingChanges.push(...capped);
+  lines.forEach((l) => (l.screens || []).forEach((s) => { if (s !== currentScreenId()) navBadges.add(s); }));
+  buildNav();
+  showToast(`${by} made ${lines.length} change${lines.length === 1 ? "" : "s"}`, "view");
+}
+
+let toastTimer = null;
+function showToast(text, action) {
+  const t = $("toast");
+  if (!t) return;
+  toastAction = action || "view";
+  $("toast-text").textContent = text;
+  $("toast-view").textContent = toastAction === "sync" ? "Sync" : "View";
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 8000);
+}
+
+/* share.js signals "updates available" (notify-first — nothing applied yet) */
+function showUpdateToast(by) {
+  showToast(`${by} made changes — tap Sync to see`, "sync");
+}
+
+function openChangesDialog() {
+  const body = $("changes-body");
+  body.innerHTML = pendingChanges.length
+    ? pendingChanges
+        .map((c) => {
+          const time = c.at ? new Date(c.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "";
+          return `<div class="change-line"><strong>${escapeHtml(c.by)}</strong> ${escapeHtml(c.text)}${time ? ` <span style="color:var(--muted);font-size:0.78rem">· ${escapeHtml(time)}</span>` : ""}</div>`;
+        })
+        .join("")
+    : `<p class="empty-state">No recent changes from the family.</p>`;
+  openDialog($("dialog-changes"));
 }
 
 /* ============================================================
@@ -3526,6 +3761,10 @@ window.VacationApp = {
     render();
   },
   render,
+  getDeviceName,
+  ensureDeviceName,
+  onRemoteChanges,
+  showUpdateToast,
 };
 
 /* ============================================================
