@@ -7,9 +7,9 @@
    Anyone opening that link sees and edits the same data (last write wins).
 
    Sync model (notify-first): local edits push automatically (600ms debounce).
-   Incoming changes are only DETECTED by a 5-minute check — the user is
+   Incoming changes are DETECTED on load, tab focus, and every ~60s — the user is
    notified (dot on the Sync button + toast) and changes apply when they tap
-   Sync. Every save is stamped with lastEditedBy/lastEditedAt. */
+   Sync (↻ in the top bar). Outgoing edits still push automatically. */
 (function () {
   const CHECK_MS = 60 * 1000; // background poll; also check on load + tab focus
   const SAVE_DEBOUNCE_MS = 600;
@@ -143,10 +143,7 @@
       if (error || !data?.payload) return false;
       const remoteAt = data.updated_at || "";
       if (lastRemoteUpdatedAt && remoteAt <= lastRemoteUpdatedAt) return false;
-      const by = data.payload.lastEditedBy || "";
-      // Own edits (e.g. pushed from this device) don't warrant a nudge.
-      if (by && by === (window.VacationApp.getDeviceName?.() || "")) return false;
-      pendingRemoteInfo = { by: by || "Someone", at: data.payload.lastEditedAt || remoteAt };
+      pendingRemoteInfo = { by: data.payload.lastEditedBy || "Someone", at: data.payload.lastEditedAt || remoteAt };
       updateSyncDot(true);
       setSyncStatus(`${pendingRemoteInfo.by} made changes — tap Sync`, "pending");
       window.VacationApp.showUpdateToast?.(pendingRemoteInfo.by);
