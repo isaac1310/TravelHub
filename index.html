@@ -1134,7 +1134,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.2.1";
+const APP_VERSION = "v1.2.2";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];
@@ -3252,21 +3252,8 @@ function renderBookings() {
     ${groups || `<div class="empty-card"><h3>No reservations yet</h3><p>Add reservations in Itinerary and they'll appear here.</p></div>`}
     <section class="booking-group">
       <h2 class="booking-group__title">Documents</h2>
-      <div class="card" style="padding:1.1rem 1.3rem">
-        <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.8rem">Tickets & confirmations (PDF or images, max ${DOC_MAX_MB} MB each). Shared trips share these too — avoid passports or IDs.</p>
-        ${documentListHtml()}
-        <div class="checklist__add">
-          <label class="btn btn--outline" style="cursor:pointer">
-            Upload document
-            <input type="file" id="doc-upload" accept="application/pdf,image/*" multiple hidden />
-          </label>
-          <span class="act__sub" style="align-self:center">${docsUsageLabel()}</span>
-        </div>
-      </div>
+      <p style="color:var(--muted);font-size:0.85rem">Documents now live in one place — the <a href="#family">Family</a> shared checklist${state.documents.length ? ` (${state.documents.length} uploaded)` : ""}.</p>
     </section>`;
-
-  $("doc-upload").addEventListener("change", (e) => addDocumentFiles(e.target, renderBookings));
-  bindDocumentActions(body, renderBookings);
 }
 
 /* ---------- FAMILY screen ---------- */
@@ -3286,8 +3273,14 @@ function renderFamily() {
       return `
         <div class="card member">
           ${avatar(name)}
-          <div><div class="member__name">${escapeHtml(name)}</div>
+          <div style="flex:1"><div class="member__name">${escapeHtml(name)}</div>
           <div class="member__trips">${trips.length ? trips.map((t) => escapeHtml(t.name)).join(" · ") : "No trips yet"}</div></div>
+          <span class="act__actions" style="opacity:1">
+            <button type="button" class="icon-btn icon-btn--small" data-member-edit="${escapeHtml(name)}" aria-label="Rename member" title="Rename">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M4 20h4L19 9l-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" class="icon-btn icon-btn--small" data-member-del="${escapeHtml(name)}" aria-label="Remove member" title="Remove">${TRASH_ICON}</button>
+          </span>
         </div>`;
     })
     .join("");
@@ -3344,6 +3337,32 @@ function renderFamily() {
   input.focus();
   bindSharedListActions(body, renderFamily);
   $("family-doc-upload").addEventListener("change", (e) => addDocumentFiles(e.target, renderFamily));
+
+  // Members are derived from trip travelers: rename/remove applies across all trips.
+  body.querySelectorAll("[data-member-edit]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const oldName = btn.getAttribute("data-member-edit");
+      const newName = (prompt(`Rename "${oldName}" to:`, oldName) || "").trim();
+      if (!newName || newName === oldName) return;
+      state.trips.forEach((t) => {
+        t.travelers = (t.travelers || []).map((n) => (n === oldName ? newName : n));
+      });
+      saveState();
+      render();
+    })
+  );
+  body.querySelectorAll("[data-member-del]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const name = btn.getAttribute("data-member-del");
+      const count = state.trips.filter((t) => (t.travelers || []).includes(name)).length;
+      if (!confirm(`Remove "${name}" from ${count} trip${count === 1 ? "" : "s"}?`)) return;
+      state.trips.forEach((t) => {
+        t.travelers = (t.travelers || []).filter((n) => n !== name);
+      });
+      saveState();
+      render();
+    })
+  );
 }
 
 /* ---------- Unified shared list: notes + documents in one list ---------- */
