@@ -25,6 +25,7 @@
   let pendingSave = false;
   let applyingRemote = false;
   let pendingRemoteInfo = null; // {by, at} — updates available, not yet applied
+  let lastNotifiedRemoteAt = null; // toast fired for this updated_at — don't re-nag
   let lastSyncAt = null;        // ms epoch of last successful push or applied pull
   let lastEditorInfo = null;    // {by, at} of the last applied remote payload
 
@@ -146,7 +147,11 @@
       pendingRemoteInfo = { by: data.payload.lastEditedBy || "Someone", at: data.payload.lastEditedAt || remoteAt };
       updateSyncDot(true);
       setSyncStatus(`${pendingRemoteInfo.by} made changes — tap Sync`, "pending");
-      window.VacationApp.showUpdateToast?.(pendingRemoteInfo.by);
+      // Toast only ONCE per remote update — the dot + pill remain the quiet reminder.
+      if (!lastNotifiedRemoteAt || remoteAt > lastNotifiedRemoteAt) {
+        lastNotifiedRemoteAt = remoteAt;
+        window.VacationApp.showUpdateToast?.(pendingRemoteInfo.by);
+      }
       return true;
     } catch (err) {
       console.error(err);
@@ -328,14 +333,22 @@
 
     // Warn before replacing local data — only when JOINING a room this device
     // hasn't used before (reloads of your own shared trip never prompt).
-    if (!alreadyJoined && hasLocalTrips() &&
-        !confirm("Open shared trip? This replaces the trip data on this device.")) {
+    const joiningOverLocalData = !alreadyJoined && hasLocalTrips();
+    if (joiningOverLocalData &&
+        !confirm("Open shared trip? This replaces the trip data on this device. (Your current data is backed up — restore it anytime from the Budget screen.)")) {
       // Cancelled: stay local-only, strip the room params so refresh won't re-prompt.
       const url = new URL(window.location.href);
       url.searchParams.delete("room");
       url.searchParams.delete("key");
       window.history.replaceState({}, "", url);
       return;
+    }
+    if (joiningOverLocalData) {
+      // Safety net: keep the pre-join data so "Restore my old data" can bring it back.
+      try {
+        const raw = localStorage.getItem("vacation-budget-planner-v1");
+        if (raw) localStorage.setItem("vacation-budget-backup-before-join", raw);
+      } catch { /* private mode */ }
     }
 
     setSyncStatus("Loading shared trip…", "busy");

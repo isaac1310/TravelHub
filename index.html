@@ -861,6 +861,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
                 </label>
                 <button type="button" id="btn-export-data" class="btn btn--ghost">Export</button>
                 <button type="button" id="btn-import-data" class="btn btn--ghost">Import</button>
+                <button type="button" id="btn-restore-backup" class="btn btn--outline" hidden title="Bring back the data this device had before joining the shared trip">Restore my old data</button>
                 <input type="file" id="import-file-input" accept="application/json,.json" hidden />
                 <button type="button" id="btn-roll-budget" class="btn btn--outline">Roll budget</button>
                 <button type="button" id="btn-add-funds" class="btn btn--primary">Add funds</button>
@@ -1120,6 +1121,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <option value="flight">Flight</option>
             <option value="hotel">Hotel</option>
             <option value="attraction" selected>Attraction / Activity</option>
+            <option value="restaurant">Restaurant</option>
+            <option value="cafe">Coffee shop</option>
+            <option value="store">Store / Shopping</option>
             <option value="transport">Transport</option>
             <option value="other">Other</option>
           </select>
@@ -1198,8 +1202,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.3.2";
+const APP_VERSION = "v1.4.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
+/* Snapshot of this device's data taken just before a shared trip replaced it */
+const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];
 
@@ -1321,7 +1327,7 @@ const EXPENSE_REF = {
   "exp-xmas-flight":  { kind: "flight", name: "Wizz Air", detail: "W6 7061" },
 };
 
-const ITEM_TYPES = ["flight", "hotel", "attraction", "transport", "other"];
+const ITEM_TYPES = ["flight", "hotel", "attraction", "restaurant", "cafe", "store", "transport", "other"];
 
 function normalizeItem(it) {
   if (!it || !it.id || !it.tripId) return null;
@@ -1346,6 +1352,9 @@ function normalizeItem(it) {
     },
     confirmation: it.confirmation || "",
     notes: it.notes || "",
+    /* Manual position within its day; 0 = "sort me by time". Set by the
+       timeline ↑/↓ buttons (minutes-scale float, so timed items interleave). */
+    sortIndex: Number(it.sortIndex) > 0 ? Number(it.sortIndex) : 0,
   };
 }
 
@@ -2047,6 +2056,9 @@ function renderFundHistory() {
 }
 
 function render() {
+  // Backup may be written by share.js after init — re-check on every render.
+  const restoreBtn = $("btn-restore-backup");
+  if (restoreBtn) restoreBtn.hidden = !localStorage.getItem(PRE_JOIN_BACKUP_KEY);
   renderYearFilter();
   renderGlobal();
   renderTrips();
@@ -2133,6 +2145,9 @@ const ITEM_TYPE_LABELS = {
   flight:     { title: "Airline", date: "Depart date", start: "Depart time", endDate: "Arrival date", end: "Arrival time" },
   hotel:      { title: "Hotel name", date: "Check-in date", start: "Check-in time", endDate: "Check-out date", end: "Check-out time" },
   attraction: { title: "Attraction / activity", date: "Date", start: "Start time", endDate: "End date", end: "End time" },
+  restaurant: { title: "Restaurant name", date: "Date", start: "Reservation time", endDate: "End date", end: "End time" },
+  cafe:       { title: "Coffee shop name", date: "Date", start: "Time", endDate: "End date", end: "End time" },
+  store:      { title: "Store / shop name", date: "Date", start: "Time", endDate: "End date", end: "End time" },
   transport:  { title: "Transport (e.g. Shuttle to hotel)", date: "Date", start: "Start time", endDate: "End date", end: "End time" },
   other:      { title: "Title", date: "Date", start: "Start time", endDate: "End date", end: "End time" },
 };
@@ -2581,6 +2596,20 @@ function bindEvents() {
 
   $("btn-add-funds").addEventListener("click", openFundsDialog);
   $("btn-export-data").addEventListener("click", exportData);
+  const restoreBtn = $("btn-restore-backup");
+  restoreBtn.addEventListener("click", () => {
+    const backup = localStorage.getItem(PRE_JOIN_BACKUP_KEY);
+    if (!backup) return;
+    if (!confirm("Restore the data this device had before joining the shared trip? This disconnects from the shared trip and brings back your old local data.")) return;
+    localStorage.setItem(STORAGE_KEY, backup);
+    localStorage.removeItem(PRE_JOIN_BACKUP_KEY);
+    localStorage.removeItem("travelhub-room");
+    const url = new URL(window.location.href);
+    url.searchParams.delete("room");
+    url.searchParams.delete("key");
+    window.history.replaceState({}, "", url);
+    location.reload();
+  });
   $("btn-import-data").addEventListener("click", () => $("import-file-input").click());
   $("import-file-input").addEventListener("change", handleImportFile);
   $("btn-add-trip").addEventListener("click", () => openTripDialog());
@@ -2700,6 +2729,9 @@ const ICONS = {
   doc: '<svg viewBox="0 0 24 24" fill="none"><path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 3.5V8h4.5" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>',
   calendar: '<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 9h17M8 3v3M16 3v3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
   users: '<svg viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M4 19c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  restaurant: '<svg viewBox="0 0 24 24" fill="none"><path d="M7 3v7a2 2 0 0 0 2 2v9M7 3v4M5 3v4m4-4v4M17 3c-1.7 0-3 2-3 5v3h3m0-8v18m0-18v8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cafe: '<svg viewBox="0 0 24 24" fill="none"><path d="M5 9h11v6a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5V9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M16 10h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5v2M11 3.5v2M14 3.5v2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  store: '<svg viewBox="0 0 24 24" fill="none"><path d="M6 8h12l1.5 12.5H4.5L6 8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 10.5V6a3 3 0 0 1 6 0v4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
 };
 
 const NAV = [
@@ -2979,6 +3011,18 @@ function renderItinerary() {
   else renderTimelineTab(trip);
 }
 
+function minutesOf(hhmm, dflt) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || "");
+  return m ? Number(m[1]) * 60 + Number(m[2]) : dflt;
+}
+
+/* Ordering key within a day (minutes-scale float): a manually moved item's
+   sortIndex wins; otherwise its start time; untimed items sink to the end. */
+function dayEntryKey(e) {
+  if (e.checkout) return minutesOf(e.item.endTime, 11 * 60);
+  return e.item.sortIndex > 0 ? e.item.sortIndex : minutesOf(e.item.startTime, 24 * 60);
+}
+
 /* Items shown on a given day: dated on it, or a hotel checkout entry */
 function itemsForDay(trip, iso) {
   const out = [];
@@ -2986,11 +3030,7 @@ function itemsForDay(trip, iso) {
     if (item.date === iso) out.push({ item, checkout: false });
     else if (item.type === "hotel" && item.endDate === iso) out.push({ item, checkout: true });
   }
-  return out.sort((a, b) => {
-    const ta = a.checkout ? a.item.endTime || "11:00" : a.item.startTime || "99";
-    const tb = b.checkout ? b.item.endTime || "11:00" : b.item.startTime || "99";
-    return ta.localeCompare(tb);
-  });
+  return out.sort((a, b) => dayEntryKey(a) - dayEntryKey(b) || a.item.id.localeCompare(b.item.id));
 }
 
 function itemTypeIcon(type) {
@@ -2998,6 +3038,9 @@ function itemTypeIcon(type) {
     : type === "hotel" ? ICONS.hotel
     : type === "transport" ? ICONS.route
     : type === "attraction" ? ICONS.explore
+    : type === "restaurant" ? ICONS.restaurant
+    : type === "cafe" ? ICONS.cafe
+    : type === "store" ? ICONS.store
     : ICONS.doc;
 }
 
@@ -3027,6 +3070,13 @@ function itemCard({ item, checkout }) {
       </span>
       ${time ? `<span class="act__time">${escapeHtml(time)}</span>` : ""}
       <span class="act__actions">
+        ${checkout ? "" : `
+        <button type="button" class="icon-btn icon-btn--small" data-move-item="${item.id}" data-move-dir="-1" aria-label="Move up" title="Move up">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5m0 0-5 5m5-5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" class="icon-btn icon-btn--small" data-move-item="${item.id}" data-move-dir="1" aria-label="Move down" title="Move down">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14m0 0-5-5m5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>`}
         <button type="button" class="icon-btn icon-btn--small" data-edit-item="${item.id}" aria-label="Edit" title="Edit">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 20h4L19 9l-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
         </button>
@@ -3097,6 +3147,32 @@ function bindItemActions(scope, trip) {
   scope.querySelectorAll("[data-delete-item]").forEach((btn) =>
     btn.addEventListener("click", () => deleteItem(btn.getAttribute("data-delete-item")))
   );
+  scope.querySelectorAll("[data-move-item]").forEach((btn) =>
+    btn.addEventListener("click", () =>
+      moveItemInDay(trip, btn.getAttribute("data-move-item"), Number(btn.getAttribute("data-move-dir")))
+    )
+  );
+}
+
+/* ↑/↓: give the moved item a sortIndex just beyond its swap target
+   (midpoint of the target and its neighbour, so nothing else moves). */
+function moveItemInDay(trip, itemId, dir) {
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) return;
+  const entries = itemsForDay(trip, item.date);
+  const idx = entries.findIndex((e) => !e.checkout && e.item.id === itemId);
+  const target = idx + dir;
+  if (idx < 0 || target < 0 || target >= entries.length) return;
+  const keys = entries.map(dayEntryKey);
+  let newKey;
+  if (dir > 0) {
+    newKey = target + 1 < entries.length ? (keys[target] + keys[target + 1]) / 2 : keys[target] + 10;
+  } else {
+    newKey = target - 1 >= 0 ? (keys[target - 1] + keys[target]) / 2 : keys[target] / 2;
+  }
+  item.sortIndex = Math.max(0.01, newKey);
+  saveState();
+  renderItinerary();
 }
 
 /* ---------- Maps sub-tab ---------- */
