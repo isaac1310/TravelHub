@@ -711,6 +711,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         background: #3b2b26; color: #fff; font-weight: 700; font-size: 0.85rem;
         border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transform: rotate(0deg);
       }
+      .map-day-head { font-weight: 700; font-size: 0.85rem; margin: 0.5rem 0 0.1rem; color: var(--ink, #3b2b26); }
+      .map-day-head:first-child { margin-top: 0; }
+      .mapstop__pin--hotel { background: var(--coral, #ef8e7f); }
+      .mapstop__pin--hotel svg { width: 15px; height: 15px; }
+      .mapstop-leg { padding-left: 8px; margin: -0.15rem 0; color: var(--muted, #8a7a70); font-size: 0.75rem; border-left: 2px dotted var(--coral, #ef8e7f); margin-left: 13px; }
+      .map-pin--hotel { background: var(--coral, #ef8e7f); width: 32px; height: 32px; }
+      .map-pin--hotel svg { width: 16px; height: 16px; }
       .field--suggest { position: relative; }
       .loc-suggest {
         position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
@@ -1120,7 +1127,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.1.0";
+const APP_VERSION = "v1.2.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];
@@ -2227,7 +2234,10 @@ function photonLabel(f) {
    One request per save; never blocks saving — coords are a cache. */
 async function geocodeItem(itemId) {
   const item = state.items.find((i) => i.id === itemId);
-  if (!item || !item.location.name) return false;
+  if (!item) return false;
+  // Hotels often have no separate location — geocode by their name instead.
+  if (!item.location.name && item.type === "hotel" && item.title) item.location.name = item.title;
+  if (!item.location.name) return false;
   // If the name is itself coordinates (decimal or DMS) or a Maps link, use them.
   const direct = parseCoordsFromText(item.location.name);
   if (direct) {
@@ -3013,6 +3023,33 @@ function bindItemActions(scope, trip) {
 }
 
 /* ---------- Maps sub-tab ---------- */
+function haversineKm(a, b) {
+  const R = 6371;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+
+/* Straight-line distance + rough time: walk ≤3km (~12 min/km), else drive (~3 min/km). */
+function legLabel(a, b) {
+  if (a?.lat == null || b?.lat == null) return "";
+  const km = haversineKm(a, b);
+  if (km < 0.05) return "";
+  const kmTxt = km < 10 ? km.toFixed(1) : String(Math.round(km));
+  const walk = km <= 3;
+  const mins = Math.max(1, Math.round(km * (walk ? 12 : 3)));
+  return `${kmTxt} km · ~${mins} min ${walk ? "walk" : "drive"}`;
+}
+
+/* The hotel covering a given day (check-in ≤ day ≤ check-out), else the trip's first hotel. */
+function tripHotelForDay(trip, iso) {
+  const hotels = tripItems(trip).filter((i) => i.type === "hotel");
+  return hotels.find((h) => h.date && h.date <= iso && (!h.endDate || iso <= h.endDate)) || hotels[0] || null;
+}
+
 function gmapsLink(item, trip) {
   const q = `${item.location.name}, ${trip.destination || ""}`.replace(/,\s*$/, "");
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
@@ -3035,32 +3072,65 @@ function renderMapsTab(trip) {
   ].join("");
 
   const isoFilter = mapDayFilter === "all" ? dayIsos : [mapDayFilter];
-  const entries = isoFilter
-    .flatMap((iso) => itemsForDay(trip, iso).filter((e) => !e.checkout))
-    .filter((e) => e.item.type !== "flight" && e.item.location.name);
-
   const hasLeaflet = typeof L !== "undefined";
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-  const listHtml = entries.length
-    ? entries
-        .map((e, idx) => {
-          const letter = letters[idx % letters.length];
-          const geo = e.item.location.lat !== null;
-          const when = `${parseISO(e.item.date) ? fmtDay(parseISO(e.item.date)) : ""}${e.item.startTime ? ", " + e.item.startTime : ""}`;
-          return `
-            <div class="mapstop">
-              <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}">${letter}</span>
-              <span class="mapstop__body">
-                <span class="act__title">${escapeHtml(e.item.title)}</span>
-                <span class="act__sub">${escapeHtml(e.item.location.name)}${when ? " · " + escapeHtml(when) : ""}</span>
-              </span>
-              ${geo ? "" : `<button type="button" class="btn btn--small btn--ghost" data-locate-item="${e.item.id}">Locate</button>`}
-              <a class="btn btn--small btn--ghost" href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener">Maps ↗</a>
-            </div>`;
-        })
-        .join("")
-    : `<p class="empty-state">No located reservations ${mapDayFilter === "all" ? "yet" : "on this day"}. Add a location to a reservation to see it here.</p>`;
+  // Per-day: the hotel is the default starting point; stops get global letters.
+  const entries = []; // all lettered stops (for pins), in sidebar order
+  const hotelPins = new Map(); // hotel item id -> item (deduped for map pins)
+  let sidebar = "";
+  let letterIdx = 0;
+
+  for (const iso of isoFilter) {
+    const stops = itemsForDay(trip, iso)
+      .filter((e) => !e.checkout && e.item.type !== "flight" && e.item.type !== "hotel" && e.item.location.name);
+    if (!stops.length) continue;
+
+    const d = parseISO(iso);
+    const hotel = tripHotelForDay(trip, iso);
+    if (hotel && hotel.location.lat !== null) hotelPins.set(hotel.id, hotel);
+
+    sidebar += `<div class="map-day-head">${escapeHtml(fmtDow(d))}, ${escapeHtml(fmtDay(d))}</div>`;
+
+    let prevLoc = null;
+    if (hotel) {
+      const hotelGeo = hotel.location.lat !== null;
+      sidebar += `
+        <div class="mapstop">
+          <span class="mapstop__pin mapstop__pin--hotel" title="Start of the day">${ICONS.hotel}</span>
+          <span class="mapstop__body">
+            <span class="act__title">${escapeHtml(hotel.title)}</span>
+            <span class="act__sub">Start of the day${hotelGeo ? "" : " · no location yet"}</span>
+          </span>
+          ${hotelGeo ? "" : `<button type="button" class="btn btn--small btn--ghost" data-locate-item="${hotel.id}">Locate</button>`}
+        </div>`;
+      if (hotelGeo) prevLoc = hotel.location;
+    }
+
+    for (const e of stops) {
+      entries.push(e);
+      const letter = letters[letterIdx % letters.length];
+      letterIdx += 1;
+      const geo = e.item.location.lat !== null;
+      const leg = prevLoc && geo ? legLabel(prevLoc, e.item.location) : "";
+      if (leg) sidebar += `<div class="mapstop-leg">↓ ${escapeHtml(leg)}</div>`;
+      const when = e.item.startTime || "";
+      sidebar += `
+        <div class="mapstop">
+          <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}">${letter}</span>
+          <span class="mapstop__body">
+            <span class="act__title">${escapeHtml(e.item.title)}</span>
+            <span class="act__sub">${escapeHtml(e.item.location.name)}${when ? " · " + escapeHtml(when) : ""}</span>
+          </span>
+          ${geo ? "" : `<button type="button" class="btn btn--small btn--ghost" data-locate-item="${e.item.id}">Locate</button>`}
+          <a class="btn btn--small btn--ghost" href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener">Maps ↗</a>
+        </div>`;
+      if (geo) prevLoc = e.item.location;
+    }
+  }
+
+  const listHtml = sidebar ||
+    `<p class="empty-state">No located reservations ${mapDayFilter === "all" ? "yet" : "on this day"}. Add a location to a reservation to see it here.</p>`;
 
   view.innerHTML = `
     <div class="daychips">${chips}</div>
@@ -3096,12 +3166,20 @@ function renderMapsTab(trip) {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(leafletMap);
 
-  if (located.length === 0) {
+  if (located.length === 0 && hotelPins.size === 0) {
     leafletMap.setView([48.8566, 2.3522], 4);
     return;
   }
 
   const bounds = [];
+  hotelPins.forEach((h) => {
+    const { lat, lng } = h.location;
+    bounds.push([lat, lng]);
+    const icon = L.divIcon({ className: "", html: `<span class="map-pin map-pin--hotel">${ICONS.hotel}</span>`, iconSize: [32, 32], iconAnchor: [16, 32] });
+    L.marker([lat, lng], { icon })
+      .addTo(leafletMap)
+      .bindPopup(`<strong>${escapeHtml(h.title)}</strong><br>Your hotel — start of the day`);
+  });
   located.forEach((e) => {
     const idx = entries.indexOf(e);
     const letter = letters[idx % letters.length];
