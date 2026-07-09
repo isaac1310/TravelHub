@@ -259,6 +259,7 @@
       roomId = data.id;
       roomSecret = data.secret;
       sharedMode = true;
+      rememberRoom(roomId, roomSecret);
       lastRemoteUpdatedAt = new Date().toISOString();
       lastSyncAt = Date.now();
       const url = new URL(window.location.href);
@@ -313,12 +314,21 @@
     }
 
     const params = new URLSearchParams(window.location.search);
-    const room = params.get("room");
-    const key = params.get("key");
+    const urlRoom = params.get("room");
+    const urlKey = params.get("key");
+    const remembered = storedRoom();
+
+    // Prefer the URL's room; fall back to the room this device already joined,
+    // so a plain reload (no ?room&key) still reconnects to the shared trip.
+    const room = urlRoom || remembered?.room;
+    const key = (urlRoom ? urlKey : remembered?.key) || null;
     if (!room || !key) return;
 
-    // Warn before replacing existing local data (only if there is any).
-    if (hasLocalTrips() &&
+    const alreadyJoined = remembered && remembered.room === room;
+
+    // Warn before replacing local data — only when JOINING a room this device
+    // hasn't used before (reloads of your own shared trip never prompt).
+    if (!alreadyJoined && hasLocalTrips() &&
         !confirm("Open shared trip? This replaces the trip data on this device.")) {
       // Cancelled: stay local-only, strip the room params so refresh won't re-prompt.
       const url = new URL(window.location.href);
@@ -339,6 +349,12 @@
       roomId = room;
       roomSecret = key;
       sharedMode = true;
+      rememberRoom(room, key);
+      // Keep the URL carrying the link so Copy/refresh stay consistent.
+      const url = new URL(window.location.href);
+      url.searchParams.set("room", room);
+      url.searchParams.set("key", key);
+      window.history.replaceState({}, "", url);
       lastRemoteUpdatedAt = data.updated_at || null;
       lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || "" };
       applyRemote(data.payload); // initial load: no diff — everything would be "new"
@@ -351,6 +367,14 @@
       alert(err.message || "Could not load the shared trip.");
       setSyncStatus("", "");
     }
+  }
+
+  const ROOM_STORE_KEY = "travelhub-room";
+  function storedRoom() {
+    try { return JSON.parse(localStorage.getItem(ROOM_STORE_KEY) || "null"); } catch { return null; }
+  }
+  function rememberRoom(room, key) {
+    try { localStorage.setItem(ROOM_STORE_KEY, JSON.stringify({ room, key })); } catch { /* private mode */ }
   }
 
   function hasLocalTrips() {
