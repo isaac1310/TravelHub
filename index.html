@@ -773,8 +773,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           </div>
           <div class="appbar__actions">
             <span class="sync-status" id="sync-status" hidden></span>
-            <button type="button" class="icon-btn" id="btn-share" aria-label="Share trip data" title="Share" hidden>
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="6" cy="12" r="2.5" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="6" r="2.5" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="18" r="2.5" stroke="currentColor" stroke-width="1.6"/><path d="m8.3 10.8 6.4-3.6M8.3 13.2l6.4 3.6" stroke="currentColor" stroke-width="1.6"/></svg>
+            <button type="button" class="icon-btn" id="btn-copy-link" aria-label="Copy share link" title="Copy share link" hidden>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.5 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </button>
+            <button type="button" class="icon-btn" id="btn-share" aria-label="Save to cloud" title="Save to cloud" hidden>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 19h9a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 5 9.5 3.5 3.5 0 0 0 6 19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 9v5m0 0-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <button type="button" class="icon-btn" id="btn-appbar-add" aria-label="New trip" title="New trip">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -806,7 +809,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <div class="budget-head">
               <div class="budget-head__intro">
                 <h2>Budget &amp; expenses</h2>
-                <p class="subtitle">Trips, budgets, and expenses by year · saved on this device</p>
+                <p class="subtitle" id="budget-subtitle">Trips, budgets, and expenses by year · saved on this device</p>
               </div>
               <div class="header__controls">
                 <label class="field field--inline">
@@ -1117,7 +1120,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.0.4";
+const APP_VERSION = "v1.1.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];
@@ -1364,7 +1367,7 @@ function normalizeState(data) {
     .map((c) => ({ id: String(c.id), text: String(c.text), done: !!c.done }));
   if (!Array.isArray(data.documents)) data.documents = [];
   data.documents = data.documents
-    .filter((d) => d && d.id && d.name && typeof d.dataUrl === "string" && d.dataUrl.startsWith("data:"))
+    .filter((d) => d && d.id && d.name && typeof d.dataUrl === "string" && /^data:(application\/pdf|image\/[a-zA-Z0-9.+-]+);/.test(d.dataUrl))
     .map((d) => ({
       id: d.id,
       name: String(d.name),
@@ -1404,6 +1407,12 @@ function loadState() {
     }
   } catch (err) {
     console.error("loadState: falling back to seed data", err);
+    // Only alarm the user if there WAS stored data we couldn't read — not on first run.
+    try {
+      if (localStorage.getItem(STORAGE_KEY)) {
+        alert("Your saved trip data couldn't be loaded, so default trips are shown. Your stored data was not deleted — reload to try again, or import a backup.");
+      }
+    } catch { /* localStorage unavailable */ }
   }
   return normalizeState(structuredClone(SEED_DATA));
 }
@@ -2107,8 +2116,10 @@ function handleItemSubmit(e) {
   const existing = itemId ? state.items.find((i) => i.id === itemId) : null;
   const locationName = isFlight ? form.arrivalAirport.value.trim() : form.locationName.value.trim();
   const keepCoords = existing && existing.location.name === locationName;
-  const pickedLat = !isFlight && form.locLat.value !== "" ? Number(form.locLat.value) : null;
-  const pickedLng = !isFlight && form.locLng.value !== "" ? Number(form.locLng.value) : null;
+  const rawLat = !isFlight && form.locLat.value !== "" ? Number(form.locLat.value) : null;
+  const rawLng = !isFlight && form.locLng.value !== "" ? Number(form.locLng.value) : null;
+  const pickedLat = Number.isFinite(rawLat) ? rawLat : null;
+  const pickedLng = Number.isFinite(rawLng) ? rawLng : null;
 
   const item = normalizeItem({
     id: itemId || uid("item"),
@@ -2157,16 +2168,37 @@ function deleteItem(itemId) {
    Google Maps, copy the link/coords, paste. Returns {lat,lng} or null. */
 function parseCoordsFromText(text) {
   const t = (text || "").trim();
+  // Only return coordinates that are real finite numbers in range.
+  const ok = (lat, lng) =>
+    Number.isFinite(lat) && Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+      ? { lat, lng } : null;
+
   // Google Maps URL: .../@48.8583,2.2944,17z  or  ...!3d48.8583!4d2.2944
   const at = t.match(/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (at) return { lat: Number(at[1]), lng: Number(at[2]) };
+  if (at) return ok(Number(at[1]), Number(at[2]));
   const d3d4 = t.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/);
-  if (d3d4) return { lat: Number(d3d4[1]), lng: Number(d3d4[2]) };
+  if (d3d4) return ok(Number(d3d4[1]), Number(d3d4[2]));
   const q = t.match(/[?&]q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/) || t.match(/query=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (q) return { lat: Number(q[1]), lng: Number(q[2]) };
+  if (q) return ok(Number(q[1]), Number(q[2]));
   // Plain "lat, lng" (only when the whole field is just that — avoids false hits)
   const plain = t.match(/^(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/);
-  if (plain) return { lat: Number(plain[1]), lng: Number(plain[2]) };
+  if (plain) return ok(Number(plain[1]), Number(plain[2]));
+  // DMS, e.g. 48°51'26.0"N 2°17'20.3"E  (also comma-separated variant)
+  const dt = t.replace(/([NSEW])\s*,\s*/gi, "$1 ");
+  const dms = [...dt.matchAll(/(\d{1,3})[°\s]+(\d{1,2})['′\s]+([\d.]+)[""″\s]*([NSEW])/gi)];
+  if (dms.length === 2) {
+    const conv = (m) => {
+      let v = Number(m[1]) + Number(m[2]) / 60 + Number(m[3]) / 3600;
+      if (/[SW]/i.test(m[4])) v = -v;
+      return v;
+    };
+    const a = dms[0], b = dms[1];
+    return ok(
+      /[NS]/i.test(a[4]) ? conv(a) : conv(b),
+      /[EW]/i.test(a[4]) ? conv(a) : conv(b)
+    );
+  }
   return null;
 }
 
@@ -2181,20 +2213,14 @@ function placeNameFromMapsUrl(text) {
   }
 }
 
-function photonUrl(query, limit, trip) {
-  let url = `https://photon.komoot.io/api/?limit=${limit}&q=${encodeURIComponent(query)}`;
-  // Bias toward the trip's city so "eiffel tower" while planning Paris wins
-  const city = (trip?.destination || "").split(",")[0].trim();
-  if (city && !query.toLowerCase().includes(city.toLowerCase())) {
-    url += `&q=${encodeURIComponent(query + " " + city)}`.replace(/^&q=/, "");
-  }
-  return url;
-}
-
 function photonLabel(f) {
   const p = f.properties || {};
-  const parts = [p.name, p.street && !p.name ? p.street : null, p.city, p.state, p.country].filter(Boolean);
-  return [...new Set(parts)].join(", ");
+  const street = [p.housenumber, p.street].filter(Boolean).join(" ");
+  const head = p.name || street;
+  const parts = [head];
+  if (street && street !== head) parts.push(street);
+  [p.city, p.state, p.country].forEach((x) => { if (x) parts.push(x); });
+  return [...new Set(parts.filter(Boolean))].join(", ");
 }
 
 /* Geocode an item's location via Photon (OpenStreetMap, typeahead-tuned).
@@ -2202,6 +2228,15 @@ function photonLabel(f) {
 async function geocodeItem(itemId) {
   const item = state.items.find((i) => i.id === itemId);
   if (!item || !item.location.name) return false;
+  // If the name is itself coordinates (decimal or DMS) or a Maps link, use them.
+  const direct = parseCoordsFromText(item.location.name);
+  if (direct) {
+    item.location.lat = direct.lat;
+    item.location.lng = direct.lng;
+    saveState();
+    if (currentScreenId() === "itinerary" && itinerarySubTab === "maps") renderItinerary();
+    return true;
+  }
   const trip = state.trips.find((t) => t.id === item.tripId);
   const city = (trip?.destination || "").split(",")[0].trim();
   const q = city && !item.location.name.toLowerCase().includes(city.toLowerCase())
@@ -2212,9 +2247,10 @@ async function geocodeItem(itemId) {
     if (!res.ok) return false;
     const data = await res.json();
     const coords = data.features?.[0]?.geometry?.coordinates;
-    if (!coords) return false;
-    item.location.lng = Number(coords[0]);
-    item.location.lat = Number(coords[1]);
+    const lng = Number(coords?.[0]), lat = Number(coords?.[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    item.location.lng = lng;
+    item.location.lat = lat;
     saveState();
     if (currentScreenId() === "itinerary" && itinerarySubTab === "maps") renderItinerary();
     return true;
@@ -2402,12 +2438,14 @@ function handleExpenseSubmit(e) {
 function deleteTrip(tripId) {
   const trip = state.trips.find((t) => t.id === tripId);
   if (!trip) return;
-  const spent = tripSpent(trip);
-  const msg = spent
-    ? `Delete "${trip.name}" and its ${trip.expenses.length} expense(s)?`
-    : `Delete "${trip.name}"?`;
+  const itemCount = state.items.filter((i) => i.tripId === tripId).length;
+  const bits = [];
+  if (trip.expenses.length) bits.push(`${trip.expenses.length} expense(s)`);
+  if (itemCount) bits.push(`${itemCount} reservation(s)`);
+  const msg = bits.length ? `Delete "${trip.name}" and its ${bits.join(" & ")}?` : `Delete "${trip.name}"?`;
   if (!confirm(msg)) return;
   state.trips = state.trips.filter((t) => t.id !== tripId);
+  state.items = state.items.filter((i) => i.tripId !== tripId);
   saveState();
   render();
 }
@@ -2648,6 +2686,13 @@ function avatar(name) {
 }
 function tripItems(trip) {
   return state.items.filter((i) => i.tripId === trip.id);
+}
+/* Seed items were migrated as `item-<expenseId>`; recover the linked expense
+   so Bookings can show its cost/payment status. New uid items return null. */
+function linkedExpense(item) {
+  const m = String(item.id).match(/^item-(.+)$/);
+  if (!m) return null;
+  return state.trips.find((t) => t.id === item.tripId)?.expenses.find((e) => e.id === m[1]) || null;
 }
 function tripHotelName(trip) {
   return tripItems(trip).find((i) => i.type === "hotel")?.title || null;
@@ -2992,7 +3037,7 @@ function renderMapsTab(trip) {
   const isoFilter = mapDayFilter === "all" ? dayIsos : [mapDayFilter];
   const entries = isoFilter
     .flatMap((iso) => itemsForDay(trip, iso).filter((e) => !e.checkout))
-    .filter((e) => e.item.location.name);
+    .filter((e) => e.item.type !== "flight" && e.item.location.name);
 
   const hasLeaflet = typeof L !== "undefined";
   const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -3077,39 +3122,49 @@ function renderBookings() {
   const groups = [...state.trips]
     .sort((a, b) => a.year - b.year)
     .map((trip) => {
-      if (trip.expenses.length === 0) return "";
-      const meta = getMeta(trip);
-      const items = trip.expenses
-        .map((e) => {
-          const ref = EXPENSE_REF[e.id] || {};
-          const kind = ref.kind || (e.category === "Flight" ? "flight" : e.category === "Hotel" ? "hotel" : "other");
-          const icon = kind === "flight" ? ICONS.plane : kind === "hotel" ? ICONS.hotel : ICONS.doc;
-          const display = expenseDisplayStatus(e);
+      const items = tripItems(trip).slice().sort((a, b) =>
+        (a.date || "").localeCompare(b.date || "") || (a.startTime || "").localeCompare(b.startTime || "")
+      );
+      if (items.length === 0) return "";
+      const cards = items
+        .map((it) => {
+          const icon = itemTypeIcon(it.type);
+          const exp = linkedExpense(it);
+          const when = [parseISO(it.date) ? fmtDay(parseISO(it.date)) : "", fmtTimeRange(it)].filter(Boolean).join(" · ");
+          const sub = [
+            it.type === "flight" && it.departAirport && it.arrivalAirport ? `${it.departAirport} → ${it.arrivalAirport}` : "",
+            it.flightNo,
+            it.type !== "flight" ? it.location.name : "",
+            it.confirmation ? `Conf: ${it.confirmation}` : "",
+            it.details,
+          ].filter(Boolean).join(" · ");
+          const foot = exp
+            ? `<div class="booking__foot">
+                  <span class="payment-status payment-status--${expenseDisplayStatus(exp)}">${paymentStatusLabel(exp)}</span>
+                  <span class="booking__amount">${formatMoney(exp.amount)}</span>
+                </div>`
+            : "";
           return `
             <div class="booking">
-              <span class="booking__icon booking__icon--${kind}">${icon}</span>
+              <span class="booking__icon booking__icon--${it.type}">${icon}</span>
               <div class="booking__body">
-                <p class="booking__title">${escapeHtml(ref.name || e.label)}</p>
-                <p class="booking__ref">${escapeHtml(e.label)}${ref.detail ? ` · <code>${escapeHtml(ref.detail)}</code>` : ""}</p>
-                <div class="booking__foot">
-                  <span class="category-tag" ${categoryDataAttr(e.category)}>${escapeHtml(normalizeCategory(e.category))}</span>
-                  <span class="payment-status payment-status--${display}">${paymentStatusLabel(e)}</span>
-                  <span class="booking__amount">${formatMoney(e.amount)}</span>
-                </div>
+                <p class="booking__title">${escapeHtml(it.title)}${when ? ` <span style="color:var(--muted);font-weight:500">· ${escapeHtml(when)}</span>` : ""}</p>
+                ${sub ? `<p class="booking__ref">${escapeHtml(sub)}</p>` : ""}
+                ${foot}
               </div>
             </div>`;
         })
         .join("");
       return `
         <section class="booking-group">
-          <h2 class="booking-group__title">${nameWithCity(trip)} <span class="badge">${trip.expenses.length} bookings</span></h2>
-          <div class="booking-list">${items}</div>
+          <h2 class="booking-group__title">${nameWithCity(trip)} <span class="badge">${items.length} reservation${items.length === 1 ? "" : "s"}</span></h2>
+          <div class="booking-list">${cards}</div>
         </section>`;
     })
     .join("");
 
   body.innerHTML = `
-    ${groups || `<div class="empty-card"><h3>No bookings yet</h3><p>Bookings you add in Budget will appear here.</p></div>`}
+    ${groups || `<div class="empty-card"><h3>No reservations yet</h3><p>Add reservations in Itinerary and they'll appear here.</p></div>`}
     <section class="booking-group">
       <h2 class="booking-group__title">Documents</h2>
       <div class="card" style="padding:1.1rem 1.3rem">
@@ -3243,6 +3298,8 @@ function bindSharedListActions(scope, rerender) {
 const DOC_MAX_MB = 2.5;
 const DOC_MAX_BYTES = DOC_MAX_MB * 1024 * 1024;
 const DOC_TOTAL_WARN_BYTES = 4 * 1024 * 1024;
+const DOC_TOTAL_MAX_MB = 4;
+const DOC_TOTAL_MAX_BYTES = DOC_TOTAL_MAX_MB * 1024 * 1024;
 
 function docsTotalBytes() {
   return state.documents.reduce((s, d) => s + (d.size || 0), 0);
@@ -3279,7 +3336,19 @@ function addDocumentFiles(input, rerender) {
   input.value = "";
   const rejected = [];
   const addedIds = [];
+  let projected = docsTotalBytes(); // running total incl. files queued this batch
   let pending = 0;
+  const finish = () => {
+    if (pending !== 0) return;
+    try {
+      saveState();
+    } catch {
+      state.documents = state.documents.filter((d) => !addedIds.includes(d.id));
+      alert("Not enough browser storage for these files. Remove some documents first.");
+    }
+    if (rejected.length) alert("Skipped:\n" + rejected.join("\n"));
+    rerender();
+  };
   for (const f of files) {
     if (f.size > DOC_MAX_BYTES) {
       rejected.push(`${f.name} (too big — max ${DOC_MAX_MB} MB)`);
@@ -3289,33 +3358,31 @@ function addDocumentFiles(input, rerender) {
       rejected.push(`${f.name} (only PDF or images)`);
       continue;
     }
+    if (projected + f.size > DOC_TOTAL_MAX_BYTES) {
+      rejected.push(`${f.name} (would exceed the ${DOC_TOTAL_MAX_MB} MB total — remove some first)`);
+      continue;
+    }
+    projected += f.size;
     pending += 1;
     const reader = new FileReader();
     reader.onload = () => {
       const id = uid("doc");
       addedIds.push(id);
       state.documents.push({
-        id,
-        name: f.name,
-        type: f.type,
-        size: f.size,
-        dataUrl: reader.result,
-        uploadedAt: todayISO(),
+        id, name: f.name, type: f.type, size: f.size,
+        dataUrl: reader.result, uploadedAt: todayISO(),
       });
       pending -= 1;
-      if (pending === 0) {
-        try {
-          saveState();
-        } catch {
-          state.documents = state.documents.filter((d) => !addedIds.includes(d.id));
-          alert("Not enough browser storage for these files. Remove some documents first.");
-        }
-        rerender();
-      }
+      finish();
+    };
+    reader.onerror = () => {
+      rejected.push(`${f.name} (couldn't be read)`);
+      pending -= 1;
+      finish();
     };
     reader.readAsDataURL(f);
   }
-  if (rejected.length) alert("Skipped:\n" + rejected.join("\n"));
+  if (pending === 0) finish(); // all files rejected synchronously → still report
 }
 
 function bindDocumentActions(scope, rerender) {

@@ -104,14 +104,24 @@
     }
   }
 
-  async function handleShareClick(btn) {
-    if (sharedMode) {
-      copyLink();
-      return;
+  /* Reflect saved state in the app bar: Save button becomes a non-actionable
+     "Saved" indicator and the Copy link button appears. */
+  function markSavedChrome() {
+    const save = document.getElementById("btn-share");
+    if (save) {
+      save.disabled = true;
+      save.setAttribute("aria-label", "Saved to cloud");
+      save.setAttribute("title", "Saved to cloud — changes sync automatically");
     }
-    if (!confirm("Create a share link? Anyone with the link can view and edit this trip data.")) return;
+    const copy = document.getElementById("btn-copy-link");
+    if (copy) copy.hidden = false;
+  }
+
+  async function handleSaveClick(btn) {
+    if (sharedMode) return; // already saved; edits auto-sync
+    if (!confirm("Save this trip to the cloud so it syncs across devices and can be shared by link?")) return;
     btn.disabled = true;
-    setSyncStatus("Creating link…", "busy");
+    setSyncStatus("Saving…", "busy");
     try {
       const { data, error } = await supabase.rpc("create_shared_budget", {
         p_payload: window.VacationApp.getPayload(),
@@ -126,11 +136,12 @@
       url.searchParams.set("key", roomSecret);
       window.history.replaceState({}, "", url);
       setInterval(pullIfNewer, POLL_MS);
+      markSavedChrome();
+      setSyncStatus("Saved", "ok");
       await copyLink();
     } catch (err) {
       console.error(err);
-      setSyncStatus("Share failed", "error");
-    } finally {
+      setSyncStatus("Save failed", "error");
       btn.disabled = false;
     }
   }
@@ -154,37 +165,65 @@
       window.VACATION_CONFIG.supabaseAnonKey
     );
 
+    const sub = document.getElementById("budget-subtitle");
+    if (sub) sub.textContent = "Trips, budgets, and expenses by year · synced to cloud when saved";
+
     const btn = document.getElementById("btn-share");
     if (btn) {
       btn.hidden = false;
-      btn.addEventListener("click", () => handleShareClick(btn));
+      btn.addEventListener("click", () => handleSaveClick(btn));
+    }
+    const copyBtn = document.getElementById("btn-copy-link");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", () => copyLink().catch(() => {}));
     }
 
     const params = new URLSearchParams(window.location.search);
     const room = params.get("room");
     const key = params.get("key");
-    if (room && key) {
+    if (!room || !key) return;
+
+    // Warn before replacing existing local data (only if there is any).
+    if (hasLocalTrips() &&
+        !confirm("Open shared trip? This replaces the trip data on this device.")) {
+      // Cancelled: stay local-only, strip the room params so refresh won't re-prompt.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("room");
+      url.searchParams.delete("key");
+      window.history.replaceState({}, "", url);
+      return;
+    }
+
+    setSyncStatus("Loading shared trip…", "busy");
+    try {
+      const { data, error } = await supabase.rpc("fetch_shared_budget", {
+        p_id: room,
+        p_secret: key,
+      });
+      if (error || !data?.payload) throw new Error("Invalid or expired share link.");
+      // Only now commit to shared mode (Cancel above never reaches here).
       roomId = room;
       roomSecret = key;
       sharedMode = true;
-      setSyncStatus("Loading shared trip…", "busy");
-      try {
-        const { data, error } = await supabase.rpc("fetch_shared_budget", {
-          p_id: roomId,
-          p_secret: roomSecret,
-        });
-        if (error || !data?.payload) throw new Error("Invalid or expired share link.");
-        lastRemoteUpdatedAt = data.updated_at || null;
-        applyRemote(data.payload);
-        setSyncStatus("Shared trip loaded", "ok");
-        setInterval(pullIfNewer, POLL_MS);
-      } catch (err) {
-        alert(err.message || "Could not load the shared trip.");
-        sharedMode = false;
-        roomId = null;
-        roomSecret = null;
-        setSyncStatus("", "");
-      }
+      lastRemoteUpdatedAt = data.updated_at || null;
+      applyRemote(data.payload);
+      markSavedChrome();
+      setSyncStatus("Shared trip loaded", "ok");
+      setInterval(pullIfNewer, POLL_MS);
+    } catch (err) {
+      alert(err.message || "Could not load the shared trip.");
+      setSyncStatus("", "");
+    }
+  }
+
+  function hasLocalTrips() {
+    try {
+      const raw = localStorage.getItem("vacation-budget-planner-v1");
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed?.trips) && parsed.trips.length > 0;
+    } catch {
+      return false;
     }
   }
 
