@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vacation Budget Planner</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="header__title">
+        <h1>Vacation Budget Planner</h1>
+        <p class="subtitle">Local · v1 — trips, budgets, and expenses by year</p>
+      </div>
+      <div class="header__controls">
+        <label class="field field--inline">
+          <span class="field__label">Year</span>
+          <select id="year-filter" aria-label="Filter by year"></select>
+        </label>
+        <button type="button" id="btn-roll-budget" class="btn btn--secondary">
+          Roll budget
+        </button>
+        <button type="button" id="btn-add-funds" class="btn btn--primary">
+          Add funds
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="panel panel--global" aria-labelledby="global-heading">
+        <h2 id="global-heading" class="panel__heading">Overview</h2>
+        <div id="global-stats" class="stats-grid"></div>
+      </section>
+
+      <section class="trips-section" aria-labelledby="trips-heading">
+        <div class="trips-section__head">
+          <h2 id="trips-heading" class="panel__heading">Trips</h2>
+          <button type="button" id="btn-add-trip" class="btn btn--secondary">
+            New trip
+          </button>
+        </div>
+        <div id="trips-list" class="trips-grid"></div>
+        <p id="trips-empty" class="empty-state" hidden>
+          No trips for this year. Create one to start tracking.
+        </p>
+      </section>
+
+      <section class="panel panel--history" aria-labelledby="funds-heading">
+        <h2 id="funds-heading" class="panel__heading">Fund additions &amp; budget rolls</h2>
+        <ul id="fund-history" class="history-list"></ul>
+        <p id="fund-history-empty" class="empty-state" hidden>
+          No fund additions or budget rolls yet.
+        </p>
+      </section>
+    </main>
+
+    <dialog id="dialog-funds" class="dialog">
+      <form id="form-funds" method="dialog">
+        <h3 class="dialog__title">Add to vacation funds</h3>
+        <label class="field">
+          <span class="field__label">Amount (₪)</span>
+          <input type="number" name="amount" min="0.01" step="0.01" required />
+        </label>
+        <label class="field">
+          <span class="field__label">Date</span>
+          <input type="date" name="date" required />
+        </label>
+        <label class="field">
+          <span class="field__label">Note (optional)</span>
+          <input type="text" name="note" maxlength="200" />
+        </label>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn--primary">Add</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dialog-trip" class="dialog">
+      <form id="form-trip" method="dialog">
+        <h3 class="dialog__title" id="trip-dialog-title">New trip</h3>
+        <input type="hidden" name="tripId" />
+        <label class="field">
+          <span class="field__label">Trip name</span>
+          <input type="text" name="name" required maxlength="80" />
+        </label>
+        <label class="field">
+          <span class="field__label">Year</span>
+          <input type="number" name="year" min="2000" max="2100" required />
+        </label>
+        <label class="field">
+          <span class="field__label">Budget (₪)</span>
+          <input type="number" name="budget" min="0" step="0.01" required />
+        </label>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn--primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dialog-roll" class="dialog dialog--wide">
+      <form id="form-roll" method="dialog">
+        <h3 class="dialog__title">Roll budget between years</h3>
+        <p class="dialog__hint">
+          Move unspent trip budget from one year to another. Source trip
+          budgets are reduced; destination trip budgets or vacation funds
+          increase.
+        </p>
+        <div class="roll-years">
+          <label class="field">
+            <span class="field__label">From year</span>
+            <select name="fromYear" id="roll-from-year" required></select>
+          </label>
+          <label class="field">
+            <span class="field__label">To year</span>
+            <select name="toYear" id="roll-to-year" required></select>
+          </label>
+        </div>
+        <div id="roll-preview" class="roll-preview" aria-live="polite"></div>
+        <label class="field">
+          <span class="field__label">Amount to roll (₪)</span>
+          <input
+            type="number"
+            name="amount"
+            id="roll-amount"
+            min="0.01"
+            step="0.01"
+            required
+          />
+          <button type="button" id="roll-use-max" class="btn btn--small btn--ghost">
+            Use all available
+          </button>
+        </label>
+        <fieldset class="field fieldset">
+          <legend class="field__label">Apply rolled amount to</legend>
+          <label class="radio">
+            <input type="radio" name="target" value="trips" checked />
+            Trip budgets in destination year (split evenly)
+          </label>
+          <label class="radio">
+            <input type="radio" name="target" value="funds" />
+            Vacation funds (shared pool)
+          </label>
+        </fieldset>
+        <label class="field">
+          <span class="field__label">Date</span>
+          <input type="date" name="date" required />
+        </label>
+        <label class="field">
+          <span class="field__label">Note (optional)</span>
+          <input type="text" name="note" maxlength="200" />
+        </label>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn--primary" id="roll-submit">
+            Roll budget
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="dialog-expense" class="dialog">
+      <form id="form-expense" method="dialog">
+        <h3 class="dialog__title">Add expense</h3>
+        <input type="hidden" name="tripId" />
+        <input type="hidden" name="expenseId" />
+        <label class="field">
+          <span class="field__label">Description</span>
+          <input type="text" name="label" required maxlength="120" />
+        </label>
+        <label class="field">
+          <span class="field__label">Category</span>
+          <select name="category" required>
+            <option value="Hotel">Hotel</option>
+            <option value="Flight">Flight</option>
+            <option value="Food">Food</option>
+            <option value="Transport">Transport</option>
+            <option value="Activities">Activities</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="field__label">Amount (₪)</span>
+          <input type="number" name="amount" min="0.01" step="0.01" required />
+        </label>
+        <label class="field">
+          <span class="field__label">Date (optional)</span>
+          <input type="date" name="date" />
+        </label>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>
+            Cancel
+          </button>
+          <button type="submit" class="btn btn--primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>

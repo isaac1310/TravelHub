@@ -1,0 +1,89 @@
+-- Run this in Supabase: SQL Editor → New query → Run
+-- Shared vacation budget (Phase 1): access only via RPC with room id + secret
+
+create table if not exists public.shared_budgets (
+  id uuid primary key default gen_random_uuid(),
+  room_secret text not null,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.shared_budgets enable row level security;
+
+-- No direct table access for anon (all access through functions below)
+revoke all on public.shared_budgets from anon, authenticated;
+
+create or replace function public.create_shared_budget(p_payload jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid := gen_random_uuid();
+  v_secret text := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
+begin
+  insert into public.shared_budgets (id, room_secret, payload)
+  values (v_id, v_secret, coalesce(p_payload, '{}'::jsonb));
+
+  return jsonb_build_object('id', v_id, 'secret', v_secret);
+end;
+$$;
+
+create or replace function public.fetch_shared_budget(p_id uuid, p_secret text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_payload jsonb;
+  v_updated timestamptz;
+begin
+  select payload, updated_at
+  into v_payload, v_updated
+  from public.shared_budgets
+  where id = p_id and room_secret = p_secret;
+
+  if v_payload is null then
+    return null;
+  end if;
+
+  return jsonb_build_object(
+    'payload', v_payload,
+    'updated_at', v_updated
+  );
+end;
+$$;
+
+create or replace function public.save_shared_budget(
+  p_id uuid,
+  p_secret text,
+  p_payload jsonb
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_updated timestamptz;
+begin
+  update public.shared_budgets
+  set
+    payload = coalesce(p_payload, '{}'::jsonb),
+    updated_at = now()
+  where id = p_id and room_secret = p_secret
+  returning updated_at into v_updated;
+
+  if v_updated is null then
+    return jsonb_build_object('ok', false);
+  end if;
+
+  return jsonb_build_object('ok', true, 'updated_at', v_updated);
+end;
+$$;
+
+grant execute on function public.create_shared_budget(jsonb) to anon, authenticated;
+grant execute on function public.fetch_shared_budget(uuid, text) to anon, authenticated;
+grant execute on function public.save_shared_budget(uuid, text, jsonb) to anon, authenticated;
