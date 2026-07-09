@@ -49,27 +49,49 @@
     }
   }
 
+  const RETRY_DELAYS_MS = [5000, 15000, 45000];
+  let retryCount = 0;
+  let retryTimer = null;
+
   async function saveRemote() {
     if (!sharedMode || !supabase) return;
+    clearTimeout(retryTimer);
     saveInFlight = true;
     setSyncStatus("Saving…", "busy");
-    const { data, error } = await supabase.rpc("save_shared_budget", {
-      p_id: roomId,
-      p_secret: roomSecret,
-      p_payload: window.VacationApp.getPayload(),
-    });
+    let failed = false;
+    try {
+      const { data, error } = await supabase.rpc("save_shared_budget", {
+        p_id: roomId,
+        p_secret: roomSecret,
+        p_payload: window.VacationApp.getPayload(),
+      });
+      failed = Boolean(error || !data?.ok);
+      if (!failed) lastRemoteUpdatedAt = data.updated_at || lastRemoteUpdatedAt;
+    } catch {
+      failed = true; // network error
+    }
     saveInFlight = false;
-    pendingSave = false;
-    if (error || !data?.ok) {
-      setSyncStatus("Save failed", "error");
+    if (!failed) {
+      pendingSave = false;
+      retryCount = 0;
+      setSyncStatus("Saved", "ok");
       return;
     }
-    lastRemoteUpdatedAt = data.updated_at || lastRemoteUpdatedAt;
-    setSyncStatus("Saved", "ok");
+    // Keep pendingSave true so polling doesn't clobber unsaved local edits,
+    // and retry with backoff. A new local edit also re-queues a save.
+    if (retryCount < RETRY_DELAYS_MS.length) {
+      const delay = RETRY_DELAYS_MS[retryCount];
+      retryCount += 1;
+      setSyncStatus(`Save failed — retrying in ${Math.round(delay / 1000)}s`, "error");
+      retryTimer = setTimeout(() => saveRemote().catch(console.error), delay);
+    } else {
+      setSyncStatus("Save failed — check your connection, edits kept locally", "error");
+    }
   }
 
   function notifyLocalChange() {
     if (!sharedMode || applyingRemote) return;
+    retryCount = 0; // fresh edit restarts the retry budget
     pendingSave = true;
     setSyncStatus("Unsaved changes", "pending");
     clearTimeout(saveTimer);
