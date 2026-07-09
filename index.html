@@ -708,6 +708,22 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         background: #3b2b26; color: #fff; font-weight: 700; font-size: 0.85rem;
         border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transform: rotate(0deg);
       }
+      .field--suggest { position: relative; }
+      .loc-suggest {
+        position: absolute; top: 100%; left: 0; right: 0; z-index: 30;
+        background: var(--surface, #fff); border: 1px solid var(--line, #e8ddd5);
+        border-radius: 12px; box-shadow: 0 10px 26px rgba(59, 43, 38, 0.14);
+        overflow: hidden; max-height: 220px; overflow-y: auto;
+      }
+      .loc-suggest__opt {
+        display: block; width: 100%; text-align: left; padding: 0.6rem 0.8rem;
+        background: none; border: 0; border-bottom: 1px solid var(--line, #e8ddd5);
+        font: inherit; font-size: 0.82rem; cursor: pointer;
+      }
+      .loc-suggest__opt:last-child { border-bottom: 0; }
+      .loc-suggest__opt:hover, .loc-suggest__opt:focus { background: var(--cream, #f8efe8); }
+      .loc-suggest__empty { padding: 0.6rem 0.8rem; font-size: 0.8rem; color: var(--muted, #8a7a70); }
+      .checklist li .icon-btn--small { margin-left: auto; }
     </style>
     <!-- Leaflet (maps) — optional; app degrades to Google Maps links if unavailable -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -1070,9 +1086,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           </label>
         </div>
         <div data-item-group="notflight">
-          <label class="field">
+          <label class="field field--suggest">
             <span class="field__label">Location (place name or address)</span>
-            <input type="text" name="locationName" maxlength="160" placeholder="e.g. London Eye" />
+            <input type="text" name="locationName" maxlength="160" placeholder="Start typing, e.g. London Eye" autocomplete="off" />
+            <input type="hidden" name="locLat" />
+            <input type="hidden" name="locLng" />
+            <div class="loc-suggest" id="loc-suggest" hidden></div>
           </label>
           <label class="field">
             <span class="field__label">Confirmation #</span>
@@ -1334,6 +1353,21 @@ function normalizeState(data) {
   }
   if (!Array.isArray(data.items)) data.items = [];
   data.items = data.items.map(normalizeItem).filter(Boolean);
+  if (!Array.isArray(data.checklist)) data.checklist = [];
+  data.checklist = data.checklist
+    .filter((c) => c && c.id && c.text)
+    .map((c) => ({ id: String(c.id), text: String(c.text), done: !!c.done }));
+  if (!Array.isArray(data.documents)) data.documents = [];
+  data.documents = data.documents
+    .filter((d) => d && d.id && d.name && typeof d.dataUrl === "string" && d.dataUrl.startsWith("data:"))
+    .map((d) => ({
+      id: d.id,
+      name: String(d.name),
+      type: String(d.type || ""),
+      size: Number(d.size) || 0,
+      dataUrl: d.dataUrl,
+      uploadedAt: d.uploadedAt || "",
+    }));
   if (!data.version || data.version < 2) migrateToV2(data);
   return data;
 }
@@ -2041,6 +2075,8 @@ function openItemDialog(tripId, item = null, defaults = {}) {
     form.startTime.value = item.startTime;
     form.endTime.value = item.endTime;
     form.locationName.value = item.location.name;
+    form.locLat.value = item.location.lat ?? "";
+    form.locLng.value = item.location.lng ?? "";
     form.confirmation.value = item.confirmation;
     form.confirmationF.value = item.confirmation;
     form.notes.value = item.notes;
@@ -2066,6 +2102,8 @@ function handleItemSubmit(e) {
   const existing = itemId ? state.items.find((i) => i.id === itemId) : null;
   const locationName = isFlight ? form.arrivalAirport.value.trim() : form.locationName.value.trim();
   const keepCoords = existing && existing.location.name === locationName;
+  const pickedLat = !isFlight && form.locLat.value !== "" ? Number(form.locLat.value) : null;
+  const pickedLng = !isFlight && form.locLng.value !== "" ? Number(form.locLng.value) : null;
 
   const item = normalizeItem({
     id: itemId || uid("item"),
@@ -2082,8 +2120,8 @@ function handleItemSubmit(e) {
     endTime: form.endTime.value,
     location: {
       name: locationName,
-      lat: keepCoords ? existing.location.lat : null,
-      lng: keepCoords ? existing.location.lng : null,
+      lat: pickedLat !== null ? pickedLat : keepCoords ? existing.location.lat : null,
+      lng: pickedLng !== null ? pickedLng : keepCoords ? existing.location.lng : null,
     },
     confirmation: (isFlight ? form.confirmationF.value : form.confirmation.value).trim(),
     notes: form.notes.value.trim(),
@@ -2124,15 +2162,63 @@ async function geocodeItem(itemId) {
       `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,
       { headers: { Accept: "application/json" } }
     );
-    if (!res.ok) return;
+    if (!res.ok) return false;
     const results = await res.json();
-    if (!results.length) return;
+    if (!results.length) return false;
     item.location.lat = Number(results[0].lat);
     item.location.lng = Number(results[0].lon);
     saveState();
     if (currentScreenId() === "itinerary" && itinerarySubTab === "maps") renderItinerary();
+    return true;
   } catch {
     /* offline or blocked — Google Maps link fallback covers this */
+    return false;
+  }
+}
+
+/* ---------- Location autocomplete (Nominatim) ---------- */
+let locSuggestTimer = null;
+let locSuggestAbort = null;
+
+function hideLocSuggestions() {
+  const el = $("loc-suggest");
+  if (el) { el.hidden = true; el.innerHTML = ""; }
+}
+
+async function showLocSuggestions(query) {
+  const el = $("loc-suggest");
+  if (!el) return;
+  try {
+    locSuggestAbort?.abort();
+    locSuggestAbort = new AbortController();
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(query)}`,
+      { headers: { Accept: "application/json" }, signal: locSuggestAbort.signal }
+    );
+    if (!res.ok) return;
+    const results = await res.json();
+    if (!results.length) {
+      el.innerHTML = `<div class="loc-suggest__empty">No matches found — you can still save; the map pin needs a match but the Google Maps link always works.</div>`;
+      el.hidden = false;
+      return;
+    }
+    el.innerHTML = results
+      .map(
+        (r) => `<button type="button" class="loc-suggest__opt" data-lat="${Number(r.lat)}" data-lng="${Number(r.lon)}" data-name="${escapeHtml(r.display_name)}">${escapeHtml(r.display_name)}</button>`
+      )
+      .join("");
+    el.hidden = false;
+    el.querySelectorAll(".loc-suggest__opt").forEach((b) =>
+      b.addEventListener("click", () => {
+        const form = $("form-item");
+        form.locationName.value = b.getAttribute("data-name");
+        form.locLat.value = b.getAttribute("data-lat");
+        form.locLng.value = b.getAttribute("data-lng");
+        hideLocSuggestions();
+      })
+    );
+  } catch {
+    /* aborted or offline */
   }
 }
 
@@ -2333,6 +2419,21 @@ function bindEvents() {
   $("form-item").addEventListener("submit", handleItemSubmit);
   $("form-item").type.addEventListener("change", syncItemTypeFields);
 
+  const locInput = $("form-item").locationName;
+  locInput.addEventListener("input", () => {
+    const form = $("form-item");
+    form.locLat.value = "";
+    form.locLng.value = "";
+    clearTimeout(locSuggestTimer);
+    const q = locInput.value.trim();
+    if (q.length < 3) { hideLocSuggestions(); return; }
+    locSuggestTimer = setTimeout(() => showLocSuggestions(q), 500);
+  });
+  $("dialog-item").addEventListener("close", () => {
+    clearTimeout(locSuggestTimer);
+    hideLocSuggestions();
+  });
+
   $("form-expense").addEventListener("input", (e) => {
     const form = e.target.form;
     if (!form || form.id !== "form-expense") return;
@@ -2429,8 +2530,6 @@ let itineraryTripId = null;
 let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let leafletMap = null;
-let familyChecklist = [];   // {id, text, done}
-let checklistSeq = 0;
 
 /* Trip meta now lives on the trip itself (persisted since v2). */
 function getMeta(trip) { return trip || {}; }
@@ -2868,7 +2967,15 @@ function renderMapsTab(trip) {
     b.addEventListener("click", () => { mapDayFilter = b.getAttribute("data-day"); renderItinerary(); })
   );
   view.querySelectorAll("[data-locate-item]").forEach((b) =>
-    b.addEventListener("click", () => { b.disabled = true; geocodeItem(b.getAttribute("data-locate-item")); })
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      b.textContent = "Locating…";
+      const ok = await geocodeItem(b.getAttribute("data-locate-item"));
+      if (!ok) {
+        b.textContent = "Not found — edit & pick from suggestions";
+        b.disabled = false;
+      }
+    })
   );
 
   if (!hasLeaflet) return;
@@ -2941,27 +3048,21 @@ function renderBookings() {
     ${groups || `<div class="empty-card"><h3>No bookings yet</h3><p>Bookings you add in Budget will appear here.</p></div>`}
     <section class="booking-group">
       <h2 class="booking-group__title">Documents</h2>
-      <div class="empty-card">
-        ${ICONS.doc}
-        <h3>No documents uploaded</h3>
-        <p>Keep passports, insurance and confirmations in one place.</p>
-        <label class="btn btn--outline" style="cursor:pointer">
-          Upload document
-          <input type="file" id="doc-upload" multiple hidden />
-        </label>
-        <ul id="doc-list" class="checklist" style="text-align:left;margin-top:1rem"></ul>
+      <div class="card" style="padding:1.1rem 1.3rem">
+        <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.8rem">Tickets & confirmations (PDF or images, max ${DOC_MAX_MB} MB each). Shared trips share these too — avoid passports or IDs.</p>
+        ${documentListHtml()}
+        <div class="checklist__add">
+          <label class="btn btn--outline" style="cursor:pointer">
+            Upload document
+            <input type="file" id="doc-upload" accept="application/pdf,image/*" multiple hidden />
+          </label>
+          <span class="act__sub" style="align-self:center">${docsUsageLabel()}</span>
+        </div>
       </div>
     </section>`;
 
-  const upload = $("doc-upload");
-  const docList = $("doc-list");
-  upload?.addEventListener("change", () => {
-    [...upload.files].forEach((f) => {
-      const li = document.createElement("li");
-      li.innerHTML = `<span>${ICONS.doc}</span><label>${escapeHtml(f.name)}</label><span style="color:var(--muted);font-size:0.78rem">${Math.max(1, Math.round(f.size / 1024))} KB</span>`;
-      docList.appendChild(li);
-    });
-  });
+  $("doc-upload").addEventListener("change", (e) => addDocumentFiles(e.target, renderBookings));
+  bindDocumentActions(body, renderBookings);
 }
 
 /* ---------- FAMILY screen ---------- */
@@ -3003,10 +3104,10 @@ function renderFamily() {
     })
     .join("");
 
-  const checklistItems = familyChecklist.length
-    ? familyChecklist
+  const checklistItems = state.checklist.length
+    ? state.checklist
         .map(
-          (c) => `<li><input type="checkbox" id="chk-${c.id}" ${c.done ? "checked" : ""} data-chk="${c.id}" /><label for="chk-${c.id}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label></li>`
+          (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete item" title="Delete"><svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></li>`
         )
         .join("")
     : `<li class="empty-state">No items yet — add the first one below.</li>`;
@@ -3025,13 +3126,26 @@ function renderFamily() {
         <input type="text" id="checklist-input" placeholder="Add an item (e.g. Passports)" maxlength="80" />
         <button type="button" class="btn btn--primary" id="checklist-add">Add</button>
       </div>
+    </div>
+
+    <div class="section-head" style="margin-top:1.6rem"><div><h2>Documents</h2><p>Tickets & confirmations (PDF or images, max ${DOC_MAX_MB} MB each). Shared trips share these too — avoid passports or IDs.</p></div></div>
+    <div class="card" style="padding:1.1rem 1.3rem">
+      ${documentListHtml()}
+      <div class="checklist__add">
+        <label class="btn btn--outline" style="cursor:pointer">
+          Upload document
+          <input type="file" id="family-doc-upload" accept="application/pdf,image/*" multiple hidden />
+        </label>
+        <span class="act__sub" style="align-self:center">${docsUsageLabel()}</span>
+      </div>
     </div>`;
 
   const input = $("checklist-input");
   const addItem = () => {
     const v = input.value.trim();
     if (!v) return;
-    familyChecklist.push({ id: ++checklistSeq, text: v, done: false });
+    state.checklist.push({ id: uid("chk"), text: v, done: false });
+    saveState();
     renderFamily();
   };
   $("checklist-add").addEventListener("click", addItem);
@@ -3039,9 +3153,110 @@ function renderFamily() {
   input.focus();
   body.querySelectorAll("[data-chk]").forEach((cb) =>
     cb.addEventListener("change", () => {
-      const item = familyChecklist.find((c) => String(c.id) === cb.getAttribute("data-chk"));
+      const item = state.checklist.find((c) => c.id === cb.getAttribute("data-chk"));
       if (item) item.done = cb.checked;
+      saveState();
       renderFamily();
+    })
+  );
+  body.querySelectorAll("[data-chk-del]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      state.checklist = state.checklist.filter((c) => c.id !== btn.getAttribute("data-chk-del"));
+      saveState();
+      renderFamily();
+    })
+  );
+  $("family-doc-upload").addEventListener("change", (e) => addDocumentFiles(e.target, renderFamily));
+  bindDocumentActions(body, renderFamily);
+}
+
+/* ---------- Shared documents store (Family + Bookings) ---------- */
+const DOC_MAX_MB = 2.5;
+const DOC_MAX_BYTES = DOC_MAX_MB * 1024 * 1024;
+const DOC_TOTAL_WARN_BYTES = 4 * 1024 * 1024;
+
+function docsTotalBytes() {
+  return state.documents.reduce((s, d) => s + (d.size || 0), 0);
+}
+
+function docsUsageLabel() {
+  const used = docsTotalBytes();
+  if (!used) return "";
+  const mb = (used / 1024 / 1024).toFixed(1);
+  return `${mb} MB stored${used > DOC_TOTAL_WARN_BYTES ? " — near the browser storage limit" : ""}`;
+}
+
+function documentListHtml() {
+  if (!state.documents.length) {
+    return `<p class="empty-state">No documents uploaded yet.</p>`;
+  }
+  return `<ul class="checklist">${state.documents
+    .map(
+      (d) => `
+      <li>
+        <span>${ICONS.doc}</span>
+        <label style="flex:1">${escapeHtml(d.name)} <span style="color:var(--muted);font-size:0.78rem">${Math.max(1, Math.round(d.size / 1024))} KB</span></label>
+        <a class="btn btn--small btn--ghost" href="${d.dataUrl}" download="${escapeHtml(d.name)}">Download</a>
+        <button type="button" class="icon-btn icon-btn--small" data-doc-del="${escapeHtml(d.id)}" aria-label="Delete document" title="Delete">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </li>`
+    )
+    .join("")}</ul>`;
+}
+
+function addDocumentFiles(input, rerender) {
+  const files = [...input.files];
+  input.value = "";
+  const rejected = [];
+  const addedIds = [];
+  let pending = 0;
+  for (const f of files) {
+    if (f.size > DOC_MAX_BYTES) {
+      rejected.push(`${f.name} (too big — max ${DOC_MAX_MB} MB)`);
+      continue;
+    }
+    if (!/^(application\/pdf|image\/)/.test(f.type)) {
+      rejected.push(`${f.name} (only PDF or images)`);
+      continue;
+    }
+    pending += 1;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const id = uid("doc");
+      addedIds.push(id);
+      state.documents.push({
+        id,
+        name: f.name,
+        type: f.type,
+        size: f.size,
+        dataUrl: reader.result,
+        uploadedAt: todayISO(),
+      });
+      pending -= 1;
+      if (pending === 0) {
+        try {
+          saveState();
+        } catch {
+          state.documents = state.documents.filter((d) => !addedIds.includes(d.id));
+          alert("Not enough browser storage for these files. Remove some documents first.");
+        }
+        rerender();
+      }
+    };
+    reader.readAsDataURL(f);
+  }
+  if (rejected.length) alert("Skipped:\n" + rejected.join("\n"));
+}
+
+function bindDocumentActions(scope, rerender) {
+  scope.querySelectorAll("[data-doc-del]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const doc = state.documents.find((d) => d.id === btn.getAttribute("data-doc-del"));
+      if (!doc || !confirm(`Delete document "${doc.name}"?`)) return;
+      state.documents = state.documents.filter((d) => d.id !== doc.id);
+      saveState();
+      rerender();
     })
   );
 }
