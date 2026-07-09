@@ -41,12 +41,16 @@ expose in client code. Trip data is protected by the per-trip secret embedded
 in each share link. Without `config.js` the app is fully local — no errors, no
 Save button.
 
-**How Save works:** click **Save** once to store the trip in Supabase (a
-`?room&key` link is copied to your clipboard); after that, edits sync
-automatically (~20s poll + on-change). Open the link on another device to view
-and edit the same trip. Concurrent edits are **last-write-wins** — two people
-editing the same field within a sync window can overwrite each other; large
-documents also make each sync heavier, so keep attachments small.
+**How Save & Sync work:** click **Save** once to store the trip in Supabase (a
+`?room&key` link is copied to your clipboard). You'll be asked who you are
+(once per device) so changes are stamped with a name. Your edits push
+automatically; **incoming** family changes are notify-first: every 5 minutes
+the app checks for updates and shows a dot on the Sync button + a toast
+("Moran made changes — tap Sync"). Nothing changes on screen until you tap
+**Sync**, which then shows a "What's new" list and marks the changed sections
+with a dot in the navigation. Concurrent edits are **last-write-wins** — sync
+before making big edits; large documents also make each sync heavier, so keep
+attachments small.
 
 ## Hosting
 
