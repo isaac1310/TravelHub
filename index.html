@@ -681,9 +681,16 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 
       /* ===== Itinerary sub-tabs, reservation cards & maps ===== */
       .switcher--sub { margin: 0.4rem 0 1.1rem; }
-      .sync-status { font-size: 0.72rem; color: var(--muted, #8a7a70); white-space: nowrap; }
-      .sync-status--error { color: #c0392b; }
-      .sync-status--busy, .sync-status--pending { color: #b98a2b; }
+      .sync-status {
+        font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+        padding: 0.28rem 0.6rem; border-radius: 999px; display: inline-flex; align-items: center; gap: 0.3rem;
+        background: #eee6df; color: var(--muted, #8a7a70);
+      }
+      .sync-status--ok { background: #e4f4ea; color: #1f7a44; }
+      .sync-status--error { background: #fbe4e0; color: #c0392b; }
+      .sync-status--busy, .sync-status--pending { background: #fbf1dd; color: #9a6a12; }
+      .sync-status--flash { animation: syncflash 0.9s ease; }
+      @keyframes syncflash { 0% { transform: scale(0.85); } 40% { transform: scale(1.08); } 100% { transform: scale(1); } }
       .act { position: relative; }
       .act__actions { display: inline-flex; gap: 0.3rem; margin-left: 0.5rem; opacity: 0; transition: opacity 0.15s; }
       .act:hover .act__actions, .act:focus-within .act__actions { opacity: 1; }
@@ -1127,7 +1134,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.2.0";
+const APP_VERSION = "v1.2.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];

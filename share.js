@@ -25,12 +25,23 @@
     return Boolean(c?.supabaseUrl && c?.supabaseAnonKey);
   }
 
+  let statusClearTimer = null;
   function setSyncStatus(text, type) {
     const el = document.getElementById("sync-status");
     if (!el) return;
+    clearTimeout(statusClearTimer);
     el.hidden = !text;
-    el.textContent = text;
+    el.textContent = (type === "ok" ? "✓ " : "") + text;
     el.className = "sync-status" + (type ? ` sync-status--${type}` : "");
+    if (type === "ok") {
+      // Flash so the save is noticeable, then fade the label back to a calm "Saved".
+      el.classList.remove("sync-status--flash");
+      void el.offsetWidth; // restart animation
+      el.classList.add("sync-status--flash");
+      statusClearTimer = setTimeout(() => {
+        if (sharedMode) { el.hidden = false; el.textContent = "✓ Saved"; el.className = "sync-status sync-status--ok"; }
+      }, 2500);
+    }
   }
 
   function getShareUrl() {
@@ -126,21 +137,33 @@
     }
   }
 
-  /* Reflect saved state in the app bar: Save button becomes a non-actionable
-     "Saved" indicator and the Copy link button appears. */
+  /* Once saved, the Save button stays clickable as a manual "Save now"
+     (edits also auto-sync); the Copy link button appears. */
   function markSavedChrome() {
     const save = document.getElementById("btn-share");
     if (save) {
-      save.disabled = true;
-      save.setAttribute("aria-label", "Saved to cloud");
-      save.setAttribute("title", "Saved to cloud — changes sync automatically");
+      save.disabled = false;
+      save.setAttribute("aria-label", "Save now");
+      save.setAttribute("title", "Save now — changes also sync automatically");
     }
     const copy = document.getElementById("btn-copy-link");
     if (copy) copy.hidden = false;
   }
 
+  /* Manual "Save now": flush any pending debounce and push immediately,
+     with visible confirmation. */
+  async function saveNow(btn) {
+    if (btn) btn.disabled = true;
+    clearTimeout(saveTimer);
+    clearTimeout(retryTimer);
+    retryCount = 0;
+    pendingSave = true;
+    await saveRemote().catch(console.error);
+    if (btn) btn.disabled = false;
+  }
+
   async function handleSaveClick(btn) {
-    if (sharedMode) return; // already saved; edits auto-sync
+    if (sharedMode) { await saveNow(btn); return; } // manual re-save with feedback
     if (!confirm("Save this trip to the cloud so it syncs across devices and can be shared by link?")) return;
     btn.disabled = true;
     setSyncStatus("Saving…", "busy");
