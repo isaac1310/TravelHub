@@ -29,12 +29,13 @@ Open `index.html` in a browser — no build step. Data is saved in
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. In the project's **SQL Editor**, paste and run `supabase-schema.sql`.
-3. Copy `config.example.js` to `config.js` and fill in the **Project URL** and
-   **anon public key** from Project Settings → API.
+3. Put the **Project URL** and **publishable (anon public) key** from Project
+   Settings → API into `config.js` (see `config.example.js` for the shape).
 4. Reload the app — a Share button appears in the top bar.
 
-`config.js` is gitignored. Without it the app is fully local — no errors, no
-Share button.
+The publishable key is safe to expose in client code; trip data is protected
+by the per-trip secret embedded in each share link. Without `config.js` the
+app is fully local — no errors, no Share button.
 
 ## Hosting
 
