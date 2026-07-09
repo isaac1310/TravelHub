@@ -267,6 +267,7 @@ h1, h2, h3, h4, .brand__name {
 .sidebar__account .who { font-size: 0.82rem; line-height: 1.2; }
 .sidebar__account .who strong { display: block; font-weight: 600; }
 .sidebar__account .who span { color: var(--muted); font-size: 0.72rem; }
+.app-version { padding: 0.5rem 0 0.2rem; text-align: center; color: var(--muted); font-size: 0.68rem; letter-spacing: 0.02em; }
 
 .app__body { min-width: 0; display: flex; flex-direction: column; }
 
@@ -751,6 +752,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="avatar avatar--Itzik">I</span>
           <span class="who"><strong>Itzik</strong><span>Family organiser</span></span>
         </div>
+        <div class="app-version" data-app-version></div>
       </aside>
 
       <!-- ===== Body ===== -->
@@ -1113,6 +1115,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
+const APP_VERSION = "v1.0.2";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];
@@ -3291,6 +3294,7 @@ window.VacationApp = {
 /* ============================================================
    INIT
    ============================================================ */
+document.querySelectorAll("[data-app-version]").forEach((el) => { el.textContent = `TravelHub ${APP_VERSION}`; });
 setupDialogCloseHandlers();
 bindEvents();
 buildNav();
