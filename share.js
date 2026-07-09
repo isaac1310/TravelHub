@@ -34,8 +34,26 @@
     return Boolean(c?.supabaseUrl && c?.supabaseAnonKey);
   }
 
+  /* Mobile chip mirrors the status pill in compact form. */
+  function setChip(text, type) {
+    const chip = document.getElementById("sync-chip");
+    if (!chip) return;
+    chip.hidden = false;
+    const label = document.getElementById("sync-chip-text");
+    if (label) {
+      label.textContent =
+        type === "ok" ? "✓" :
+        type === "busy" ? "…" :
+        type === "error" ? "!" :
+        type === "pending" ? "↻" : "✓";
+    }
+    chip.className = "sync-chip" + (type ? ` sync-chip--${type}` : "");
+    chip.title = text || "Sync now";
+  }
+
   let statusClearTimer = null;
   function setSyncStatus(text, type) {
+    setChip(text, type);
     const el = document.getElementById("sync-status");
     if (!el) return;
     clearTimeout(statusClearTimer);
@@ -131,6 +149,8 @@
   function updateSyncDot(on) {
     const dot = document.getElementById("sync-dot");
     if (dot) dot.hidden = !on;
+    const chipDot = document.getElementById("sync-chip-dot");
+    if (chipDot) chipDot.hidden = !on;
   }
 
   /* Notify-first: detect newer remote data, tell the user, apply NOTHING. */
