@@ -134,6 +134,23 @@ and one toast naming the editor. **Nothing on B's screen may change yet.**
 Then tap **Sync** in B. Now the change applies and the "what's new" list names the right
 person. If B updated *before* you tapped Sync, that's a regression.
 
+### B3b. Concurrent edits on different data (v1.8.0 — the everyday case)
+
+This is the one that matches how you actually use it: Moran edits the trip, Itzik edits
+the budget. It does **not** require them to be simultaneous — just for one device to have
+an unsent edit when the other's change arrives.
+
+1. Both devices synced and showing the same room.
+2. On **A**, open a trip and change its **name**. Don't wait.
+3. On **B**, within the same minute, change **that same trip's budget**.
+4. Let both settle, then check both devices.
+
+**Expect:** the new name *and* the new budget, on both. **Fail:** one of them reverted —
+that's the pre-v1.8.0 behaviour, where the Sync recovery overwrote the unsent edit.
+
+Also worth one run: edit on A, then immediately kill the tab (swipe the app away) before
+it can push, and reopen. The edit must still be there.
+
 ### B4. Conflict guard (the one that protects real work)
 
 1. Edit in **A**, and separately edit in **B**.

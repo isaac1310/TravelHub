@@ -199,6 +199,8 @@
       failed = Boolean(error || !data?.ok);
       if (!failed) {
         lastRemoteUpdatedAt = data.updated_at || lastRemoteUpdatedAt;
+        // Server now holds exactly this; it becomes the base for the next merge.
+        writeMergeBase(payload);
         if (dropped.length) reportDroppedDocs(dropped);
       }
     } catch (err) {
@@ -277,7 +279,7 @@
         lastRemoteUpdatedAt = remoteAt;
         lastNotifiedRemoteAt = remoteAt;
         lastEditorInfo = { by, at: data.payload.lastEditedAt || remoteAt };
-        applyRemote(data.payload);
+        if (!applyOrMerge(data.payload)) return false;
         window.VacationApp.onRemoteChanges?.(prev, data.payload);
         pendingRemoteInfo = null;
         updateSyncDot(false);
@@ -308,6 +310,44 @@
      change, and applying the remote afterwards would overwrite the local edits we
      were trying to save. Whole-document storage rules out a field-level merge, so
      order is the only protection available. */
+  /* Apply a remote payload without throwing away edits this device hasn't pushed.
+     Three-way merges when there is something local at risk AND we have a base to
+     compare against; otherwise falls back to the plain replace, which is correct
+     when nothing local is pending. Returns false only when the merge refused. */
+  function applyOrMerge(remotePayload) {
+    const base = baseWithDocs(readMergeBase(), remotePayload);
+    const localDiverged = pendingSave || (base && window.VacationApp.hasLocalChangesSince?.(base));
+
+    if (!base || !localDiverged) {
+      applyRemote(remotePayload);
+      writeMergeBase(remotePayload);
+      return true;
+    }
+
+    applyingRemote = true;
+    let stats;
+    try { stats = window.VacationApp.mergeWithBase(base, remotePayload); }
+    finally { applyingRemote = false; }
+
+    if (stats?.blocked === "rollover") {
+      setSyncStatus("Both devices ran a rollover — sync one first", "error");
+      window.VacationApp.showSyncErrorToast?.(
+        "Both devices ran a year-end rollover. Open the other device and let it sync, then try again — merging them would leave the budgets and the ledger disagreeing."
+      );
+      return false;
+    }
+
+    // The merged state is what both sides now agree on, once we push it below.
+    writeMergeBase(window.VacationApp.getPayload());
+    pendingSave = true; // merged result must reach the server
+    if (stats?.orphansDropped) {
+      window.VacationApp.showSyncErrorToast?.(
+        `${stats.orphansDropped} reservation${stats.orphansDropped === 1 ? "" : "s"} belonged to a trip someone deleted, so ${stats.orphansDropped === 1 ? "it was" : "they were"} removed.`
+      );
+    }
+    return true;
+  }
+
   async function syncNow() {
     if (!sharedMode || !supabase) return;
     const btn = document.getElementById("btn-sync-now");
@@ -325,7 +365,12 @@
           lastRemoteUpdatedAt = remoteAt;
           lastNotifiedRemoteAt = remoteAt;
           lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || remoteAt };
-          applyRemote(data.payload);
+          if (!applyOrMerge(data.payload)) {
+            // Blocked (both devices rolled over). Local is untouched; don't push
+            // either, or we'd send state that never saw their rollover.
+            if (btn) btn.disabled = false;
+            return;
+          }
           window.VacationApp.onRemoteChanges?.(prev, data.payload);
         }
       }
@@ -426,6 +471,8 @@
          runs ahead of the server makes every future remote change compare as "older", and
          this device silently never sees the family's edits again. */
       lastRemoteUpdatedAt = await fetchServerUpdatedAt();
+      // The room was created from exactly this payload — it's the first base.
+      writeMergeBase(window.VacationApp.getPayload());
       lastSyncAt = Date.now();
       stripCredentialsFromUrl();
       startUpdateChecks();
@@ -526,7 +573,10 @@
         stripCredentialsFromUrl();
         lastRemoteUpdatedAt = data.updated_at || null;
         lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || "" };
-        applyRemote(data.payload);
+        /* Not necessarily "nothing to merge": an edit made just before the tab closed
+           may never have been pushed. applyOrMerge keeps it instead of overwriting. */
+        applyOrMerge(data.payload);
+        if (pendingSave) saveRemote().catch(console.error); // merged edits still owe the server
         lastSyncAt = Date.now();
         markSavedChrome();
         setSyncStatus("Shared trip loaded", "ok");
@@ -625,6 +675,7 @@
     }
 
     backupBeforeJoin();
+    clearMergeBase(); // joining a different room invalidates any previous base
 
     // Apply locally with pushes suppressed, so committing to the room is a
     // separate, deliberate step below rather than a side effect of rendering.
@@ -653,8 +704,10 @@
     // Only now, and only if this device actually contributed something.
     if (localAdds > 0) {
       pendingSave = true;
-      await saveRemote();
+      await saveRemote(); // writes the base on success
     } else {
+      // Nothing pushed, so the room's copy is what we agree on.
+      writeMergeBase(data.payload);
       setSyncStatus("Shared trip opened", "ok");
     }
 
@@ -688,6 +741,7 @@
     lastRemoteUpdatedAt = null;
     lastNotifiedRemoteAt = null;
     try { localStorage.removeItem(ROOM_STORE_KEY); } catch { /* private mode */ }
+    clearMergeBase(); // a base from the room we just left would merge against the wrong history
     updateSyncDot(false);
     setSyncStatus("Not shared — this device only", "");
     markUnsharedChrome();
@@ -742,6 +796,52 @@
     });
     document.querySelectorAll("[data-when-shared]").forEach((el) => { el.hidden = !sharedMode; });
     document.querySelectorAll("[data-when-local]").forEach((el) => { el.hidden = sharedMode; });
+  }
+
+  /* The last payload this device and the server agreed on. Without it a pull can't
+     tell "she changed this" from "he changed this", and has to overwrite.
+
+     Documents are stripped to their ids: they're inline base64 and the state already
+     runs ~5.5MB against a ~5MB localStorage quota, so a full second copy cannot fit.
+     Ids alone are enough — document content is never edited, only added or removed,
+     so id-level presence is all the merge needs. */
+  const MERGE_BASE_KEY = "travelhub-sync-base";
+
+  function baseShape(payload) {
+    return {
+      ...payload,
+      documents: (payload.documents || []).map((d) => ({ id: d.id })),
+    };
+  }
+
+  function writeMergeBase(payload) {
+    try {
+      localStorage.setItem(MERGE_BASE_KEY, JSON.stringify(baseShape(payload)));
+    } catch {
+      // A stale base is worse than none — it would make the merge confidently wrong.
+      try { localStorage.removeItem(MERGE_BASE_KEY); } catch { /* private mode */ }
+    }
+  }
+
+  function readMergeBase() {
+    try { return JSON.parse(localStorage.getItem(MERGE_BASE_KEY) || "null"); }
+    catch { return null; }
+  }
+
+  function clearMergeBase() {
+    try { localStorage.removeItem(MERGE_BASE_KEY); } catch { /* private mode */ }
+  }
+
+  /* Documents were stripped from the base, so restore their ids from whichever side
+     still has the content. Without this every document looks "deleted in base" and
+     the merge would drop them. */
+  function baseWithDocs(base, remotePayload) {
+    if (!base) return null;
+    const known = new Map((remotePayload.documents || []).map((d) => [d.id, d]));
+    return {
+      ...base,
+      documents: (base.documents || []).map((d) => known.get(d.id) || { id: d.id }),
+    };
   }
 
   const ROOM_STORE_KEY = "travelhub-room";

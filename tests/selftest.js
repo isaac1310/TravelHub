@@ -99,6 +99,7 @@
       syncTimestamps();
       buildTraceability();
       joinMerge();
+      threeWayMerge();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -365,6 +366,146 @@
       if (parse("") !== null) return "empty accepted";
       if (parse("https://example.com/?room=abc") !== null) return "link missing the key was accepted";
       return true;
+    });
+  }
+
+  /* ===== 1b4. Three-way merge =====
+     The scenario this exists for: Moran renames a trip, Itzik changes its budget,
+     neither has synced. Both edits must survive. Everything else here guards a way
+     that merge could silently corrupt data instead of visibly failing. */
+
+  function threeWayMerge() {
+    group("merge3");
+
+    const m3 = window.VacationApp?.merge3;
+
+    check("merge3 is exposed", () =>
+      typeof m3 === "function" ? true : "VacationApp.merge3 missing");
+
+    if (typeof m3 !== "function") return;
+
+    const trip = (id, over) => Object.assign(
+      { id, name: id, year: 2026, budget: 1000, destination: "", startDate: "", endDate: "",
+        travelers: [], cover: "", expenses: [] }, over || {});
+    const wrap = (trips, over) => Object.assign({ trips, items: [], version: 2 }, over || {});
+    const clone = (o) => JSON.parse(JSON.stringify(o));
+
+    // THE scenario.
+    check("different fields on the same trip both survive", () => {
+      const base = wrap([trip("t1", { name: "Paris", budget: 1000 })]);
+      const local = clone(base);  local.trips[0].budget = 2500;   // Itzik
+      const remote = clone(base); remote.trips[0].name = "Paris trip"; // Moran
+      const t = m3(base, local, remote).state.trips[0];
+      return eq(t.budget, 2500, "Itzik's budget") === true && eq(t.name, "Paris trip", "Moran's name") === true
+        ? true : `budget=${t.budget} name=${t.name}`;
+    });
+
+    check("same field changed on both sides takes the server value", () => {
+      const base = wrap([trip("t1", { budget: 1000 })]);
+      const local = clone(base);  local.trips[0].budget = 2500;
+      const remote = clone(base); remote.trips[0].budget = 3000;
+      return eq(m3(base, local, remote).state.trips[0].budget, 3000);
+    });
+
+    check("a local deletion propagates and does not resurrect", () => {
+      const base = wrap([trip("t1"), trip("t2")]);
+      const local = wrap([trip("t2")]);        // t1 deleted here
+      const remote = clone(base);              // still present remotely, untouched
+      const ids = m3(base, local, remote).state.trips.map((t) => t.id);
+      return eq(ids.join(","), "t2", "t1 should stay deleted");
+    });
+
+    check("a remote deletion propagates", () => {
+      const base = wrap([trip("t1"), trip("t2")]);
+      const local = clone(base);
+      const remote = wrap([trip("t2")]);
+      return eq(m3(base, local, remote).state.trips.map((t) => t.id).join(","), "t2");
+    });
+
+    check("delete on one side vs edit on the other keeps the edit", () => {
+      const base = wrap([trip("t1", { budget: 1000 })]);
+      const local = wrap([]);                                    // deleted here
+      const remote = clone(base); remote.trips[0].budget = 4000; // edited there
+      const trips = m3(base, local, remote).state.trips;
+      return eq(trips.length, 1, "kept") === true && eq(trips[0].budget, 4000, "their edit") === true
+        ? true : JSON.stringify(trips.map((t) => t.id));
+    });
+
+    check("additions from both sides are kept", () => {
+      const base = wrap([trip("t1")]);
+      const local = wrap([trip("t1"), trip("mine")]);
+      const remote = wrap([trip("t1"), trip("theirs")]);
+      const ids = m3(base, local, remote).state.trips.map((t) => t.id).sort().join(",");
+      return eq(ids, "mine,t1,theirs");
+    });
+
+    // trip.expenses render in raw array order, so a rebuild must not shuffle them.
+    check("expense order is preserved, additions appended", () => {
+      const exp = (id) => ({ id, label: id, category: "Food", amount: 10, date: "", status: "booked", amountPaid: 0, paidDate: "" });
+      const base = wrap([trip("t1", { expenses: [exp("a"), exp("b"), exp("c")] })]);
+      const local = clone(base);  local.trips[0].expenses.push(exp("mine"));
+      const remote = clone(base); remote.trips[0].expenses.push(exp("theirs"));
+      const ids = m3(base, local, remote).state.trips[0].expenses.map((e) => e.id).join(",");
+      return eq(ids, "a,b,c,mine,theirs");
+    });
+
+    check("running totals apply both deltas", () => {
+      const base = wrap([], { currentFunds: 1000, fundHistory: [] });
+      const local = wrap([], { currentFunds: 1500, fundHistory: [{ id: "f1", amount: 500 }] });
+      const remote = wrap([], { currentFunds: 1200, fundHistory: [{ id: "f2", amount: 200 }] });
+      // 1000 + 500 + 200 — not 1500 and not 1200
+      return eq(m3(base, local, remote).state.currentFunds, 1700);
+    });
+
+    /* trip.budget is a running total whose deltas live in rollHistory. Replaying is
+       unsafe (reduceSourceBudgets clamps on tripSpent and isn't idempotent), so a
+       double rollover must refuse rather than leave ledger and balances disagreeing. */
+    check("a rollover on both devices is refused, not merged", () => {
+      const base = wrap([trip("t1")], { rollHistory: [] });
+      const local = wrap([trip("t1", { budget: 800 })], { rollHistory: [{ id: "r1", amount: 200 }] });
+      const remote = wrap([trip("t1", { budget: 700 })], { rollHistory: [{ id: "r2", amount: 300 }] });
+      const res = m3(base, local, remote);
+      return eq(res.stats.blocked, "rollover", "blocked") === true && eq(res.state, null, "no state") === true
+        ? true : JSON.stringify(res.stats);
+    });
+
+    check("a rollover on one device only still merges", () => {
+      const base = wrap([trip("t1", { budget: 1000 })], { rollHistory: [] });
+      const local = wrap([trip("t1", { budget: 800 })], { rollHistory: [{ id: "r1", amount: 200 }] });
+      const remote = clone(base);
+      const res = m3(base, local, remote);
+      if (res.stats.blocked) return "blocked when it shouldn't be";
+      return eq(res.state.trips[0].budget, 800, "the rolling side's budget stands");
+    });
+
+    check("reservations orphaned by a deleted trip are dropped and counted", () => {
+      const item = (id, tripId) => ({ id, tripId, type: "other", title: id, location: {} });
+      const base = wrap([trip("t1")], { items: [] });
+      const local = wrap([trip("t1")], { items: [item("i1", "t1")] }); // added here
+      const remote = wrap([], { items: [] });                          // trip deleted there
+      const res = m3(base, local, remote);
+      return eq(res.state.items.length, 0, "orphan dropped") === true
+        && eq(res.stats.orphansDropped, 1, "counted") === true
+        ? true : `items=${res.state.items.length} dropped=${res.stats.orphansDropped}`;
+    });
+
+    check("travellers removed on one side stay removed", () => {
+      const base = wrap([trip("t1", { travelers: ["Itzik", "Moran"] })]);
+      const local = clone(base);  local.trips[0].travelers = ["Itzik"];              // removed Moran
+      const remote = clone(base); remote.trips[0].travelers = ["Itzik", "Moran", "Goni"]; // added Goni
+      const t = m3(base, local, remote).state.trips[0].travelers.sort().join(",");
+      return eq(t, "Goni,Itzik");
+    });
+
+    // Guards the derived item-<expenseId> linkage.
+    check("merge never rewrites an id", () => {
+      const item = (id, tripId) => ({ id, tripId, type: "hotel", title: "H", location: {} });
+      const base = wrap([trip("t1")], { items: [item("item-exp-9", "t1")] });
+      const local = clone(base);  local.trips[0].budget = 50;
+      const remote = clone(base); remote.trips[0].name = "Renamed";
+      const res = m3(base, local, remote).state;
+      return eq(res.items[0].id, "item-exp-9", "item id") === true
+        && eq(res.trips[0].id, "t1", "trip id") === true ? true : "an id was rewritten";
     });
   }
 

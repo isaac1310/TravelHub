@@ -1582,7 +1582,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.7.1";
+const APP_VERSION = "v1.8.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -1868,6 +1868,153 @@ function mergeById(localList, roomList, ignoreKeys) {
 
 /* Returns { state, stats } — stats drives the "N of your trips differ" notice
    and the "you have N trips not in this room" prompt. */
+/* ============================================================
+   THREE-WAY MERGE — two people editing different things at once
+   ============================================================
+
+   mergeStates (below) is the two-way version used when JOINING a room: no shared
+   history, so the room wins any tie. Once both sides descend from a common base we
+   can do better, and we have to:
+
+   Both on wifi. Itzik edits a budget at 20:00 and his phone pushes in 600ms. Moran
+   began editing a trip at 19:59:50, before her device's 20s poll saw his change. Her
+   push is correctly blocked, she taps Sync — and the Sync applies his payload over
+   her unsaved edit. Different data, both online, and her work is gone silently.
+
+   With a base we can tell "she changed this" from "he changed this" and keep both.
+   Same-field clashes take the server's value, quietly: they land on different fields
+   in practice, so a conflict UI would be machinery for a case that doesn't occur. */
+
+const MERGE_IGNORED_KEYS = ["expenses"]; // merged separately, as its own collection
+
+function changed(a, b, ignoreKeys) {
+  return !sameEntity(a || {}, b || {}, ignoreKeys);
+}
+
+/* Merge one entity field by field: whichever side moved away from the base wins;
+   if both moved, remote does. */
+function mergeFields(base, local, remote, ignoreKeys) {
+  const out = { ...remote };
+  const keys = new Set([...Object.keys(local || {}), ...Object.keys(remote || {})]);
+  for (const k of keys) {
+    if ((ignoreKeys || []).includes(k)) continue;
+    const b = JSON.stringify(base ? base[k] : undefined);
+    const l = JSON.stringify(local ? local[k] : undefined);
+    const r = JSON.stringify(remote ? remote[k] : undefined);
+    if (l === r) continue;            // agree already
+    if (r === b) out[k] = local[k];   // only local moved → take it
+    // else remote moved (or both) → keep remote, already in `out`
+  }
+  return out;
+}
+
+/* The table from the plan, in code. `base` is what makes a deletion distinguishable
+   from "not seen yet" — without it every delete resurrects on the next merge. */
+function merge3List(baseList, localList, remoteList, opts) {
+  const o = opts || {};
+  const byId = (l) => new Map((Array.isArray(l) ? l : []).filter((e) => e && e.id).map((e) => [e.id, e]));
+  const B = byId(baseList), L = byId(localList), R = byId(remoteList);
+
+  const out = [];
+  const seen = new Set();
+  const push = (e) => { if (e && !seen.has(e.id)) { seen.add(e.id); out.push(e); } };
+
+  /* Order: base order first (preserves what people already see — trip.expenses is
+     rendered in raw array order), then each side's additions. */
+  const ordered = [
+    ...(Array.isArray(baseList) ? baseList : []),
+    ...(Array.isArray(localList) ? localList : []),
+    ...(Array.isArray(remoteList) ? remoteList : []),
+  ].map((e) => e && e.id).filter(Boolean);
+
+  for (const id of ordered) {
+    if (seen.has(id)) continue;
+    const b = B.get(id), l = L.get(id), r = R.get(id);
+    const inB = B.has(id), inL = L.has(id), inR = R.has(id);
+
+    if (inB && !inL && !inR) { seen.add(id); continue; }              // deleted both sides
+    if (inB && !inL) {                                                 // deleted locally
+      if (!changed(b, r, o.ignoreKeys)) { seen.add(id); continue; }    // remote untouched → honour delete
+      push(r); continue;                                               // delete-vs-edit → remote wins
+    }
+    if (inB && !inR) {                                                 // deleted remotely
+      if (!changed(b, l, o.ignoreKeys)) { seen.add(id); continue; }
+      push(l); continue;
+    }
+    if (!inB && inL && !inR) { push(l); continue; }                    // local addition
+    if (!inB && !inL && inR) { push(r); continue; }                    // remote addition
+    if (!inB && inL && inR) { push(r); continue; }                     // same id both sides → remote
+    push(o.mergeEntity ? o.mergeEntity(b, l, r) : mergeFields(b, l, r, o.ignoreKeys));
+  }
+  return out;
+}
+
+/* Value-keyed set (trip.travelers is raw strings, cross-referenced by value). */
+function merge3Set(baseArr, localArr, remoteArr) {
+  const B = new Set(baseArr || []), L = new Set(localArr || []), R = new Set(remoteArr || []);
+  const out = [];
+  for (const v of new Set([...(localArr || []), ...(remoteArr || [])])) {
+    const removedLocally = B.has(v) && !L.has(v);
+    const removedRemotely = B.has(v) && !R.has(v);
+    if (removedLocally || removedRemotely) continue;
+    out.push(v);
+  }
+  return out;
+}
+
+function merge3(baseState, localState, remoteState) {
+  const base = baseState || {};
+  const local = localState || {};
+  const remote = remoteState || {};
+  const stats = { merged: false, orphansDropped: 0, blocked: null };
+
+  /* Rollover mutates trip.budget AND appends to rollHistory, so the ledger and the
+     balances have to move together. Replaying is not safe — reduceSourceBudgets
+     clamps on tripSpent() and is neither commutative nor idempotent — so if BOTH
+     sides rolled over since the base, refuse rather than corrupt. */
+  const rollIds = (s) => new Set((s.rollHistory || []).map((r) => r && r.id));
+  const baseRolls = rollIds(base);
+  const localRolled = (local.rollHistory || []).some((r) => r && !baseRolls.has(r.id));
+  const remoteRolled = (remote.rollHistory || []).some((r) => r && !baseRolls.has(r.id));
+  if (localRolled && remoteRolled) {
+    return { state: null, stats: { ...stats, blocked: "rollover" } };
+  }
+
+  const merged = { ...remote };
+
+  merged.trips = merge3List(base.trips, local.trips, remote.trips, {
+    ignoreKeys: MERGE_IGNORED_KEYS,
+    mergeEntity: (b, l, r) => {
+      const trip = mergeFields(b, l, r, MERGE_IGNORED_KEYS);
+      trip.expenses = merge3List(b && b.expenses, l && l.expenses, r && r.expenses);
+      trip.travelers = merge3Set(b && b.travelers, l && l.travelers, r && r.travelers);
+      return trip;
+    },
+  });
+
+  merged.items = merge3List(base.items, local.items, remote.items);
+  for (const key of ["checklist", "documents", "fundHistory", "rollHistory"]) {
+    merged[key] = merge3List(base[key], local[key], remote[key]);
+  }
+
+  /* Running total: both deltas must land. local + remote − base is the general form
+     of the fundHistory special case mergeStates uses. */
+  const num = (v) => Number(v) || 0;
+  merged.currentFunds = num(local.currentFunds) + num(remote.currentFunds) - num(base.currentFunds);
+
+  merged.version = Math.max(num(base.version), num(local.version), num(remote.version)) || remote.version;
+
+  /* Deleting a trip cascades to its items, but "A deletes trip T while B adds an item
+     to T" leaves items pointing at nothing. They'd stay invisible and sync forever. */
+  const tripIds = new Set(merged.trips.map((t) => t.id));
+  const before = merged.items.length;
+  merged.items = merged.items.filter((i) => tripIds.has(i.tripId));
+  stats.orphansDropped = before - merged.items.length;
+
+  stats.merged = true;
+  return { state: normalizeState(merged), stats };
+}
+
 function mergeStates(localState, roomState) {
   const local = localState || {};
   const room = roomState || {};
@@ -4595,7 +4742,32 @@ window.VacationApp = {
   },
   /* Dry run: what would joining this room add or clash with? Changes nothing. */
   previewMerge: (roomPayload) => mergeStates(structuredClone(state), roomPayload).stats,
+  /* Three-way merge against the last synced copy, so edits made here survive a pull.
+     Returns null state when blocked (both sides rolled over) — caller must not apply. */
+  mergeWithBase: (basePayload, remotePayload) => {
+    const { state: merged, stats } = merge3(basePayload, state, remotePayload);
+    if (!merged) return stats;
+    state = merged;
+    saveState();
+    render();
+    return stats;
+  },
+  /* Has this device drifted from the last synced copy? Catches edits that never
+     reached the server — the tab closed inside the save debounce, or the retries ran
+     out — which a plain reload would otherwise silently overwrite.
+     Documents compare by id only: that's all the base stores. */
+  hasLocalChangesSince: (base) => {
+    if (!base) return false;
+    const shape = (s) => JSON.stringify({
+      ...s,
+      documents: (s.documents || []).map((d) => d.id).sort(),
+      lastEditedBy: undefined,
+      lastEditedAt: undefined,
+    });
+    return shape(state) !== shape({ ...base, documents: (base.documents || []).map((d) => ({ id: d.id })) });
+  },
   mergeStates, // exposed for ?selftest=1
+  merge3,      // ditto
   render,
   getDeviceName,
   ensureDeviceName,
