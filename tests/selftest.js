@@ -100,6 +100,7 @@
       buildTraceability();
       joinMerge();
       threeWayMerge();
+      baselineLifecycle();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -506,6 +507,102 @@
       const res = m3(base, local, remote).state;
       return eq(res.items[0].id, "item-exp-9", "item id") === true
         && eq(res.trips[0].id, "t1", "trip id") === true ? true : "an id was rewritten";
+    });
+  }
+
+  /* ===== 1b5. Baseline lifecycle =====
+     Two external reviews found five bugs in v1.8.0, none of which merge3 unit tests
+     could catch: they were all about WHEN the base is written and advanced, not about
+     the merge itself. These are the regression guards. */
+
+  function baselineLifecycle() {
+    group("lifecycle");
+
+    const m3 = window.VacationApp?.merge3;
+    if (typeof m3 !== "function") { check("merge3 available", () => "missing"); return; }
+
+    const trip = (id, over) => Object.assign(
+      { id, name: id, year: 2026, budget: 1000, destination: "", startDate: "", endDate: "",
+        travelers: [], cover: "", expenses: [] }, over || {});
+    const wrap = (trips, over) => Object.assign({ trips, items: [], version: 2 }, over || {});
+    const clone = (o) => JSON.parse(JSON.stringify(o));
+    const doc = (id) => ({ id, name: id + ".pdf", type: "application/pdf", size: 10,
+      dataUrl: "data:application/pdf;base64,AAAA", uploadedAt: "" });
+
+    /* #1 — the reviewer's reproduction. Merge, push FAILS so the base stays at the
+       remote we fetched, then a newer remote arrives. The merged local edit must
+       survive; if the base had been promoted to the merged state it would revert. */
+    check("a merged edit survives a failed push and a later remote update", () => {
+      const base0 = wrap([trip("t1", { budget: 100 })]);
+      const local = clone(base0); local.trips[0].budget = 200;   // my unsent edit
+      const remote1 = clone(base0); remote1.trips[0].name = "Renamed";
+      const merged = m3(base0, local, remote1).state;
+      if (merged.trips[0].budget !== 200) return "first merge lost the edit";
+
+      // Push failed → base is remote1 (what the server actually has), not `merged`.
+      const remote2 = clone(remote1); remote2.trips[0].destination = "Rome";
+      const after = m3(remote1, merged, remote2).state;
+      return eq(after.trips[0].budget, 200, "budget after second merge");
+    });
+
+    /* #3 — deletions of attachments must stick, and not be re-uploaded.
+       The base MUST be built the way share.js really stores and rehydrates it:
+       persisted as `{id}` only (no body), then bodies restored from the remote. A
+       remotely-deleted document has no body to restore, so it stays a bare `{id}` and
+       compares as "changed" against the local full copy — which is precisely how the
+       deletion used to be undone. Testing with full bodies in the base hides the bug. */
+    const storedBase = (payload) => ({ ...payload, documents: (payload.documents || []).map((d) => ({ id: d.id })) });
+    const rehydrate = (base, remote) => {
+      const known = new Map((remote.documents || []).map((d) => [d.id, d]));
+      return { ...base, documents: (base.documents || []).map((d) => known.get(d.id) || { id: d.id }) };
+    };
+
+    check("a document deleted remotely stays deleted", () => {
+      const agreed = wrap([], { documents: [doc("d1"), doc("d2")] });
+      const local = clone(agreed);                         // untouched, still holds both
+      const remote = wrap([], { documents: [doc("d1")] }); // d2 deleted there
+      const base0 = rehydrate(storedBase(agreed), remote); // d2 has no body to restore
+      const ids = m3(base0, local, remote).state.documents.map((d) => d.id).join(",");
+      return eq(ids, "d1", "d2 must not resurrect");
+    });
+
+    check("a document added locally still survives a merge", () => {
+      const agreed = wrap([], { documents: [doc("d1")] });
+      const local = wrap([], { documents: [doc("d1"), doc("mine")] });
+      const remote = clone(agreed);
+      const base0 = rehydrate(storedBase(agreed), remote);
+      const ids = m3(base0, local, remote).state.documents.map((d) => d.id).sort().join(",");
+      return eq(ids, "d1,mine");
+    });
+
+    /* #4 — an expense-only change counts as editing the trip, so a concurrent trip
+       delete must not silently take the expense with it. */
+    check("deleting a trip loses to an expense added on the other device", () => {
+      const exp = (id) => ({ id, label: id, category: "Food", amount: 10, date: "",
+        status: "booked", amountPaid: 0, paidDate: "" });
+      const base0 = wrap([trip("t1", { expenses: [] })]);
+      const local = wrap([]);                                       // trip deleted here
+      const remote = clone(base0); remote.trips[0].expenses.push(exp("e1")); // expense added there
+      const res = m3(base0, local, remote).state;
+      if (res.trips.length !== 1) return `trip was dropped (${res.trips.length} trips)`;
+      return eq(res.trips[0].expenses.length, 1, "the expense survived");
+    });
+
+    check("a genuinely untouched trip is still deleted", () => {
+      const base0 = wrap([trip("t1"), trip("t2")]);
+      const local = wrap([trip("t2")]);
+      const remote = clone(base0);
+      return eq(m3(base0, local, remote).state.trips.map((t) => t.id).join(","), "t2");
+    });
+
+    // The base must never carry document bodies — localStorage has no room for them.
+    check("the stored base strips document bodies", () => {
+      const big = "data:application/pdf;base64," + "A".repeat(300000);
+      const payload = wrap([], { documents: [{ id: "d1", name: "big.pdf", size: 1, dataUrl: big }] });
+      const shaped = { ...payload, documents: (payload.documents || []).map((d) => ({ id: d.id })) };
+      const bytes = JSON.stringify(shaped).length;
+      if (JSON.stringify(shaped).includes("AAAA")) return "document body leaked into the base";
+      return bytes < 50000 ? true : `base is ${bytes} bytes, expected well under 50KB`;
     });
   }
 

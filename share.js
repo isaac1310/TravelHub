@@ -276,10 +276,11 @@
       if (!pendingSave) {
         // Safe to apply: nothing unsaved here to overwrite.
         const prev = structuredClone(window.VacationApp.getPayload());
+        // Same rule as syncNow: only mark this version seen once it actually applied.
+        if (!applyOrMerge(data.payload)) return false;
         lastRemoteUpdatedAt = remoteAt;
         lastNotifiedRemoteAt = remoteAt;
         lastEditorInfo = { by, at: data.payload.lastEditedAt || remoteAt };
-        if (!applyOrMerge(data.payload)) return false;
         window.VacationApp.onRemoteChanges?.(prev, data.payload);
         pendingRemoteInfo = null;
         updateSyncDot(false);
@@ -330,16 +331,44 @@
     finally { applyingRemote = false; }
 
     if (stats?.blocked === "rollover") {
-      setSyncStatus("Both devices ran a rollover — sync one first", "error");
-      window.VacationApp.showSyncErrorToast?.(
-        "Both devices ran a year-end rollover. Open the other device and let it sync, then try again — merging them would leave the budgets and the ledger disagreeing."
+      /* Two divergent rollovers cannot be reconciled automatically — the budget
+         deltas aren't replayable. "Sync the other device and retry" was bad advice:
+         the other device is equally stuck, so the pair would wedge forever. The only
+         real exit is a human choosing which one to keep. */
+      setSyncStatus("Both devices ran a rollover", "error");
+      const takeServer = confirm(
+        "Both this device and the family's copy ran a year-end rollover.\n\n" +
+        "These can't be combined — the budgets and the ledger would stop agreeing.\n\n" +
+        "Keep the family's rollover and discard this device's? " +
+        "Your current data is backed up first (Menu → Restore my old data)."
       );
-      return false;
+      if (!takeServer) {
+        window.VacationApp.showSyncErrorToast?.(
+          "Still out of sync — this device's rollover is kept for now. Sync again when you're ready to choose."
+        );
+        return false;
+      }
+      backupBeforeJoin(); // reuse the pre-join restore slot; this is the same kind of loss
+      applyRemote(remotePayload);
+      writeMergeBase(remotePayload);
+      pendingSave = false; // local rollover deliberately discarded — don't push it
+      setSyncStatus("Using the family's rollover", "ok");
+      window.VacationApp.showSyncErrorToast?.(
+        "Kept the family's rollover. Your previous data is under Menu → Restore my old data."
+      );
+      return true;
     }
 
-    // The merged state is what both sides now agree on, once we push it below.
-    writeMergeBase(window.VacationApp.getPayload());
+    /* Base = the last payload BOTH SIDES agreed on, which is the remote we just
+       fetched — NOT the merged result, which the server has never seen. Writing the
+       merged state here would make the next pull treat unpushed local edits as shared
+       history and quietly revert them to the remote's older values. The push below
+       rewrites the base on success. */
+    writeMergeBase(remotePayload);
     pendingSave = true; // merged result must reach the server
+    // Lead the What's-new list with the fact that a merge happened — otherwise the
+    // diff shows only their changes and looks like yours were dropped.
+    window.VacationApp.noteMerged?.(lastEditorInfo?.by || "the family");
     if (stats?.orphansDropped) {
       window.VacationApp.showSyncErrorToast?.(
         `${stats.orphansDropped} reservation${stats.orphansDropped === 1 ? "" : "s"} belonged to a trip someone deleted, so ${stats.orphansDropped === 1 ? "it was" : "they were"} removed.`
@@ -362,15 +391,17 @@
         const remoteAt = data.updated_at || "";
         if (!lastRemoteUpdatedAt || ts(remoteAt) > ts(lastRemoteUpdatedAt)) {
           const prev = structuredClone(window.VacationApp.getPayload());
-          lastRemoteUpdatedAt = remoteAt;
-          lastNotifiedRemoteAt = remoteAt;
-          lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || remoteAt };
           if (!applyOrMerge(data.payload)) {
-            // Blocked (both devices rolled over). Local is untouched; don't push
-            // either, or we'd send state that never saw their rollover.
+            /* Refused (both devices rolled over). Leave lastRemoteUpdatedAt BEHIND:
+               marking this version as seen would make the next Sync skip the fetch,
+               fall through to the push, and overwrite their rollover with ours —
+               turning the guard into the very thing it exists to prevent. */
             if (btn) btn.disabled = false;
             return;
           }
+          lastRemoteUpdatedAt = remoteAt;
+          lastNotifiedRemoteAt = remoteAt;
+          lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || remoteAt };
           window.VacationApp.onRemoteChanges?.(prev, data.payload);
         }
       }
@@ -411,8 +442,15 @@
     try {
       await navigator.clipboard.writeText(url);
       setSyncStatus("Link copied", "ok");
-    } catch {
+      return;
+    } catch { /* clipboard blocked — fall back below */ }
+    /* prompt() itself throws in some embedded/webview contexts. Letting that escape
+       made handleSaveClick's catch report "Save failed" for a share that had already
+       succeeded — the room existed, the message said otherwise. */
+    try {
       prompt("Copy this share link:", url);
+    } catch {
+      setSyncStatus("Shared — use Menu → Copy share link", "ok");
     }
   }
 
@@ -701,13 +739,17 @@
     startUpdateChecks();
     window.VacationApp.ensureDeviceName?.();
 
+    /* Write the base BEFORE attempting the push. The room's copy is what both sides
+       already agree on; the merged copy isn't until it lands. Without this, a failed
+       upload left no base at all, so reconnecting fell back to a wholesale replace and
+       dropped this device's contributions from the working state. */
+    writeMergeBase(data.payload);
+
     // Only now, and only if this device actually contributed something.
     if (localAdds > 0) {
       pendingSave = true;
-      await saveRemote(); // writes the base on success
+      await saveRemote(); // rewrites the base to the merged payload on success
     } else {
-      // Nothing pushed, so the room's copy is what we agree on.
-      writeMergeBase(data.payload);
       setSyncStatus("Shared trip opened", "ok");
     }
 

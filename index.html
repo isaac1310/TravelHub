@@ -1582,7 +1582,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.8.0";
+const APP_VERSION = "v1.8.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -1933,12 +1933,20 @@ function merge3List(baseList, localList, remoteList, opts) {
     const inB = B.has(id), inL = L.has(id), inR = R.has(id);
 
     if (inB && !inL && !inR) { seen.add(id); continue; }              // deleted both sides
+
+    /* Deletion decisions compare the WHOLE entity — no ignoreKeys. Those exist for the
+       field pass (a trip's expenses merge separately), but using them here made an
+       expense-only change look like "untouched", so deleting a trip on one device
+       silently discarded an expense added on the other. */
     if (inB && !inL) {                                                 // deleted locally
-      if (!changed(b, r, o.ignoreKeys)) { seen.add(id); continue; }    // remote untouched → honour delete
+      if (o.addRemoveOnly || !changed(b, r)) { seen.add(id); continue; }
       push(r); continue;                                               // delete-vs-edit → remote wins
     }
     if (inB && !inR) {                                                 // deleted remotely
-      if (!changed(b, l, o.ignoreKeys)) { seen.add(id); continue; }
+      /* addRemoveOnly: documents are never edited, only attached or removed, so a
+         local "change" can't exist — and the base only stores their ids anyway, which
+         made every local document look edited and resurrected deliberate deletions. */
+      if (o.addRemoveOnly || !changed(b, l)) { seen.add(id); continue; }
       push(l); continue;
     }
     if (!inB && inL && !inR) { push(l); continue; }                    // local addition
@@ -1993,9 +2001,11 @@ function merge3(baseState, localState, remoteState) {
   });
 
   merged.items = merge3List(base.items, local.items, remote.items);
-  for (const key of ["checklist", "documents", "fundHistory", "rollHistory"]) {
+  for (const key of ["checklist", "fundHistory", "rollHistory"]) {
     merged[key] = merge3List(base[key], local[key], remote[key]);
   }
+  // Attachments are add/remove-only — a deletion must stick, including sensitive ones.
+  merged.documents = merge3List(base.documents, local.documents, remote.documents, { addRemoveOnly: true });
 
   /* Running total: both deltas must land. local + remote − base is the general form
      of the fundHistory special case mergeStates uses. */
@@ -4756,6 +4766,16 @@ window.VacationApp = {
      reached the server — the tab closed inside the save debounce, or the retries ran
      out — which a plain reload would otherwise silently overwrite.
      Documents compare by id only: that's all the base stores. */
+  /* A merge ran, so the What's-new list must say so. Without this it shows only the
+     other person's diff, which reads as "my edits were dropped" when they weren't. */
+  noteMerged: (by) => {
+    pendingChanges.unshift({
+      screens: [],
+      text: `— your changes were kept and combined with ${by}'s`,
+      by: "Sync",
+      at: new Date().toISOString(),
+    });
+  },
   hasLocalChangesSince: (base) => {
     if (!base) return false;
     const shape = (s) => JSON.stringify({
