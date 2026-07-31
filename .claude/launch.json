@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "travelhub",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "http-server", "-p", "8722", "-c-1"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["/private/tmp/claude-501/-Users-issacavineta-Documents-Vacation-POC/7e72a9c7-fe4f-420c-a0ee-c8fa719704a8/scratchpad/serve.js"],
       "port": 8722
     }
   ]

@@ -1,0 +1,10 @@
+# Keep private data and dead weight out of the public deployment.
+# NOTE: scripts/ must stay — vercel.json's buildCommand runs scripts/write-config.js.
+archive/
+*.zip
+*.gif
+*.csv
+*.md
+supabase-schema.sql
+.github/
+.DS_Store

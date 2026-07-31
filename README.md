@@ -42,7 +42,10 @@ in each share link. Without `config.js` the app is fully local — no errors, no
 Save button.
 
 **How Save & Sync work:** click **Save** once to store the trip in Supabase (a
-`?room&key` link is copied to your clipboard). You'll be asked who you are
+`?room&key` link is copied to your clipboard — the app then removes those
+parameters from its own address bar so the secret isn't left on screen or leaked
+in outbound `Referer` headers; use **Copy link** whenever you need it again).
+You'll be asked who you are
 (once per device) so changes are stamped with a name. Your edits push
 automatically; **incoming** family changes are notify-first: every 5 minutes
 the app checks for updates and shows a dot on the Sync button + a toast
@@ -52,7 +55,31 @@ with a dot in the navigation. Concurrent edits are **last-write-wins** — sync
 before making big edits; large documents also make each sync heavier, so keep
 attachments small.
 
-## Hosting
+## Hosting — Vercel
 
-The app is static — GitHub Pages, Netlify, or any static host works. Share
-links only work for others once the app is hosted somewhere they can reach.
+The app is static, so there's no build step to speak of. Share links only work
+for others once the app is hosted somewhere they can reach.
+
+**One-time setup:**
+
+1. Import this repository at [vercel.com/new](https://vercel.com/new). Framework
+   preset: **Other**. `vercel.json` already sets the build command and output
+   directory — leave the defaults alone.
+2. In **Settings → Environment Variables**, add these for *all* environments
+   (Production, Preview, Development):
+   - `VACATION_SUPABASE_URL` — e.g. `https://xxxx.supabase.co`
+   - `VACATION_SUPABASE_ANON_KEY` — the **publishable** key
+3. Deploy. `scripts/write-config.js` writes `config.js` from those variables at
+   build time; if they're missing it silently no-ops and the committed
+   `config.js` is used instead.
+
+`.vercelignore` keeps the design archive, handoff bundles, and the source CSV
+out of the public deployment. `vercel.json` also sets a Content-Security-Policy
+and `Referrer-Policy: no-referrer` — if you add a new external script, image
+host, or API, add it to the CSP or the browser will block it.
+
+To deploy from the terminal instead:
+
+```bash
+npx vercel --prod
+```

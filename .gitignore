@@ -1,2 +1,6 @@
 .DS_Store
 node_modules/
+.vercel/
+
+# Design handoff bundles — large, and regenerated from the design tool
+*-handoff.zip
