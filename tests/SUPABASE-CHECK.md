@@ -93,7 +93,30 @@ Paste the copied link into browser **B**. Confirm:
 - `localStorage.getItem("vacation-budget-backup-before-join")` in B is non-null — the
   pre-join backup exists, which is what makes the join reversible
 
-### B3. Notify-first (the design — silent auto-apply is a bug)
+### B2b. The creator-device regression (v1.6.1 — check this every release)
+
+This is the exact shape of the bug that shipped in v1.6.0, and it is **asymmetric**:
+it only affects the device that *created* the room, so testing one direction misses it.
+
+1. On **A** (the creator), edit nothing.
+2. On **B**, make a visible change and let it save.
+3. Wait ~20s on **A**, with the tab visible.
+
+**Expect:** A picks the change up on its own. **Fail:** A never notices, no matter how
+long you wait or how many times you tap Sync.
+
+The cause was A seeding its staleness baseline from its own device clock rather than the
+server's, so any clock skew made every incoming change look older. To see the baseline
+directly, run on **A**:
+
+```js
+window.VacationShare.getSyncInfo()
+```
+
+`lastSyncAt` in the future relative to the server, or a baseline that never advances after
+B saves, is the signature. Test both directions — A→B **and** B→A.
+
+### B3. Auto-apply, and when it should defer (v1.6.1)
 
 Edit something in **A** (rename a trip). Within ~60 seconds, **B** should show a sync dot
 and one toast naming the editor. **Nothing on B's screen may change yet.**
