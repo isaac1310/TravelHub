@@ -74,34 +74,51 @@ document.querySelector("[data-app-version]").textContent
 
 This session lost hours to testing a stale deploy. Check it first, every time.
 
-### B1. Create a room
+> **Share and Join are not the same action, and only one person does the first.**
+>
+> | Who | Action | What it does |
+> |---|---|---|
+> | Moran, once, ever | **Share my trips** | Creates a **new** room and gives her a link |
+> | Itzik, and any other device | **Join a shared trip** | Connects to Moran's **existing** room |
+>
+> If Itzik also taps *Share my trips*, he creates a **second room**. Both devices then
+> sync perfectly to different rooms and never see each other. That is the bug this whole
+> flow exists to prevent, so keep the roles straight while testing.
 
-In browser **A**, click **Save**. Confirm:
+### B1. Moran creates the room
 
-- you're asked who you are (once per device)
-- a link is copied to your clipboard
+On **Moran's device**: Menu (⋯) → **Share my trips** → confirm the prompt. Then check:
+
+- she's asked who she is (once per device)
+- the link is copied to her clipboard — if the clipboard is blocked, the pill says to use
+  **Menu → Copy share link** instead, and the share still succeeded
 - the room id and secret are **stripped from the address bar** — the URL must not show
-  `?room=…&key=…` after saving
-- the status pill settles on "Saved"
+  `?room=…&key=…` afterwards
+- the Menu shows a room badge like `Shared · 3644ee`
 
-### B2. Join from browser B — via the Join dialog (v1.7.0)
+She sends that link to Itzik however she likes — WhatsApp, email, anything.
 
-Give **B** a trip of its own first, so convergence is actually exercised. Then
-**Menu → Join a shared trip**, paste the link, Join. Confirm:
+### B2. Itzik joins with the link
 
-- the prompt states how many of B's trips will be **added for everyone**, and how many
-  exist in both (the shared version is kept)
-- after joining, B shows **A's trips *and* its own** — nothing of B's disappeared
-- both devices show the **same** `Shared · xxxxxx` identity in the Menu
-- `localStorage.getItem("vacation-budget-backup-before-join")` in B is non-null
+Give **Itzik's device** a trip of its own first, so convergence is actually exercised —
+otherwise this only proves he can receive, not that his own data survives.
 
-Then check **A** picks up B's trip on its own within ~20s. That round trip is the whole
-point: it proves the room converged rather than one side overwriting the other.
+On **Itzik's device**: Menu → **Join a shared trip** → paste the link → **Join**. Confirm:
+
+- the prompt states how many of Itzik's trips will be **added for everyone**, and how many
+  exist on both sides (the shared version is kept)
+- after joining, Itzik sees **Moran's trips *and* his own** — nothing of his disappeared
+- **both devices show the same `Shared · xxxxxx` badge.** This is the single most useful
+  check in the file: matching badges mean one room, different badges mean the split.
+- `localStorage.getItem("vacation-budget-backup-before-join")` on his device is non-null
+
+Then check **Moran** picks up Itzik's trip on her own within ~20s. That round trip is the
+whole point: it proves the room converged rather than one side overwriting the other.
 
 **The two-room trap (negative test).** On a fresh third browser, tap **Share my trips**
 instead of Join. The warning must tell you to use Join instead. If you proceed anyway, the
-two devices must show **different** room ids — the split is now visible rather than silent.
-This is the bug that made "sync doesn't work" so hard to diagnose.
+two devices must show **different** room badges — the split is now visible rather than
+silent. This is the bug that made "sync doesn't work" so hard to diagnose.
 
 ### B2b. The creator-device regression (v1.6.1 — check this every release)
 
@@ -128,11 +145,22 @@ B saves, is the signature. Test both directions — A→B **and** B→A.
 
 ### B3. Auto-apply, and when it should defer (v1.6.1)
 
-Edit something in **A** (rename a trip). Within ~60 seconds, **B** should show a sync dot
-and one toast naming the editor. **Nothing on B's screen may change yet.**
+Two different behaviours depending on whether the receiving device has unsaved edits.
+Both must hold.
 
-Then tap **Sync** in B. Now the change applies and the "what's new" list names the right
-person. If B updated *before* you tapped Sync, that's a regression.
+**Nothing unsaved on the receiver → it applies on its own.** With Itzik's tab open and
+idle, have Moran rename a trip. Within ~20 seconds Itzik's screen updates **without him
+tapping anything**, and a toast says what changed. Needing to tap Sync here is the
+regression — the "tap Sync to see" nag was removed in v1.6.1.
+
+**Unsaved edits on the receiver → it waits for him.** Have Itzik start editing something
+and leave it unsaved, then have Moran save a change. Now Itzik gets the dot and a *"tap
+Sync"* toast and **nothing on his screen changes**, because applying it would overwrite
+what he is still typing. Tapping Sync then merges both (see B3b).
+
+Note the poll only runs while the tab is **visible** — backgrounded tabs stop polling to
+save mobile data and catch up when you return. If nothing arrives, check the tab is in the
+foreground before calling it a failure.
 
 ### B3b. Concurrent edits on different data (v1.8.0 — the everyday case)
 

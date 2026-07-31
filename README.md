@@ -41,18 +41,29 @@ expose in client code. Trip data is protected by the per-trip secret embedded
 in each share link. Without `config.js` the app is fully local — no errors, no
 Save button.
 
-**How Save & Sync work:** click **Save** once to store the trip in Supabase (a
-`?room&key` link is copied to your clipboard — the app then removes those
-parameters from its own address bar so the secret isn't left on screen or leaked
-in outbound `Referer` headers; use **Copy link** whenever you need it again).
-You'll be asked who you are
-(once per device) so changes are stamped with a name. Your edits push
-automatically; **incoming** family changes are notify-first: every 5 minutes
-the app checks for updates and shows a dot on the Sync button + a toast
-("Moran made changes — tap Sync"). Nothing changes on screen until you tap
-**Sync**, which then shows a "What's new" list and marks the changed sections
-with a dot in the navigation. Concurrent edits are **last-write-wins** — sync
-before making big edits; large documents also make each sync heavier, so keep
+**Sharing: one person Shares, everyone else Joins.** These are different actions
+and only the first person does the first one:
+
+- **Share my trips** creates a **new** shared space from everything on that device
+  and copies a link. Exactly one person, exactly once.
+- **Join a shared trip** connects a device to an existing one — Menu → paste the
+  link. Anyone who taps *Share* instead creates a **second, separate room** that
+  will never sync with the first, so the app warns about this.
+
+The link carries a room id and a secret; the app strips them from its own address
+bar once joined, so the secret isn't left on screen or leaked in outbound
+`Referer` headers. Use **Copy share link** when you need it again. You'll be asked
+who you are once per device, so changes are stamped with a name. The Menu shows
+which room you're in (`Shared · 3644ee`) — two devices showing different badges are
+in different rooms, which is the first thing to check if syncing seems broken.
+
+**How syncing behaves:** your edits upload automatically, and incoming changes
+**apply on their own** within about 20 seconds while the tab is open (backgrounded
+tabs pause polling and catch up when you return). The exception is when you have
+unsaved edits of your own: then the app waits, shows a dot and a "tap Sync" toast,
+and merges both sides when you tap it — so two people editing different things at
+once both keep their work. If you both change the *same* field, the value that
+reached the server first wins. Large documents make every sync heavier, so keep
 attachments small.
 
 ## Hosting — Vercel
