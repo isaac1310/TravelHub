@@ -97,6 +97,7 @@
     try {
       regressionGuards();
       syncTimestamps();
+      buildTraceability();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -239,6 +240,36 @@
       && eq(ts(""), 0, "empty") === true
       && eq(ts("not a date"), 0, "garbage") === true
         ? true : "junk input did not fall back to 0");
+  }
+
+  /* ===== 1b2. Build traceability =====
+     The sidebar is display:none on mobile, so the version line that lives in it is
+     invisible on a phone — the one device where a stale build hides. */
+
+  function buildTraceability() {
+    group("traceability");
+
+    check("version label includes the release and the commit", () => {
+      const label = versionLabel();
+      if (!label.includes(APP_VERSION)) return `missing release name: "${label}"`;
+      const commit = window.VACATION_BUILD?.commit;
+      if (commit && !label.includes(commit)) return `missing commit ${commit}: "${label}"`;
+      return true;
+    });
+
+    check("at least one version element is reachable outside the sidebar", () => {
+      const outside = [...document.querySelectorAll("[data-app-version]")]
+        .filter((el) => !el.closest(".sidebar"));
+      return outside.length
+        ? true
+        : "every version element is inside .sidebar, which is hidden on mobile";
+    });
+
+    check("every version element is populated", () => {
+      const empty = [...document.querySelectorAll("[data-app-version]")]
+        .filter((el) => !el.textContent.trim());
+      return empty.length ? `${empty.length} version element(s) left blank` : true;
+    });
   }
 
   /* ===== 1c. Dialog dismissal =====

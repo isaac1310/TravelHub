@@ -276,6 +276,9 @@ h1, h2, h3, h4, .brand__name {
 .sidebar__account .who strong { display: block; font-weight: 600; }
 .sidebar__account .who span { color: var(--muted); font-size: 0.72rem; }
 .app-version { padding: 0.5rem 0 0.2rem; text-align: center; color: var(--muted); font-size: 0.68rem; letter-spacing: 0.02em; }
+/* Selectable: the commit hash is the single most useful thing to paste when
+   reporting a problem from a phone. */
+.app-version--sheet { margin-top: 0.6rem; user-select: text; -webkit-user-select: text; cursor: text; }
 
 .app__body { min-width: 0; display: flex; flex-direction: column; }
 
@@ -1229,6 +1232,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 10a8 8 0 1 1 2 6M4 10V5m0 5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Restore my old data
         </button>
+        <!-- The sidebar (and its version line) is hidden on mobile, so surface the
+             build here — this is the only place a phone can see what it's running. -->
+        <div class="app-version app-version--sheet" data-app-version></div>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close style="flex:1;justify-content:center">Close</button>
         </div>
