@@ -1531,7 +1531,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.6.0";
+const APP_VERSION = "v1.6.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -2428,7 +2428,18 @@ function render() {
   if (typeof renderActiveShellScreen === "function") renderActiveShellScreen();
 }
 
-function openDialog(dialog) { dialog.showModal(); }
+/* A snapshot of the dialog's form when it opened, so a backdrop tap can tell
+   "nothing typed yet" (safe to dismiss) from "half-filled" (don't discard it). */
+function formSignature(dialog) {
+  const form = dialog.querySelector("form");
+  if (!form) return null;
+  return new URLSearchParams(new FormData(form)).toString();
+}
+
+function openDialog(dialog) {
+  dialog.dataset.openSignature = formSignature(dialog) ?? "";
+  dialog.showModal();
+}
 function closeDialog(dialog) { dialog.close(); }
 
 function setupDialogCloseHandlers() {
@@ -2436,6 +2447,22 @@ function setupDialogCloseHandlers() {
     btn.addEventListener("click", () => {
       const dialog = btn.closest("dialog");
       if (dialog) closeDialog(dialog);
+    });
+  });
+
+  /* Tap outside to dismiss. With a native <dialog>, a click on the backdrop
+     reports the dialog itself as the target — clicks on content hit a child. */
+  document.querySelectorAll("dialog").forEach((dialog) => {
+    let startedOnBackdrop = false;
+    // Track where the press began, so selecting text and releasing outside
+    // doesn't count as a backdrop tap.
+    dialog.addEventListener("pointerdown", (e) => { startedOnBackdrop = e.target === dialog; });
+    dialog.addEventListener("click", (e) => {
+      if (!startedOnBackdrop || e.target !== dialog) return;
+      const sig = formSignature(dialog);
+      // Never throw away typed input on a mis-tap — Cancel and Esc still work.
+      if (sig !== null && sig !== dialog.dataset.openSignature) return;
+      closeDialog(dialog);
     });
   });
 }
@@ -4344,7 +4371,9 @@ function showToast(text, action) {
 }
 
 /* share.js signals "updates available" (notify-first — nothing applied yet) */
-function showUpdateToast(by) {
+function showUpdateToast(by, opts) {
+  // Applied automatically (nothing local was at risk) vs. waiting on a decision.
+  if (opts?.applied) return showToast(`Updated — ${by} made changes`, "view");
   showToast(`${by} made changes — tap Sync to see`, "sync");
 }
 

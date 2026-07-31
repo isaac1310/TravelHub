@@ -96,6 +96,8 @@
 
     try {
       regressionGuards();
+      syncTimestamps();
+      dialogBehaviour();
       trustBoundary();
       budgetMath();
       dataSafety();
@@ -197,6 +199,98 @@
       const btn = document.getElementById("btn-map-retry");
       if (btn) btn.click(); else renderItinerary();
       return truthy(document.querySelector(".leaflet-container"), "leaflet container");
+    });
+  }
+
+  /* ===== 1b. Sync timestamp comparison =====
+     Postgres returns "…+00:00", browsers produce "…Z". Parsing to epoch before comparing
+     is the correct thing to do, though measurement showed the two forms rarely disagree
+     in practice — the differing digits fall before the separator. The bug that actually
+     broke device-to-device sync was seeding the baseline from the DEVICE clock; that one
+     needs the two-browser test in SUPABASE-CHECK.md, not a unit check. */
+
+  function syncTimestamps() {
+    group("sync");
+
+    const ts = window.VacationShare?._ts;
+
+    check("timestamp helper is exposed by share.js", () =>
+      typeof ts === "function" ? true : "VacationShare._ts missing — is share.js loaded?");
+
+    if (typeof ts !== "function") return;
+
+    check("a later server timestamp compares as newer", () =>
+      ts("2026-07-31T17:41:00+00:00") > ts("2026-07-31T17:40:00.000Z")
+        ? true : "later server time did not compare as newer");
+
+    /* The one case where the two forms genuinely diverge: the same instant written
+       "+00:00" vs ".000Z" is EQUAL, but as strings '+' sorts before '.', so a string
+       compare invents an ordering. Harmless in today's call sites, wrong the moment
+       anyone writes >= against it. */
+    check("the same instant in both formats is equal, not ordered", () => {
+      const pg = "2026-07-31T17:40:00+00:00";
+      const js = "2026-07-31T17:40:00.000Z";
+      if (ts(pg) !== ts(js)) return `parsed to different epochs: ${ts(pg)} vs ${ts(js)}`;
+      return pg < js ? true : "fixture no longer demonstrates the string-ordering trap";
+    });
+
+    check("timestamp helper tolerates junk without throwing", () =>
+      eq(ts(undefined), 0, "undefined") === true
+      && eq(ts(""), 0, "empty") === true
+      && eq(ts("not a date"), 0, "garbage") === true
+        ? true : "junk input did not fall back to 0");
+  }
+
+  /* ===== 1c. Dialog dismissal =====
+     Tapping outside must close a dialog, but must NOT discard half-typed input. */
+
+  function dialogBehaviour() {
+    group("dialogs");
+
+    // Synthesise the backdrop tap: a real pointerdown+click whose target is the
+    // dialog itself, which is what the browser reports for a backdrop hit.
+    function backdropTap(dialog) {
+      dialog.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      dialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+
+    check("backdrop tap closes a dialog with no form input", () => {
+      const dlg = document.getElementById("dialog-changes"); // no form
+      if (!dlg) return "dialog-changes not found";
+      openDialog(dlg);
+      if (!dlg.open) return "dialog did not open";
+      backdropTap(dlg);
+      const closed = !dlg.open;
+      if (dlg.open) closeDialog(dlg);
+      return closed ? true : "dialog stayed open after backdrop tap";
+    });
+
+    check("a click on dialog CONTENT does not close it", () => {
+      const dlg = document.getElementById("dialog-changes");
+      openDialog(dlg);
+      const child = dlg.querySelector("*");
+      if (!child) { closeDialog(dlg); return "no child element to click"; }
+      dlg.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      child.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const stillOpen = dlg.open;
+      closeDialog(dlg);
+      return stillOpen ? true : "content click closed the dialog";
+    });
+
+    check("backdrop tap does NOT discard a half-filled form", () => {
+      const dlg = document.getElementById("dialog-trip");
+      const form = dlg?.querySelector("form");
+      if (!form) return "dialog-trip form not found";
+      openDialog(dlg);
+      const field = form.querySelector('input[name="name"], input[type="text"]');
+      if (!field) { closeDialog(dlg); return "no text field to dirty"; }
+      const original = field.value;
+      field.value = "half typed trip name";
+      backdropTap(dlg);
+      const stayedOpen = dlg.open;
+      field.value = original;
+      if (dlg.open) closeDialog(dlg);
+      return stayedOpen ? true : "dialog closed and discarded typed input";
     });
   }
 

@@ -11,7 +11,7 @@
    notified (dot on the Sync button + toast) and changes apply when they tap
    Sync (↻ in the top bar). Outgoing edits still push automatically. */
 (function () {
-  const CHECK_MS = 60 * 1000; // background poll; also check on load + tab focus
+  const CHECK_MS = 20 * 1000; // background poll; also check on load + tab focus
   const SAVE_DEBOUNCE_MS = 600;
   let checkTimer = null;
 
@@ -32,6 +32,15 @@
   function isConfigured() {
     const c = window.VACATION_CONFIG;
     return Boolean(c?.supabaseUrl && c?.supabaseAnonKey);
+  }
+
+  /* Compare timestamps as epoch milliseconds, never as strings. Postgres serialises
+     timestamptz as "…+00:00" while a browser produces "…Z"; comparing those two shapes
+     with < / > is not chronological, and getting it wrong means a device silently stops
+     seeing everyone else's changes. */
+  function ts(value) {
+    const n = Date.parse(value);
+    return Number.isNaN(n) ? 0 : n;
   }
 
   /* Mobile chip mirrors the status pill in compact form. */
@@ -116,7 +125,7 @@
       });
       if (error || !data?.payload) return false;
       const remoteAt = data.updated_at || "";
-      if (!lastRemoteUpdatedAt || remoteAt <= lastRemoteUpdatedAt) return false;
+      if (!lastRemoteUpdatedAt || ts(remoteAt) <= ts(lastRemoteUpdatedAt)) return false;
       pendingRemoteInfo = { by: data.payload.lastEditedBy || "Someone", at: data.payload.lastEditedAt || remoteAt };
       return true;
     } catch {
@@ -194,7 +203,9 @@
     if (chipDot) chipDot.hidden = !on;
   }
 
-  /* Notify-first: detect newer remote data, tell the user, apply NOTHING. */
+  /* Apply incoming changes automatically when nothing local is at risk, which is almost
+     always. Only when this device has unsaved edits does a human need to decide, and then
+     we fall back to notifying and let them tap Sync. */
   async function checkForUpdates() {
     if (!sharedMode || !supabase || saveInFlight) return false;
     try {
@@ -204,14 +215,34 @@
       });
       if (error || !data?.payload) return false;
       const remoteAt = data.updated_at || "";
-      if (lastRemoteUpdatedAt && remoteAt <= lastRemoteUpdatedAt) return false;
-      pendingRemoteInfo = { by: data.payload.lastEditedBy || "Someone", at: data.payload.lastEditedAt || remoteAt };
-      updateSyncDot(true);
-      setSyncStatus(`${pendingRemoteInfo.by} made changes — tap Sync`, "pending");
-      // Toast only ONCE per remote update — the dot + pill remain the quiet reminder.
-      if (!lastNotifiedRemoteAt || remoteAt > lastNotifiedRemoteAt) {
+      if (lastRemoteUpdatedAt && ts(remoteAt) <= ts(lastRemoteUpdatedAt)) return false;
+
+      const by = data.payload.lastEditedBy || "Someone";
+
+      if (!pendingSave) {
+        // Safe to apply: nothing unsaved here to overwrite.
+        const prev = structuredClone(window.VacationApp.getPayload());
+        lastRemoteUpdatedAt = remoteAt;
         lastNotifiedRemoteAt = remoteAt;
-        window.VacationApp.showUpdateToast?.(pendingRemoteInfo.by);
+        lastEditorInfo = { by, at: data.payload.lastEditedAt || remoteAt };
+        applyRemote(data.payload);
+        window.VacationApp.onRemoteChanges?.(prev, data.payload);
+        pendingRemoteInfo = null;
+        updateSyncDot(false);
+        lastSyncAt = Date.now();
+        setSyncStatus(`Updated — ${by} made changes`, "ok");
+        window.VacationApp.showUpdateToast?.(by, { applied: true });
+        return true;
+      }
+
+      // Unsaved local edits: don't touch them, ask for a decision.
+      pendingRemoteInfo = { by, at: data.payload.lastEditedAt || remoteAt };
+      updateSyncDot(true);
+      setSyncStatus(`${by} made changes — tap Sync`, "pending");
+      // Toast only ONCE per remote update — the dot + pill remain the quiet reminder.
+      if (!lastNotifiedRemoteAt || ts(remoteAt) > ts(lastNotifiedRemoteAt)) {
+        lastNotifiedRemoteAt = remoteAt;
+        window.VacationApp.showUpdateToast?.(by);
       }
       return true;
     } catch (err) {
@@ -220,33 +251,37 @@
     }
   }
 
-  /* Sync = push local edits first, then FRESH fetch (never a cached copy),
-     apply if newer, and report what changed. */
+  /* Sync = FRESH fetch (never a cached copy), apply if newer, THEN push.
+     Pulling first matters: pushing first would send state that predates the remote
+     change, and applying the remote afterwards would overwrite the local edits we
+     were trying to save. Whole-document storage rules out a field-level merge, so
+     order is the only protection available. */
   async function syncNow() {
     if (!sharedMode || !supabase) return;
     const btn = document.getElementById("btn-sync-now");
     if (btn) btn.disabled = true;
     setSyncStatus("Syncing…", "busy");
     try {
-      if (pendingSave) {
-        clearTimeout(saveTimer);
-        clearTimeout(retryTimer);
-        retryCount = 0;
-        await saveRemote();
-      }
       const { data, error } = await supabase.rpc("fetch_shared_budget", {
         p_id: roomId,
         p_secret: roomSecret,
       });
       if (!error && data?.payload) {
         const remoteAt = data.updated_at || "";
-        if (!lastRemoteUpdatedAt || remoteAt > lastRemoteUpdatedAt) {
+        if (!lastRemoteUpdatedAt || ts(remoteAt) > ts(lastRemoteUpdatedAt)) {
           const prev = structuredClone(window.VacationApp.getPayload());
           lastRemoteUpdatedAt = remoteAt;
+          lastNotifiedRemoteAt = remoteAt;
           lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || remoteAt };
           applyRemote(data.payload);
           window.VacationApp.onRemoteChanges?.(prev, data.payload);
         }
+      }
+      if (pendingSave) {
+        clearTimeout(saveTimer);
+        clearTimeout(retryTimer);
+        retryCount = 0;
+        await saveRemote();
       }
       pendingRemoteInfo = null;
       updateSyncDot(false);
@@ -326,7 +361,11 @@
       roomSecret = data.secret;
       sharedMode = true;
       rememberRoom(roomId, roomSecret);
-      lastRemoteUpdatedAt = new Date().toISOString();
+      /* Seed the baseline from the SERVER's clock, not this device's. create_shared_budget
+         returns only {id, secret}, so read the row back once. A device-clock baseline that
+         runs ahead of the server makes every future remote change compare as "older", and
+         this device silently never sees the family's edits again. */
+      lastRemoteUpdatedAt = await fetchServerUpdatedAt();
       lastSyncAt = Date.now();
       stripCredentialsFromUrl();
       startUpdateChecks();
@@ -337,6 +376,22 @@
       console.error(err);
       setSyncStatus("Save failed", "error");
       btn.disabled = false;
+    }
+  }
+
+  /* Read back the row's server-side updated_at. Returns null on failure, which is the
+     safe value: a null baseline means "unknown", so the next check treats remote as
+     newer and self-heals rather than locking this device out of updates. */
+  async function fetchServerUpdatedAt() {
+    try {
+      const { data, error } = await supabase.rpc("fetch_shared_budget", {
+        p_id: roomId,
+        p_secret: roomSecret,
+      });
+      if (error || !data) return null;
+      return data.updated_at || null;
+    } catch {
+      return null;
     }
   }
 
@@ -460,7 +515,12 @@
   function startUpdateChecks() {
     clearInterval(checkTimer);
     setTimeout(() => checkForUpdates().catch(console.error), 2000);
-    checkTimer = setInterval(() => checkForUpdates().catch(console.error), CHECK_MS);
+    // Don't poll a backgrounded tab — it wastes mobile data and the visibilitychange
+    // handler below catches up the moment the user returns.
+    checkTimer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      checkForUpdates().catch(console.error);
+    }, CHECK_MS);
     if (!startUpdateChecks.bound) {
       startUpdateChecks.bound = true;
       document.addEventListener("visibilitychange", () => {
@@ -476,6 +536,7 @@
     isShared: () => sharedMode,
     syncNow,
     checkForUpdates,
+    _ts: ts, // exposed for the smoke test — timestamp comparison is easy to break silently
     getSyncInfo: () => ({ lastSyncAt, lastEditor: lastEditorInfo, updatesAvailable: !!pendingRemoteInfo }),
   };
 
