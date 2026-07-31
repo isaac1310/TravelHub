@@ -24,6 +24,7 @@
   let saveInFlight = false;
   let pendingSave = false;
   let applyingRemote = false;
+  let suppressPush = false;   // true while a join is applied but not yet committed
   let pendingRemoteInfo = null; // {by, at} — updates available, not yet applied
   let lastNotifiedRemoteAt = null; // toast fired for this updated_at — don't re-nag
   let lastSyncAt = null;        // ms epoch of last successful push or applied pull
@@ -133,6 +134,42 @@
     }
   }
 
+  /* The server caps a room at 8 MB via pg_column_size — the TOAST-compressed jsonb.
+     The client can't measure that exactly (Blob measures raw JSON and over-estimates),
+     so this is an early warning with a margin, not the authority. Documents are the
+     only thing big enough to matter, so they're what gets left behind; the server's
+     own error is still handled below in case this estimate was wrong. */
+  const SIZE_WARN_BYTES = 7 * 1024 * 1024;
+
+  function payloadWithinCap() {
+    const payload = stampedPayload();
+    const size = new Blob([JSON.stringify(payload)]).size;
+    if (size <= SIZE_WARN_BYTES || !Array.isArray(payload.documents) || !payload.documents.length) {
+      return { payload, dropped: [] };
+    }
+    // Keep documents on this device; sync everything else rather than nothing.
+    const dropped = payload.documents.map((d) => d.name);
+    return { payload: { ...payload, documents: [] }, dropped };
+  }
+
+  function isTooLarge(err) {
+    return /too large|payload/i.test(String(err?.message || err?.hint || ""));
+  }
+
+  function reportTooLarge() {
+    setSyncStatus("Too big to sync — remove some documents", "error");
+    window.VacationApp.showSyncErrorToast?.(
+      "This trip is too large to sync. Remove some attached documents (Family → Shared checklist) and it'll save again."
+    );
+  }
+
+  function reportDroppedDocs(names) {
+    setSyncStatus("Saved without documents", "ok");
+    window.VacationApp.showSyncErrorToast?.(
+      `Saved, but ${names.length} document${names.length === 1 ? "" : "s"} stayed on this device only (too large to share): ${names.slice(0, 3).join(", ")}${names.length > 3 ? "…" : ""}`
+    );
+  }
+
   async function saveRemote() {
     if (!sharedMode || !supabase) return;
     clearTimeout(retryTimer);
@@ -146,14 +183,26 @@
     setSyncStatus("Saving…", "busy");
     let failed = false;
     try {
+      const { payload, dropped } = payloadWithinCap();
       const { data, error } = await supabase.rpc("save_shared_budget", {
         p_id: roomId,
         p_secret: roomSecret,
-        p_payload: stampedPayload(),
+        p_payload: payload,
       });
+      if (isTooLarge(error)) {
+        // The server is the authority on size; report it rather than retrying
+        // forever against a wall.
+        saveInFlight = false;
+        reportTooLarge();
+        return;
+      }
       failed = Boolean(error || !data?.ok);
-      if (!failed) lastRemoteUpdatedAt = data.updated_at || lastRemoteUpdatedAt;
-    } catch {
+      if (!failed) {
+        lastRemoteUpdatedAt = data.updated_at || lastRemoteUpdatedAt;
+        if (dropped.length) reportDroppedDocs(dropped);
+      }
+    } catch (err) {
+      if (isTooLarge(err)) { saveInFlight = false; reportTooLarge(); return; }
       failed = true; // network error
     }
     saveInFlight = false;
@@ -179,7 +228,8 @@
   }
 
   function notifyLocalChange() {
-    if (!sharedMode || applyingRemote) return;
+    // suppressPush keeps a join local-only until the user has committed to it.
+    if (!sharedMode || applyingRemote || suppressPush) return;
     retryCount = 0; // fresh edit restarts the retry budget
     pendingSave = true;
     setSyncStatus("Unsaved changes", "pending");
@@ -348,7 +398,15 @@
 
   async function handleSaveClick(btn) {
     if (sharedMode) { await saveNow(btn); return; } // manual re-save with feedback
-    if (!confirm("Save this trip to the cloud so it syncs across devices and can be shared by link?")) return;
+    /* A room holds EVERYTHING on this device, not one trip — and pressing this on a
+       second device makes a separate room that will never sync with the first. Both
+       facts have to be in the prompt; the old copy promised the opposite. */
+    if (!confirm(
+      "Put all the trips on this device into a new shared space?\n\n" +
+      "You'll get a link to send to the family.\n\n" +
+      "If someone already shared with you, close this and tap \"Join a shared trip\" instead — " +
+      "sharing here creates a separate copy that won't sync with theirs."
+    )) return;
     btn.disabled = true;
     await window.VacationApp.ensureDeviceName?.(); // who is stamping changes
     setSyncStatus("Saving…", "busy");
@@ -370,6 +428,7 @@
       stripCredentialsFromUrl();
       startUpdateChecks();
       markSavedChrome();
+      updateRoomChrome();
       setSyncStatus("Saved", "ok");
       await copyLink();
     } catch (err) {
@@ -430,6 +489,7 @@
     if (syncBtn) {
       syncBtn.addEventListener("click", () => syncNow().catch(console.error));
     }
+    updateRoomChrome(); // "Local only" until proven otherwise
 
     const params = new URLSearchParams(window.location.search);
     const urlRoom = params.get("room");
@@ -444,52 +504,179 @@
 
     const alreadyJoined = remembered && remembered.room === room;
 
-    // Warn before replacing local data — only when JOINING a room this device
-    // hasn't used before (reloads of your own shared trip never prompt).
-    const joiningOverLocalData = !alreadyJoined && hasLocalTrips();
-    if (joiningOverLocalData &&
-        !confirm("Open shared trip? This replaces the trip data on this device. (Your current data is backed up — restore it anytime from the Budget screen.)")) {
-      // Cancelled: stay local-only, strip the room params so refresh won't re-prompt.
+    if (alreadyJoined) {
+      // Reconnecting to our own room on a plain reload: adopt the room's copy
+      // wholesale. Nothing to merge — this device's edits are already up there.
+      setSyncStatus("Loading shared trip…", "busy");
+      try {
+        const { data, error } = await supabase.rpc("fetch_shared_budget", { p_id: room, p_secret: key });
+        if (error || !data?.payload) throw new Error("Invalid or expired share link.");
+        roomId = room;
+        roomSecret = key;
+        sharedMode = true;
+        stripCredentialsFromUrl();
+        lastRemoteUpdatedAt = data.updated_at || null;
+        lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || "" };
+        applyRemote(data.payload);
+        lastSyncAt = Date.now();
+        markSavedChrome();
+        setSyncStatus("Shared trip loaded", "ok");
+        startUpdateChecks();
+        updateRoomChrome();
+        window.VacationApp.ensureDeviceName?.();
+      } catch (err) {
+        alert(err.message || "Could not load the shared trip.");
+        setSyncStatus("", "");
+      }
+      return;
+    }
+
+    // First time on this device: merge rather than replace.
+    const res = await joinRoom(room, key);
+    if (!res.ok && res.reason !== "cancelled") alert(res.reason);
+    if (!res.ok) {
+      // Strip the params so a refresh doesn't re-prompt.
       const url = new URL(window.location.href);
       url.searchParams.delete("room");
       url.searchParams.delete("key");
       window.history.replaceState({}, "", url);
-      return;
     }
-    if (joiningOverLocalData) {
-      // Safety net: keep the pre-join data so "Restore my old data" can bring it back.
-      try {
-        const raw = localStorage.getItem("vacation-budget-planner-v1");
-        if (raw) localStorage.setItem("vacation-budget-backup-before-join", raw);
-      } catch { /* private mode */ }
+  }
+
+  /* Accepts a full share link, or a bare "room=…&key=…" query string. Deliberately
+     NOT a short code: fetch_shared_budget needs both the id and the 64-hex secret,
+     and the secret is the authorisation — there is nothing shorter to type. */
+  function parseShareLink(input) {
+    const raw = String(input || "").trim();
+    if (!raw) return null;
+    const read = (params) => {
+      const room = params.get("room");
+      const key = params.get("key");
+      return room && key ? { room, key } : null;
+    };
+    try {
+      const url = new URL(raw, window.location.origin);
+      const fromUrl = read(url.searchParams);
+      if (fromUrl) return fromUrl;
+    } catch { /* not a URL — fall through */ }
+    try {
+      return read(new URLSearchParams(raw.replace(/^[?#]/, "")));
+    } catch {
+      return null;
+    }
+  }
+
+  /* Join a room, merging what's already on this device instead of replacing it.
+     Read-only until the user confirms: nothing is applied and nothing is pushed
+     before that point, so a mistaken link can't touch someone else's data. */
+  async function joinRoom(room, key) {
+    if (!supabase) return { ok: false, reason: "Sharing isn't configured on this device." };
+
+    if (sharedMode && roomId && roomId !== room) {
+      const ok = confirm(
+        `This device is synced to trip ${shortRoom(roomId)}.\n\n` +
+        `Leave it and join ${shortRoom(room)} instead?`
+      );
+      if (!ok) return { ok: false, reason: "cancelled" };
     }
 
-    setSyncStatus("Loading shared trip…", "busy");
+    setSyncStatus("Opening shared trip…", "busy");
+    let data;
     try {
-      const { data, error } = await supabase.rpc("fetch_shared_budget", {
-        p_id: room,
-        p_secret: key,
-      });
-      if (error || !data?.payload) throw new Error("Invalid or expired share link.");
-      // Only now commit to shared mode (Cancel above never reaches here).
-      roomId = room;
-      roomSecret = key;
-      sharedMode = true;
-      rememberRoom(room, key);
-      // A plain reload reconnects from the remembered room, so the URL needn't carry the secret.
-      stripCredentialsFromUrl();
-      lastRemoteUpdatedAt = data.updated_at || null;
-      lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || "" };
-      applyRemote(data.payload); // initial load: no diff — everything would be "new"
-      lastSyncAt = Date.now();
-      markSavedChrome();
-      setSyncStatus("Shared trip loaded", "ok");
-      startUpdateChecks();
-      window.VacationApp.ensureDeviceName?.(); // non-blocking; needed before their first edit is stamped
+      const res = await supabase.rpc("fetch_shared_budget", { p_id: room, p_secret: key });
+      if (res.error || !res.data?.payload) throw new Error("That share link didn't work — it may be mistyped or expired.");
+      data = res.data;
     } catch (err) {
-      alert(err.message || "Could not load the shared trip.");
       setSyncStatus("", "");
+      return { ok: false, reason: err.message || "Could not open the shared trip." };
     }
+
+    /* Preview the merge before changing anything. Whole-document sync means any
+       local trip we keep WILL be uploaded on the next edit, so this has to be
+       asked up front — a "not now" that silently uploads later would be a lie. */
+    const preview = window.VacationApp.previewMerge?.(data.payload) || { addedTrips: 0, addedItems: 0, addedOther: 0, divergedTrips: 0 };
+    const localAdds = preview.addedTrips + preview.addedItems + preview.addedOther;
+    if (localAdds > 0) {
+      const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+      const bits = [];
+      if (preview.addedTrips) bits.push(plural(preview.addedTrips, "trip"));
+      if (preview.addedItems) bits.push(plural(preview.addedItems, "reservation"));
+      if (preview.addedOther) bits.push(plural(preview.addedOther, "other item"));
+      const onlyOne = bits.length === 1 && localAdds === 1;
+      const ok = confirm(
+        `Join this shared trip?\n\n` +
+        `This device has ${bits.join(", ")} that ${onlyOne ? "isn't" : "aren't"} in it. ` +
+        `Joining adds ${onlyOne ? "it" : "them"} for everyone in the family.\n\n` +
+        (preview.divergedTrips
+          ? `${plural(preview.divergedTrips, "trip")} also ${preview.divergedTrips === 1 ? "exists" : "exist"} in both — ` +
+            `the shared version is kept, and yours stays available under "Restore my old data".`
+          : "")
+      );
+      if (!ok) { setSyncStatus("", ""); return { ok: false, reason: "cancelled" }; }
+    }
+
+    backupBeforeJoin();
+
+    // Apply locally with pushes suppressed, so committing to the room is a
+    // separate, deliberate step below rather than a side effect of rendering.
+    suppressPush = true;
+    let stats;
+    try {
+      applyingRemote = true;
+      try { stats = window.VacationApp.mergePayload(data.payload); }
+      finally { applyingRemote = false; }
+    } finally {
+      suppressPush = false;
+    }
+
+    roomId = room;
+    roomSecret = key;
+    sharedMode = true;
+    rememberRoom(room, key);
+    stripCredentialsFromUrl();
+    lastRemoteUpdatedAt = data.updated_at || null;
+    lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || "" };
+    lastSyncAt = Date.now();
+    markSavedChrome();
+    startUpdateChecks();
+    window.VacationApp.ensureDeviceName?.();
+
+    // Only now, and only if this device actually contributed something.
+    if (localAdds > 0) {
+      pendingSave = true;
+      await saveRemote();
+    } else {
+      setSyncStatus("Shared trip opened", "ok");
+    }
+
+    if (stats?.divergedTrips) {
+      window.VacationApp.showSyncErrorToast?.(
+        `${stats.divergedTrips} of your trips also exist here — the shared version is shown. Yours: Menu → Restore my old data.`
+      );
+    }
+    updateRoomChrome();
+    return { ok: true, stats };
+  }
+
+  function backupBeforeJoin() {
+    try {
+      const raw = localStorage.getItem("vacation-budget-planner-v1");
+      if (raw) localStorage.setItem("vacation-budget-backup-before-join", raw);
+    } catch { /* private mode */ }
+  }
+
+  function shortRoom(id) { return String(id || "").slice(0, 6); }
+
+  /* Show WHICH room this device is in. Two devices side by side then reveal a
+     mismatch at a glance — the failure that made "sync is broken" so hard to see. */
+  function updateRoomChrome() {
+    const label = sharedMode ? `Shared · ${shortRoom(roomId)}` : "Local only";
+    document.querySelectorAll("[data-room-identity]").forEach((el) => {
+      el.textContent = label;
+      el.title = sharedMode ? `Synced to shared trip ${roomId}` : "Not shared — only on this device";
+    });
+    document.querySelectorAll("[data-when-shared]").forEach((el) => { el.hidden = !sharedMode; });
+    document.querySelectorAll("[data-when-local]").forEach((el) => { el.hidden = sharedMode; });
   }
 
   const ROOM_STORE_KEY = "travelhub-room";
@@ -537,7 +724,21 @@
     syncNow,
     checkForUpdates,
     _ts: ts, // exposed for the smoke test — timestamp comparison is easy to break silently
+    _parseShareLink: parseShareLink, // ditto
     getSyncInfo: () => ({ lastSyncAt, lastEditor: lastEditorInfo, updatesAvailable: !!pendingRemoteInfo }),
+    getRoomId: () => (sharedMode ? roomId : null),
+    getShareUrl,
+    joinFromLink: async (input) => {
+      const parsed = parseShareLink(input);
+      if (!parsed) return { ok: false, reason: "That doesn't look like a share link. Paste the whole link you were sent." };
+      return joinRoom(parsed.room, parsed.key);
+    },
+    startSharing: () => {
+      const btn = document.getElementById("btn-share");
+      return handleSaveClick(btn || document.createElement("button"));
+    },
+    copyLink,
+    refreshChrome: updateRoomChrome,
   };
 
   if (document.readyState === "loading") {

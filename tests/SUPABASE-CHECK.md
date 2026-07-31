@@ -84,14 +84,24 @@ In browser **A**, click **Save**. Confirm:
   `?room=…&key=…` after saving
 - the status pill settles on "Saved"
 
-### B2. Join from browser B
+### B2. Join from browser B — via the Join dialog (v1.7.0)
 
-Paste the copied link into browser **B**. Confirm:
+Give **B** a trip of its own first, so convergence is actually exercised. Then
+**Menu → Join a shared trip**, paste the link, Join. Confirm:
 
-- you are **prompted** before local data is replaced
-- after accepting, B shows A's trips
-- `localStorage.getItem("vacation-budget-backup-before-join")` in B is non-null — the
-  pre-join backup exists, which is what makes the join reversible
+- the prompt states how many of B's trips will be **added for everyone**, and how many
+  exist in both (the shared version is kept)
+- after joining, B shows **A's trips *and* its own** — nothing of B's disappeared
+- both devices show the **same** `Shared · xxxxxx` identity in the Menu
+- `localStorage.getItem("vacation-budget-backup-before-join")` in B is non-null
+
+Then check **A** picks up B's trip on its own within ~20s. That round trip is the whole
+point: it proves the room converged rather than one side overwriting the other.
+
+**The two-room trap (negative test).** On a fresh third browser, tap **Share my trips**
+instead of Join. The warning must tell you to use Join instead. If you proceed anyway, the
+two devices must show **different** room ids — the split is now visible rather than silent.
+This is the bug that made "sync doesn't work" so hard to diagnose.
 
 ### B2b. The creator-device regression (v1.6.1 — check this every release)
 

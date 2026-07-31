@@ -98,6 +98,7 @@
       regressionGuards();
       syncTimestamps();
       buildTraceability();
+      joinMerge();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -269,6 +270,101 @@
       const empty = [...document.querySelectorAll("[data-app-version]")]
         .filter((el) => !el.textContent.trim());
       return empty.length ? `${empty.length} version element(s) left blank` : true;
+    });
+  }
+
+  /* ===== 1b3. Join merge =====
+     The rule: ADD ids the room lacks, room's version stands on a shared id, and NEVER
+     rewrite an id — reservation ids are derived from expense ids (`item-${exp.id}`), so
+     a rename would orphan reservations from their costs. */
+
+  function joinMerge() {
+    group("merge");
+
+    const merge = window.VacationApp?.mergeStates;
+
+    check("mergeStates is exposed", () =>
+      typeof merge === "function" ? true : "VacationApp.mergeStates missing");
+
+    if (typeof merge !== "function") return;
+
+    const trip = (id, over) => Object.assign(
+      { id, name: id, year: 2026, budget: 1000, destination: "", startDate: "", endDate: "",
+        travelers: [], cover: "", expenses: [] }, over || {});
+
+    check("trips the room lacks are added; shared ids are not duplicated", () => {
+      const local = { trips: [trip("trip-paris-2026"), trip("trip-mine")], items: [], version: 2 };
+      const room  = { trips: [trip("trip-paris-2026"), trip("trip-theirs")], items: [], version: 2 };
+      const { state, stats } = merge(local, room);
+      const ids = state.trips.map((t) => t.id).sort();
+      if (ids.length !== new Set(ids).size) return "duplicate trip ids: " + ids.join(",");
+      return eq(ids.join(","), "trip-mine,trip-paris-2026,trip-theirs", "merged ids") === true
+        && eq(stats.addedTrips, 1, "addedTrips") === true
+        ? true : `ids=${ids.join(",")} added=${stats.addedTrips}`;
+    });
+
+    check("on a shared id the room's version stands, and divergence is counted", () => {
+      const local = { trips: [trip("trip-paris-2026", { budget: 9999 })], items: [], version: 2 };
+      const room  = { trips: [trip("trip-paris-2026", { budget: 1000 })], items: [], version: 2 };
+      const { state, stats } = merge(local, room);
+      if (state.trips.length !== 1) return "expected exactly one Paris, got " + state.trips.length;
+      return eq(state.trips[0].budget, 1000, "room budget wins") === true
+        && eq(stats.divergedTrips, 1, "divergedTrips") === true
+        ? true : `budget=${state.trips[0].budget} diverged=${stats.divergedTrips}`;
+    });
+
+    check("identical trips on both sides are not flagged as divergent", () => {
+      const local = { trips: [trip("trip-paris-2026")], items: [], version: 2 };
+      const room  = { trips: [trip("trip-paris-2026")], items: [], version: 2 };
+      return eq(merge(local, room).stats.divergedTrips, 0);
+    });
+
+    // The invariant that keeps reservations attached to their costs.
+    check("no id is ever rewritten by the merge", () => {
+      const local = {
+        trips: [trip("trip-mine", { expenses: [{ id: "exp-1", label: "Hotel", category: "Hotel", amount: 100, date: "", status: "booked", amountPaid: 0, paidDate: "" }] })],
+        items: [{ id: "item-exp-1", tripId: "trip-mine", type: "hotel", title: "H", location: {} }],
+        version: 2,
+      };
+      const room = { trips: [trip("trip-paris-2026")], items: [], version: 2 };
+      const { state } = merge(local, room);
+      const mine = state.trips.find((t) => t.id === "trip-mine");
+      if (!mine) return "local trip was dropped";
+      if (mine.expenses[0]?.id !== "exp-1") return "expense id changed to " + mine.expenses[0]?.id;
+      const item = state.items.find((i) => i.id === "item-exp-1");
+      if (!item) return "derived item id was rewritten or dropped";
+      return eq(item.tripId, "trip-mine", "item still points at its trip");
+    });
+
+    check("money ledgers are unioned, never overwritten", () => {
+      const local = { trips: [], items: [], version: 2,
+        fundHistory: [{ id: "f-local", amount: 500, date: "2026-01-01" }] };
+      const room  = { trips: [], items: [], version: 2,
+        fundHistory: [{ id: "f-room", amount: 300, date: "2026-01-02" }] };
+      const ids = merge(local, room).state.fundHistory.map((f) => f.id).sort().join(",");
+      return eq(ids, "f-local,f-room");
+    });
+
+    check("currentFunds keeps local additions the room never saw", () => {
+      const local = { trips: [], items: [], version: 2, currentFunds: 1500,
+        fundHistory: [{ id: "f-room", amount: 1000 }, { id: "f-local", amount: 500 }] };
+      const room  = { trips: [], items: [], version: 2, currentFunds: 1000,
+        fundHistory: [{ id: "f-room", amount: 1000 }] };
+      // room's 1000 + the 500 it never saw
+      return eq(merge(local, room).state.currentFunds, 1500);
+    });
+
+    check("share links parse; junk is rejected", () => {
+      const parse = window.VacationShare?._parseShareLink;
+      if (typeof parse !== "function") return "VacationShare._parseShareLink missing";
+      const full = parse("https://example.com/?room=abc&key=def");
+      if (full?.room !== "abc" || full?.key !== "def") return "full URL not parsed: " + JSON.stringify(full);
+      const bare = parse("  room=abc&key=def  ");
+      if (bare?.room !== "abc") return "bare query not parsed: " + JSON.stringify(bare);
+      if (parse("hello") !== null) return "junk accepted";
+      if (parse("") !== null) return "empty accepted";
+      if (parse("https://example.com/?room=abc") !== null) return "link missing the key was accepted";
+      return true;
     });
   }
 

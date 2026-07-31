@@ -1055,6 +1055,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="avatar avatar--Itzik">I</span>
           <span class="who"><strong>Itzik</strong><span>Family organiser</span></span>
         </div>
+        <div class="app-version" data-room-identity></div>
         <div class="app-version" data-app-version></div>
       </aside>
 
@@ -1081,14 +1082,14 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>
             </button>
             <span class="sync-status" id="sync-status" hidden></span>
-            <button type="button" class="icon-btn" id="btn-sync-now" aria-label="Sync — get family changes" title="Sync — pull changes from other devices" hidden>
+            <button type="button" class="icon-btn" id="btn-sync-now" aria-label="Check for family changes" title="Check now — family changes arrive automatically" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.5 4.6M4 12a8 8 0 0 1 14.5-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M18.5 3.5v4h-4M5.5 20.5v-4h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span class="icon-btn__dot" id="sync-dot" hidden></span>
             </button>
             <button type="button" class="icon-btn" id="btn-copy-link" aria-label="Copy share link" title="Copy share link" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.5 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </button>
-            <button type="button" class="icon-btn" id="btn-share" aria-label="Save to cloud" title="Save to cloud" hidden>
+            <button type="button" class="icon-btn" id="btn-share" aria-label="Share my trips" title="Share my trips — puts everything on this device into a shared space" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 19h9a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 5 9.5 3.5 3.5 0 0 0 6 19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 9v5m0 0-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <button type="button" class="icon-btn" id="btn-appbar-add" aria-label="New trip" title="New trip">
@@ -1210,7 +1211,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <p class="dialog__hint" id="overflow-device" style="margin-bottom:0.6rem"></p>
         <button type="button" class="sheet-item" data-overflow="save">
           <svg viewBox="0 0 24 24" fill="none"><path d="M6 19h9a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 5 9.5 3.5 3.5 0 0 0 6 19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 9v5m0 0-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span id="overflow-save-label">Save to cloud</span>
+          <span id="overflow-save-label">Share my trips</span>
+        </button>
+        <button type="button" class="sheet-item" data-overflow="join">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Join a shared trip
         </button>
         <button type="button" class="sheet-item" data-overflow="copy" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.5 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -1233,12 +1238,36 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           Restore my old data
         </button>
         <!-- The sidebar (and its version line) is hidden on mobile, so surface the
-             build here — this is the only place a phone can see what it's running. -->
-        <div class="app-version app-version--sheet" data-app-version></div>
+             build here — this is the only place a phone can see what it's running.
+             Room identity sits alongside it: two devices compared side by side then
+             reveal a mismatch immediately. -->
+        <div class="app-version app-version--sheet" data-room-identity></div>
+        <div class="app-version app-version--sheet" style="margin-top:0.1rem" data-app-version></div>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close style="flex:1;justify-content:center">Close</button>
         </div>
       </div>
+    </dialog>
+
+    <!-- ===== Join a shared trip ===== -->
+    <dialog id="dialog-join" class="dialog">
+      <form method="dialog" id="join-form" style="padding: 1.1rem 1.3rem">
+        <h3 class="dialog__title">Join a shared trip</h3>
+        <p class="dialog__hint">
+          Paste the whole link someone sent you. Your own trips aren't deleted — anything
+          that isn't already in the shared trip gets added to it.
+        </p>
+        <label class="field">
+          <span class="field__label">Share link</span>
+          <input type="text" name="link" id="join-link" inputmode="url" autocomplete="off"
+                 placeholder="https://…/?room=…&amp;key=…" />
+        </label>
+        <p class="dialog__hint" id="join-error" style="color:var(--danger,#c0392b)" hidden></p>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
+          <button type="button" class="btn btn--primary" id="btn-join-confirm">Join</button>
+        </div>
+      </form>
     </dialog>
 
     <!-- ===== Item ⋯ action sheet ===== -->
@@ -1537,7 +1566,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.6.1";
+const APP_VERSION = "v1.7.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -1780,6 +1809,81 @@ function normalizeExpense(exp) {
     amountPaid,
     paidDate,
   };
+}
+
+/* ============================================================
+   MERGE — joining a shared room without losing what's on this device
+   ============================================================
+
+   Rule: ADD ids the room doesn't have; where an id exists on both sides the
+   room's version stands. Ids are NEVER rewritten. That last part is load-bearing:
+   reservation ids are derived from expense ids (`item-${exp.id}`, see migrateToV2),
+   so renaming an expense would orphan its reservation, and renaming a trip would
+   strand every item pointing at it.
+
+   Divergent local copies aren't destroyed — the caller writes PRE_JOIN_BACKUP_KEY
+   first, and reports the count so the user can restore. */
+
+/* Compare an entity's own scalar fields, ignoring nested collections that are
+   merged separately (a trip's expenses). Key order must not matter. */
+function sameEntity(a, b, ignoreKeys) {
+  const project = (o) =>
+    JSON.stringify(
+      Object.keys(o)
+        .filter((k) => !(ignoreKeys || []).includes(k))
+        .sort()
+        .map((k) => [k, o[k]])
+    );
+  return project(a) === project(b);
+}
+
+/* Room order first, then whatever the local side had that the room lacks. */
+function mergeById(localList, roomList, ignoreKeys) {
+  const room = Array.isArray(roomList) ? roomList : [];
+  const local = Array.isArray(localList) ? localList : [];
+  const roomIds = new Set(room.map((e) => e && e.id));
+  const added = local.filter((e) => e && !roomIds.has(e.id));
+  const diverged = local.filter((e) => {
+    if (!e || !roomIds.has(e.id)) return false;
+    return !sameEntity(e, room.find((r) => r.id === e.id), ignoreKeys);
+  }).length;
+  return { list: [...room, ...added], added: added.length, diverged };
+}
+
+/* Returns { state, stats } — stats drives the "N of your trips differ" notice
+   and the "you have N trips not in this room" prompt. */
+function mergeStates(localState, roomState) {
+  const local = localState || {};
+  const room = roomState || {};
+  const merged = { ...room };
+  const stats = { addedTrips: 0, divergedTrips: 0, addedItems: 0, addedOther: 0 };
+
+  // Trips: room's version wins wholesale on a shared id, so nested expenses
+  // ride along with it rather than being merged separately.
+  const trips = mergeById(local.trips, room.trips, ["expenses"]);
+  merged.trips = trips.list;
+  stats.addedTrips = trips.added;
+  stats.divergedTrips = trips.diverged;
+
+  const items = mergeById(local.items, room.items);
+  merged.items = items.list;
+  stats.addedItems = items.added;
+
+  for (const key of ["checklist", "documents", "fundHistory", "rollHistory"]) {
+    const r = mergeById(local[key], room[key]);
+    merged[key] = r.list;
+    stats.addedOther += r.added;
+  }
+
+  /* currentFunds is a plain number, not derived from the ledger, so taking the
+     room's value alone would silently swallow fund additions made only here.
+     Add back exactly the entries the room was missing. */
+  const roomFundIds = new Set((room.fundHistory || []).map((f) => f && f.id));
+  const unseen = (local.fundHistory || []).filter((f) => f && !roomFundIds.has(f.id));
+  merged.currentFunds =
+    (Number(room.currentFunds) || 0) + unseen.reduce((s, f) => s + (Number(f.amount) || 0), 0);
+
+  return { state: normalizeState(merged), stats };
 }
 
 function normalizeState(data) {
@@ -4209,11 +4313,16 @@ function bindShellEvents() {
     const shared = window.VacationShare?.isShared?.();
     const name = getDeviceName();
     $("overflow-device").textContent = name ? `This device: ${name}` : "";
-    $("overflow-save-label").textContent = shared ? "Save now" : "Save to cloud";
+    $("overflow-save-label").textContent = shared ? "Save now" : "Share my trips";
     const dlg = $("dialog-overflow");
-    dlg.querySelector('[data-overflow="save"]').hidden = document.getElementById("btn-share").hidden; // hidden = sharing not configured
+    const sharingConfigured = !document.getElementById("btn-share").hidden;
+    dlg.querySelector('[data-overflow="save"]').hidden = !sharingConfigured;
+    // Joining only makes sense before you're in a room — switching is a separate,
+    // deliberate act and gets its own confirm inside joinRoom.
+    dlg.querySelector('[data-overflow="join"]').hidden = !sharingConfigured;
     dlg.querySelector('[data-overflow="copy"]').hidden = !shared;
     dlg.querySelector('[data-overflow="sync"]').hidden = !shared;
+    window.VacationShare?.refreshChrome?.();
     dlg.querySelector('[data-overflow="restore"]').hidden = !localStorage.getItem(PRE_JOIN_BACKUP_KEY);
     openDialog(dlg);
   });
@@ -4222,6 +4331,7 @@ function bindShellEvents() {
       closeDialog($("dialog-overflow")); // never two dialogs at once
       const act = b.getAttribute("data-overflow");
       if (act === "save") $("btn-share").click();
+      else if (act === "join") openJoinDialog();
       else if (act === "copy") $("btn-copy-link").click();
       else if (act === "sync") window.VacationShare?.syncNow?.();
       else if (act === "export") exportData();
@@ -4229,6 +4339,28 @@ function bindShellEvents() {
       else if (act === "restore") $("btn-restore-backup").click();
     })
   );
+  $("btn-join-confirm").addEventListener("click", async () => {
+    const input = $("join-link");
+    const err = $("join-error");
+    const btn = $("btn-join-confirm");
+    err.hidden = true;
+    btn.disabled = true;
+    btn.textContent = "Joining…";
+    try {
+      const res = await window.VacationShare?.joinFromLink?.(input.value);
+      if (res?.ok) {
+        closeDialog($("dialog-join"));
+        input.value = "";
+      } else if (res && res.reason !== "cancelled") {
+        err.textContent = res.reason;
+        err.hidden = false;
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Join";
+    }
+  });
+
   // Mobile sync chip: tap = sync now
   $("sync-chip").addEventListener("click", () => window.VacationShare?.syncNow?.());
   $("btn-changes-clear").addEventListener("click", () => {
@@ -4388,6 +4520,13 @@ function showSyncErrorToast(text) {
   showToast(text, "error");
 }
 
+function openJoinDialog() {
+  const err = $("join-error");
+  if (err) err.hidden = true;
+  openDialog($("dialog-join"));
+  $("join-link")?.focus();
+}
+
 function openChangesDialog() {
   const body = $("changes-body");
   body.innerHTML = pendingChanges.length
@@ -4411,6 +4550,18 @@ window.VacationApp = {
     saveState();
     render();
   },
+  /* Merge a room's payload into what's already here and apply the result.
+     Returns the stats so share.js can report divergences and offer the push. */
+  mergePayload: (roomPayload) => {
+    const { state: merged, stats } = mergeStates(state, roomPayload);
+    state = merged;
+    saveState();
+    render();
+    return stats;
+  },
+  /* Dry run: what would joining this room add or clash with? Changes nothing. */
+  previewMerge: (roomPayload) => mergeStates(structuredClone(state), roomPayload).stats,
+  mergeStates, // exposed for ?selftest=1
   render,
   getDeviceName,
   ensureDeviceName,
