@@ -4436,6 +4436,16 @@ function boot() {
   bindShellEvents();
   render();   // budget engine (also calls renderActiveShellScreen)
   router();   // set initial screen from hash
+
+  /* Smoke test, opt-in via ?selftest=1 — see tests/selftest.js.
+     Injected from here, not at parse time: a dynamically-inserted script is async by
+     default, so injecting earlier let it race ahead of the deferred share.js and report
+     phantom failures. By boot() every deferred script has already run. */
+  if (new URLSearchParams(location.search).has("selftest")) {
+    const s = document.createElement("script");
+    s.src = "tests/selftest.js";
+    document.head.appendChild(s);
+  }
 }
 
 /* Let the plane finish its flight before dismissing, so a fast boot doesn't turn
@@ -4460,12 +4470,6 @@ if (document.readyState === "loading") {
   hideSplash();
 }
 
-/* Smoke test, opt-in via ?selftest=1 — see tests/selftest.js */
-if (new URLSearchParams(location.search).has("selftest")) {
-  const s = document.createElement("script");
-  s.src = "tests/selftest.js";
-  document.head.appendChild(s);
-}
     </script>
   </body>
 </html>
