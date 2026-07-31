@@ -4,3 +4,5 @@ node_modules/
 
 # Design handoff bundles — large, and regenerated from the design tool
 *-handoff.zip
+
+# Written at build time by scripts/write-config.js (a placeholder is committed)

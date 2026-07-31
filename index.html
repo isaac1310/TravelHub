@@ -1012,6 +1012,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
          Pinned to an exact version so the integrity hash can be verified. -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"
       integrity="sha384-faMlYZUtkJj+Sh6Bmu/L0GzPcraRWN6CW+9RH3GUrK/Z0WS9tgaNNt0tHiLxsbdb" crossorigin="" defer></script>
+    <script src="build-info.js" defer></script>
     <script src="share.js" defer></script>
   </head>
   <body>
@@ -4380,10 +4381,20 @@ window.VacationApp = {
 /* ============================================================
    INIT
    ============================================================ */
+/* The release name says what we meant to ship; the commit SHA says what is actually
+   running. Keep both — a stale deploy is invisible otherwise. */
+function versionLabel() {
+  const b = window.VACATION_BUILD || {};
+  const parts = [`TravelHub ${APP_VERSION}`];
+  if (b.commit) parts.push(b.commit);
+  if (b.env && b.env !== "production") parts.push(b.env);
+  return parts.join(" · ");
+}
+
 /* Boot after DOMContentLoaded so deferred libraries (Leaflet, Supabase) are already
    defined — this script is inline and would otherwise run before them. */
 function boot() {
-  document.querySelectorAll("[data-app-version]").forEach((el) => { el.textContent = `TravelHub ${APP_VERSION}`; });
+  document.querySelectorAll("[data-app-version]").forEach((el) => { el.textContent = versionLabel(); });
   setupDialogCloseHandlers();
   bindEvents();
   buildNav();
@@ -4412,6 +4423,13 @@ if (document.readyState === "loading") {
 } else {
   boot();
   hideSplash();
+}
+
+/* Smoke test, opt-in via ?selftest=1 — see tests/selftest.js */
+if (new URLSearchParams(location.search).has("selftest")) {
+  const s = document.createElement("script");
+  s.src = "tests/selftest.js";
+  document.head.appendChild(s);
 }
     </script>
   </body>
