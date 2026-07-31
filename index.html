@@ -279,6 +279,14 @@ h1, h2, h3, h4, .brand__name {
 /* Selectable: the commit hash is the single most useful thing to paste when
    reporting a problem from a phone. */
 .app-version--sheet { margin-top: 0.6rem; user-select: text; -webkit-user-select: text; cursor: text; }
+.room-badge {
+  display: inline-flex; align-items: center; gap: 0.35rem; margin: 0 0 0.7rem;
+  padding: 0.25rem 0.6rem; border: 1px solid var(--line, #e8ddd5); border-radius: 999px;
+  background: var(--cream-2, #f7ede6); color: var(--ink, #3b2b26);
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
+}
+.room-badge::before { content: "●"; color: var(--brand, #ef8e7f); font-size: 0.7em; }
+.room-badge:hover { background: var(--brand-soft, #fbe4de); }
 
 .app__body { min-width: 0; display: flex; flex-direction: column; }
 
@@ -1208,14 +1216,18 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
     <dialog id="dialog-overflow" class="dialog">
       <div style="padding: 0.9rem 1.2rem 0.4rem">
         <h3 class="dialog__title" style="margin-bottom:0.4rem">Menu</h3>
-        <p class="dialog__hint" id="overflow-device" style="margin-bottom:0.6rem"></p>
+        <p class="dialog__hint" id="overflow-device" style="margin-bottom:0.2rem"></p>
+        <!-- Which room this device is in, where you'd actually look for it.
+             Tap to copy the full id — the short form is for comparing two devices
+             at a glance, the full one for matching against the database. -->
+        <button type="button" class="room-badge" id="btn-room-badge" data-room-identity></button>
         <button type="button" class="sheet-item" data-overflow="save">
           <svg viewBox="0 0 24 24" fill="none"><path d="M6 19h9a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 5 9.5 3.5 3.5 0 0 0 6 19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 9v5m0 0-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span id="overflow-save-label">Share my trips</span>
         </button>
         <button type="button" class="sheet-item" data-overflow="join">
           <svg viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          Join a shared trip
+          <span id="overflow-join-label">Join a shared trip</span>
         </button>
         <button type="button" class="sheet-item" data-overflow="copy" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.5 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -1232,6 +1244,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <button type="button" class="sheet-item" data-overflow="import">
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 4v11m0 0-3.5-3.5M12 15l3.5 3.5M5 19h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Import data
+        </button>
+        <button type="button" class="sheet-item" data-overflow="leave" hidden>
+          <svg viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Leave shared trip
         </button>
         <button type="button" class="sheet-item" data-overflow="restore" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 10a8 8 0 1 1 2 6M4 10V5m0 5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1566,7 +1582,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.7.0";
+const APP_VERSION = "v1.7.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -4313,15 +4329,19 @@ function bindShellEvents() {
     const shared = window.VacationShare?.isShared?.();
     const name = getDeviceName();
     $("overflow-device").textContent = name ? `This device: ${name}` : "";
-    $("overflow-save-label").textContent = shared ? "Save now" : "Share my trips";
     const dlg = $("dialog-overflow");
     const sharingConfigured = !document.getElementById("btn-share").hidden;
-    dlg.querySelector('[data-overflow="save"]').hidden = !sharingConfigured;
-    // Joining only makes sense before you're in a room — switching is a separate,
-    // deliberate act and gets its own confirm inside joinRoom.
+    /* Two different menus, not one menu with everything on it.
+       Not shared → the only real choices are start one or join one.
+       Shared     → saving is automatic, so "Save now" is noise; what you actually
+                    want is the link, a manual check, or a way out. */
+    $("overflow-save-label").textContent = "Share my trips";
+    $("overflow-join-label").textContent = shared ? "Switch to a different trip" : "Join a shared trip";
+    dlg.querySelector('[data-overflow="save"]').hidden = !sharingConfigured || shared;
     dlg.querySelector('[data-overflow="join"]').hidden = !sharingConfigured;
     dlg.querySelector('[data-overflow="copy"]').hidden = !shared;
     dlg.querySelector('[data-overflow="sync"]').hidden = !shared;
+    dlg.querySelector('[data-overflow="leave"]').hidden = !shared;
     window.VacationShare?.refreshChrome?.();
     dlg.querySelector('[data-overflow="restore"]').hidden = !localStorage.getItem(PRE_JOIN_BACKUP_KEY);
     openDialog(dlg);
@@ -4332,6 +4352,7 @@ function bindShellEvents() {
       const act = b.getAttribute("data-overflow");
       if (act === "save") $("btn-share").click();
       else if (act === "join") openJoinDialog();
+      else if (act === "leave") window.VacationShare?.leaveRoom?.();
       else if (act === "copy") $("btn-copy-link").click();
       else if (act === "sync") window.VacationShare?.syncNow?.();
       else if (act === "export") exportData();
@@ -4339,6 +4360,19 @@ function bindShellEvents() {
       else if (act === "restore") $("btn-restore-backup").click();
     })
   );
+  // Tap the room badge to copy the full id — useful when comparing two devices
+  // or matching a row in the database.
+  $("btn-room-badge").addEventListener("click", async () => {
+    const id = window.VacationShare?.getRoomId?.();
+    const badge = $("btn-room-badge");
+    if (!id) { badge.textContent = "Not shared — tap Share my trips"; return; }
+    const original = badge.textContent;
+    try { await navigator.clipboard.writeText(id); badge.textContent = "Room id copied"; }
+    catch { badge.textContent = id; }
+    setTimeout(() => window.VacationShare?.refreshChrome?.(), 1800);
+    void original;
+  });
+
   $("btn-join-confirm").addEventListener("click", async () => {
     const input = $("join-link");
     const err = $("join-error");

@@ -263,6 +263,8 @@
         p_id: roomId,
         p_secret: roomSecret,
       });
+      // The RPC returns null (not an error) when the row is gone — a deleted room.
+      if (!error && data === null) { handleMissingRoom(); return false; }
       if (error || !data?.payload) return false;
       const remoteAt = data.updated_at || "";
       if (lastRemoteUpdatedAt && ts(remoteAt) <= ts(lastRemoteUpdatedAt)) return false;
@@ -510,6 +512,13 @@
       setSyncStatus("Loading shared trip…", "busy");
       try {
         const { data, error } = await supabase.rpc("fetch_shared_budget", { p_id: room, p_secret: key });
+        /* Room gone (deleted in the dashboard, or the secret changed). Forget it rather
+           than re-prompting on every reload — the trips are already on this device. */
+        if (!error && data === null) {
+          roomId = room;
+          handleMissingRoom();
+          return;
+        }
         if (error || !data?.payload) throw new Error("Invalid or expired share link.");
         roomId = room;
         roomSecret = key;
@@ -658,6 +667,62 @@
     return { ok: true, stats };
   }
 
+  /* Disconnect this device from its room. The trips stay — they're already local —
+     this just stops syncing. Needed whenever a room is gone or was joined by mistake;
+     without it a device points at a dead room forever with no way out. */
+  function leaveRoom(opts) {
+    const silent = opts && opts.silent;
+    if (!silent && !confirm(
+      `Stop syncing with shared trip ${shortRoom(roomId)}?\n\n` +
+      `Your trips stay on this device. You can rejoin later with the link.`
+    )) return false;
+
+    clearTimeout(saveTimer);
+    clearTimeout(retryTimer);
+    clearInterval(checkTimer);
+    sharedMode = false;
+    roomId = null;
+    roomSecret = null;
+    pendingSave = false;
+    pendingRemoteInfo = null;
+    lastRemoteUpdatedAt = null;
+    lastNotifiedRemoteAt = null;
+    try { localStorage.removeItem(ROOM_STORE_KEY); } catch { /* private mode */ }
+    updateSyncDot(false);
+    setSyncStatus("Not shared — this device only", "");
+    markUnsharedChrome();
+    updateRoomChrome();
+    return true;
+  }
+
+  function markUnsharedChrome() {
+    const copy = document.getElementById("btn-copy-link");
+    if (copy) copy.hidden = true;
+    const sync = document.getElementById("btn-sync-now");
+    if (sync) sync.hidden = true;
+    const save = document.getElementById("btn-share");
+    if (save) {
+      save.hidden = false;
+      save.disabled = false;
+      save.setAttribute("aria-label", "Share my trips");
+      save.setAttribute("title", "Share my trips — puts everything on this device into a shared space");
+    }
+  }
+
+  /* The room row is gone (deleted in the dashboard, or the link was revoked).
+     Say so once and disconnect, rather than retrying against nothing forever. */
+  let missingRoomHandled = false;
+  function handleMissingRoom() {
+    if (missingRoomHandled) return;
+    missingRoomHandled = true;
+    const gone = shortRoom(roomId);
+    leaveRoom({ silent: true });
+    setSyncStatus("Shared trip no longer exists", "error");
+    window.VacationApp.showSyncErrorToast?.(
+      `Shared trip ${gone} no longer exists — it was deleted. Your trips are safe on this device, and sharing is switched off.`
+    );
+  }
+
   function backupBeforeJoin() {
     try {
       const raw = localStorage.getItem("vacation-budget-planner-v1");
@@ -738,6 +803,7 @@
       return handleSaveClick(btn || document.createElement("button"));
     },
     copyLink,
+    leaveRoom,
     refreshChrome: updateRoomChrome,
   };
 
