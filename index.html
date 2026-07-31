@@ -3,6 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Keep the URL (which can carry a share room id + secret) out of outbound Referer headers -->
+    <meta name="referrer" content="no-referrer" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#ef8e7f" />
+    <meta name="apple-mobile-web-app-title" content="TravelHub" />
     <title>Family TravelHub</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -708,7 +715,55 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       .daychip.is-active { background: var(--coral, #ef8e7f); border-color: var(--coral, #ef8e7f); color: #fff; }
       .map-layout { display: grid; grid-template-columns: 1fr 280px; gap: 1rem; align-items: start; }
       @media (max-width: 800px) { .map-layout { grid-template-columns: 1fr; } }
-      .map-canvas { height: 440px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line, #e8ddd5); }
+      /* ===== Splash / boot loader ===== */
+      .splash {
+        position: fixed; inset: 0; z-index: 9999; display: grid; place-content: center; gap: 0.15rem;
+        background: var(--cream, #fdf6f0); text-align: center;
+        animation: splash-out 0.45s ease 2.4s forwards;
+      }
+      .splash.is-hiding { animation: splash-out 0.45s ease forwards; }
+      .splash__sky { position: relative; width: min(78vw, 320px); height: 64px; margin: 0 auto 0.75rem; }
+      .splash__trail {
+        position: absolute; left: 0; right: 0; top: 50%; height: 2px;
+        background: repeating-linear-gradient(to right, #f2c4b8 0 7px, transparent 7px 15px);
+        transform-origin: left center; animation: splash-trail 1.5s ease-out forwards;
+      }
+      .splash__plane {
+        position: absolute; top: 50%; left: 0; width: 40px; height: 40px; color: var(--brand, #ef8e7f);
+        animation: splash-fly 1.7s cubic-bezier(0.35, 0, 0.25, 1) forwards;
+      }
+      .splash__name { margin: 0; font-weight: 700; font-size: 1.35rem; color: var(--ink, #3b2b26); }
+      .splash__tag {
+        margin: 0; font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--muted, #8a7268);
+      }
+      /* `left` is animated rather than a translate percentage: percentages inside
+         translate() resolve against the element, not the container, so the plane
+         would barely move. */
+      @keyframes splash-fly {
+        0%   { left: -14%; transform: translate(-50%, -50%) rotate(-8deg); opacity: 0; }
+        12%  { opacity: 1; }
+        50%  { left: 50%;  transform: translate(-50%, calc(-50% - 16px)) rotate(3deg); }
+        88%  { opacity: 1; }
+        100% { left: 114%; transform: translate(-50%, -50%) rotate(-6deg); opacity: 0; }
+      }
+      @keyframes splash-trail { from { transform: scaleX(0); opacity: 0.9; } to { transform: scaleX(1); opacity: 0.35; } }
+      @keyframes splash-out { to { opacity: 0; visibility: hidden; } }
+      /* A moving plane is the whole point, so when motion is reduced show a still
+         one rather than a jittery compromise. */
+      @media (prefers-reduced-motion: reduce) {
+        .splash__plane, .splash__trail { animation: none; }
+        .splash__plane { left: 50%; transform: translate(-50%, -50%); }
+        .splash { animation-delay: 0.6s; }
+      }
+
+      .map-canvas { height: 440px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line, #e8ddd5); position: relative; }
+      .map-hint {
+        position: absolute; z-index: 500; left: 50%; top: 12px; transform: translateX(-50%);
+        max-width: 22rem; padding: 0.55rem 0.9rem; border-radius: 12px; font-size: 0.85rem;
+        background: rgba(255, 255, 255, 0.94); color: #3b2b26; box-shadow: 0 4px 16px rgba(70, 45, 30, 0.18);
+        text-align: center; pointer-events: none;
+      }
       .map-list { display: flex; flex-direction: column; gap: 0.6rem; }
       .map-list__title { margin: 0 0 0.2rem; font-size: 1.15rem; }
       .mapstop { display: flex; align-items: center; gap: 0.6rem; }
@@ -936,7 +991,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .members .member .member__trips { display: none; }
 
         /* Map: taller canvas + stops list styled as a sheet */
-        .map-layout { display: flex; flex-direction: column; gap: 0; margin: 0 -1rem; }
+        /* align-items must be stretch here: the desktop rule's `start` would size the
+           empty map div to its content width on the cross axis, i.e. 0px wide. */
+        .map-layout { display: flex; flex-direction: column; align-items: stretch; gap: 0; margin: 0 -1rem; }
         .map-canvas { height: 52dvh; border-radius: 0; border: none; }
         .map-list {
           background: var(--surface); border-radius: 22px 22px 0 0; margin-top: -20px; position: relative; z-index: 2;
@@ -951,11 +1008,27 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
-    <!-- Supabase client (sharing) — optional; app is local-only without config.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js" defer></script>
+    <!-- Supabase client (sharing) — optional; app is local-only without config.js.
+         Pinned to an exact version so the integrity hash can be verified. -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.111.0/dist/umd/supabase.js"
+      integrity="sha384-faMlYZUtkJj+Sh6Bmu/L0GzPcraRWN6CW+9RH3GUrK/Z0WS9tgaNNt0tHiLxsbdb" crossorigin="" defer></script>
     <script src="share.js" defer></script>
   </head>
   <body>
+    <!-- Splash: a paper plane flies across while the app boots. Removed by JS on
+         boot; the CSS animation also self-dismisses so a JS failure can't trap the
+         user behind it. -->
+    <div id="splash" class="splash" role="status" aria-label="Loading Family TravelHub">
+      <div class="splash__sky">
+        <span class="splash__trail" aria-hidden="true"></span>
+        <svg class="splash__plane" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M2 12.5 21 4l-6.5 16-3.2-6.3L2 12.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M11.3 13.7 21 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <p class="splash__name">Family TravelHub</p>
+      <p class="splash__tag">Plan together</p>
+    </div>
     <div class="app">
       <!-- ===== Sidebar (desktop) ===== -->
       <aside class="sidebar">
@@ -1451,7 +1524,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.5.0";
+const APP_VERSION = "v1.6.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -1582,8 +1655,8 @@ function normalizeItem(it) {
   if (!it || !it.id || !it.tripId) return null;
   const loc = it.location || {};
   return {
-    id: it.id,
-    tripId: it.tripId,
+    id: safeId(it.id),
+    tripId: safeId(it.tripId),
     type: ITEM_TYPES.includes(it.type) ? it.type : "other",
     title: it.title || "",
     details: it.details || "",
@@ -1608,10 +1681,13 @@ function normalizeItem(it) {
 }
 
 function normalizeTripMeta(trip) {
+  trip.id = safeId(trip.id);
+  trip.name = String(trip.name ?? "");
+  trip.year = Number(trip.year) || 0;
   trip.destination = trip.destination || "";
   trip.startDate = trip.startDate || "";
   trip.endDate = trip.endDate || "";
-  if (!Array.isArray(trip.travelers)) trip.travelers = [];
+  trip.travelers = Array.isArray(trip.travelers) ? trip.travelers.map((t) => String(t ?? "")) : [];
   trip.cover = trip.cover || "";
 }
 
@@ -1653,6 +1729,13 @@ function uid(prefix) {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
+/* Ids end up in HTML attributes and as lookup keys, so restrict them to a safe
+   charset at the trust boundary rather than at every render site. The transform is
+   deterministic so cross-references (item.tripId → trip.id) still line up. */
+function safeId(id) {
+  return String(id ?? "").replace(/[^A-Za-z0-9_-]/g, "_");
+}
+
 function normalizeExpense(exp) {
   const amount = Math.max(0, Number(exp.amount) || 0);
   let amountPaid = Math.min(amount, Math.max(0, Number(exp.amountPaid) || 0));
@@ -1675,7 +1758,7 @@ function normalizeExpense(exp) {
   if (amountPaid === 0) paidDate = "";
 
   return {
-    id: exp.id,
+    id: safeId(exp.id),
     label: exp.label || "",
     category: normalizeCategory(exp.category),
     amount,
@@ -1700,12 +1783,12 @@ function normalizeState(data) {
   if (!Array.isArray(data.checklist)) data.checklist = [];
   data.checklist = data.checklist
     .filter((c) => c && c.id && c.text)
-    .map((c) => ({ id: String(c.id), text: String(c.text), done: !!c.done }));
+    .map((c) => ({ id: safeId(c.id), text: String(c.text), done: !!c.done }));
   if (!Array.isArray(data.documents)) data.documents = [];
   data.documents = data.documents
     .filter((d) => d && d.id && d.name && typeof d.dataUrl === "string" && /^data:(application\/pdf|image\/[a-zA-Z0-9.+-]+);/.test(d.dataUrl))
     .map((d) => ({
-      id: d.id,
+      id: safeId(d.id),
       name: String(d.name),
       type: String(d.type || ""),
       size: Number(d.size) || 0,
@@ -1755,8 +1838,24 @@ function loadState() {
   return normalizeState(structuredClone(SEED_DATA));
 }
 
+/* Warn once per session — a full quota fires on every keystroke otherwise. */
+let saveFailureWarned = false;
+
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    saveFailureWarned = false;
+  } catch (err) {
+    console.error("saveState failed", err);
+    if (!saveFailureWarned) {
+      saveFailureWarned = true;
+      const quota = err?.name === "QuotaExceededError" || err?.name === "NS_ERROR_DOM_QUOTA_REACHED";
+      alert(quota
+        ? "This device's storage is full, so your latest change wasn't saved locally. Remove some attached documents (Bookings → Documents) and try again."
+        : "Your latest change couldn't be saved on this device. If you're in a private browsing window, storage may be blocked.");
+    }
+  }
+  // Still notify the cloud — a shared room can persist the change even when local storage can't.
   window.VacationShare?.notifyLocalChange?.();
 }
 
@@ -2063,10 +2162,13 @@ function handleRollSubmit(e) {
 
 function todayISO() { return new Date().toISOString().slice(0, 10); }
 
+/* Safe in attribute values as well as element content — quotes must be escaped
+   or `attr="${escapeHtml(x)}"` can be broken out of with a `"` in the data.
+   (Shared-trip payloads are attacker-controlled if a share link ever leaks.) */
+const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
 function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
+  return String(str ?? "").replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
 }
 
 function renderYearFilter() {
@@ -3029,6 +3131,10 @@ let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let bookingsFilter = "all"; // all | flight | hotel | other
 let leafletMap = null;
+let mapResizeObserver = null;
+let mapApplyView = null;      // re-applies the intended zoom/centre after a canvas resize
+let mapApplyingView = false;  // true while mapApplyView runs, so it isn't mistaken for user input
+let mapUserMoved = false;     // the user panned/zoomed — stop re-applying the default view
 
 /* Trip meta now lives on the trip itself (persisted since v2). */
 function getMeta(trip) { return trip || {}; }
@@ -3175,7 +3281,7 @@ function renderTripsScreen() {
           ${range ? `<span class="hero__dates">${ICONS.calendar} ${range}</span>` : `<span class="hero__dates">${trip.year}</span>`}
           <button type="button" class="pill" data-edit-trip="${trip.id}">Edit</button>
         </div>
-        <div class="hero__travellers">${travellers}<span style="font-weight:600">${(meta.travelers || []).join(", ")}</span></div>
+        <div class="hero__travellers">${travellers}<span style="font-weight:600">${escapeHtml((meta.travelers || []).join(", "))}</span></div>
       </div>`;
     hero.querySelector("[data-edit-trip]")?.addEventListener("click", () => openTripDialog(trip));
   } else {
@@ -3278,7 +3384,7 @@ function renderItinerary() {
 
   body.innerHTML = `
     <div class="section-head">
-      <div><h2>${nameWithCity(trip)}</h2><p>${fmtDateRange(trip)} · ${(trip.travelers || []).join(", ")}</p></div>
+      <div><h2>${nameWithCity(trip)}</h2><p>${fmtDateRange(trip)} · ${escapeHtml((trip.travelers || []).join(", "))}</p></div>
     </div>
     <div class="switcher switcher--sub" role="tablist" aria-label="Itinerary view">
       <button type="button" role="tab" class="${itinerarySubTab === "timeline" ? "is-active" : ""}" data-subtab="timeline">Timeline</button>
@@ -3539,6 +3645,15 @@ function gmapsLink(item, trip) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
+/* Marks a view change as ours, so the dragstart/zoomstart it emits isn't counted
+   as the user taking over the map. */
+function withViewGuard(fn) {
+  return () => {
+    mapApplyingView = true;
+    try { fn(); } finally { mapApplyingView = false; }
+  };
+}
+
 function renderMapsTab(trip) {
   const view = $("itinerary-view");
   const days = eachDay(trip);
@@ -3619,7 +3734,9 @@ function renderMapsTab(trip) {
   view.innerHTML = `
     <div class="daychips">${chips}</div>
     <div class="map-layout">
-      ${hasLeaflet ? `<div id="map-canvas" class="map-canvas"></div>` : `<div class="empty-card"><h3>Map unavailable</h3><p>Couldn't load the map library — use the Google Maps links instead.</p></div>`}
+      ${hasLeaflet
+        ? `<div id="map-canvas" class="map-canvas"></div>`
+        : `<div class="empty-card"><h3>Map unavailable</h3><p>Couldn't load the map library — check your connection, or use the Google Maps links below.</p><button type="button" class="btn btn--small" id="btn-map-retry">Retry</button></div>`}
       <div class="map-list ${window.innerWidth <= 900 ? "map-list--collapsed" : ""}" id="map-list">
         <h3 class="map-list__title">${escapeHtml((trip.destination || trip.name).split(",")[0])}</h3>
         ${listHtml}
@@ -3631,7 +3748,6 @@ function renderMapsTab(trip) {
   mapList.querySelector(".map-list__title")?.addEventListener("click", () => {
     if (window.innerWidth > 900) return;
     mapList.classList.toggle("map-list--collapsed");
-    setTimeout(() => leafletMap?.invalidateSize(), 60);
   });
 
   view.querySelectorAll("[data-day]").forEach((b) =>
@@ -3649,20 +3765,38 @@ function renderMapsTab(trip) {
     })
   );
 
-  if (!hasLeaflet) return;
+  if (!hasLeaflet) {
+    $("btn-map-retry")?.addEventListener("click", () => renderItinerary());
+    return;
+  }
 
   const located = entries.filter((e) => e.item.location.lat !== null);
   leafletMap = L.map("map-canvas", { scrollWheelZoom: false });
-  // Keep tiles correct through viewport/orientation changes
-  window.addEventListener("resize", () => leafletMap?.invalidateSize(), { passive: true, once: true });
-  setTimeout(() => leafletMap?.invalidateSize(), 120);
+  const canvas = $("map-canvas");
+  /* The canvas is often still 0×0 on the first pass (the mobile sheet, or simply
+     pre-layout), and a zoom fitted at that size comes out useless. Re-apply the
+     intended view whenever the canvas resizes, so tiles AND zoom stay correct
+     through sheet expand, rotation, and the mobile keyboard. */
+  mapResizeObserver?.disconnect();
+  mapResizeObserver = new ResizeObserver(() => {
+    if (!leafletMap) return;
+    leafletMap.invalidateSize();
+    // Don't yank the view back once the user has panned or zoomed themselves.
+    if (!mapUserMoved) mapApplyView?.();
+  });
+  mapResizeObserver.observe(canvas);
+  mapUserMoved = false;
+  leafletMap.on("dragstart zoomstart", () => { if (!mapApplyingView) mapUserMoved = true; });
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(leafletMap);
 
   if (located.length === 0 && hotelPins.size === 0) {
-    leafletMap.setView([48.8566, 2.3522], 4);
+    mapApplyView = withViewGuard(() => leafletMap.setView([48.8566, 2.3522], 4));
+    mapApplyView();
+    canvas.insertAdjacentHTML("afterbegin",
+      `<div class="map-hint">No locations pinned yet — tap <strong>Locate</strong> on a reservation to place it on the map.</div>`);
     return;
   }
 
@@ -3685,8 +3819,10 @@ function renderMapsTab(trip) {
       .addTo(leafletMap)
       .bindPopup(`<strong>${escapeHtml(e.item.title)}</strong><br>${escapeHtml(e.item.location.name)}${e.item.startTime ? "<br>" + escapeHtml(fmtTimeRange(e.item)) : ""}`);
   });
-  if (bounds.length === 1) leafletMap.setView(bounds[0], 14);
-  else leafletMap.fitBounds(bounds, { padding: [30, 30] });
+  mapApplyView = withViewGuard(bounds.length === 1
+    ? () => leafletMap.setView(bounds[0], 14)
+    : () => leafletMap.fitBounds(bounds, { padding: [30, 30] }));
+  mapApplyView();
 }
 
 /* ---------- BOOKINGS & DOCUMENTS screen ---------- */
@@ -3881,7 +4017,7 @@ function sharedListRowsHtml() {
     (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete note" title="Delete">${TRASH_ICON}</button></li>`
   );
   const docRows = state.documents.map(
-    (d) => `<li><span class="shared-list__doc">${ICONS.doc}</span><label style="flex:1">${escapeHtml(d.name)} <span style="color:var(--muted);font-size:0.78rem">${Math.max(1, Math.round(d.size / 1024))} KB</span></label><a class="btn btn--small btn--ghost" href="${d.dataUrl}" download="${escapeHtml(d.name)}">Download</a><button type="button" class="icon-btn icon-btn--small" data-doc-del="${escapeHtml(d.id)}" aria-label="Delete document" title="Delete">${TRASH_ICON}</button></li>`
+    (d) => `<li><span class="shared-list__doc">${ICONS.doc}</span><label style="flex:1">${escapeHtml(d.name)} <span style="color:var(--muted);font-size:0.78rem">${Math.max(1, Math.round(d.size / 1024))} KB</span></label><a class="btn btn--small btn--ghost" href="${escapeHtml(d.dataUrl)}" download="${escapeHtml(d.name)}">Download</a><button type="button" class="icon-btn icon-btn--small" data-doc-del="${escapeHtml(d.id)}" aria-label="Delete document" title="Delete">${TRASH_ICON}</button></li>`
   );
   const rows = [...noteRows, ...docRows];
   return rows.length ? rows.join("") : `<li class="empty-state">Nothing yet — add a note or attach a document below.</li>`;
@@ -3934,7 +4070,7 @@ function documentListHtml() {
       <li>
         <span>${ICONS.doc}</span>
         <label style="flex:1">${escapeHtml(d.name)} <span style="color:var(--muted);font-size:0.78rem">${Math.max(1, Math.round(d.size / 1024))} KB</span></label>
-        <a class="btn btn--small btn--ghost" href="${d.dataUrl}" download="${escapeHtml(d.name)}">Download</a>
+        <a class="btn btn--small btn--ghost" href="${escapeHtml(d.dataUrl)}" download="${escapeHtml(d.name)}">Download</a>
         <button type="button" class="icon-btn icon-btn--small" data-doc-del="${escapeHtml(d.id)}" aria-label="Delete document" title="Delete">
           <svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -4192,6 +4328,8 @@ function showToast(text, action) {
   if (!t) return;
   toastAction = action || "view";
   $("toast-text").textContent = text;
+  // An error toast has nothing to act on — only the dismiss button applies.
+  $("toast-view").hidden = toastAction === "error";
   $("toast-view").textContent = toastAction === "sync" ? "Sync" : "View";
   t.hidden = false;
   clearTimeout(toastTimer);
@@ -4201,6 +4339,11 @@ function showToast(text, action) {
 /* share.js signals "updates available" (notify-first — nothing applied yet) */
 function showUpdateToast(by) {
   showToast(`${by} made changes — tap Sync to see`, "sync");
+}
+
+/* share.js reports a sync failure the status pill alone doesn't make obvious */
+function showSyncErrorToast(text) {
+  showToast(text, "error");
 }
 
 function openChangesDialog() {
@@ -4231,18 +4374,45 @@ window.VacationApp = {
   ensureDeviceName,
   onRemoteChanges,
   showUpdateToast,
+  showSyncErrorToast,
 };
 
 /* ============================================================
    INIT
    ============================================================ */
-document.querySelectorAll("[data-app-version]").forEach((el) => { el.textContent = `TravelHub ${APP_VERSION}`; });
-setupDialogCloseHandlers();
-bindEvents();
-buildNav();
-bindShellEvents();
-render();   // budget engine (also calls renderActiveShellScreen)
-router();   // set initial screen from hash
+/* Boot after DOMContentLoaded so deferred libraries (Leaflet, Supabase) are already
+   defined — this script is inline and would otherwise run before them. */
+function boot() {
+  document.querySelectorAll("[data-app-version]").forEach((el) => { el.textContent = `TravelHub ${APP_VERSION}`; });
+  setupDialogCloseHandlers();
+  bindEvents();
+  buildNav();
+  bindShellEvents();
+  render();   // budget engine (also calls renderActiveShellScreen)
+  router();   // set initial screen from hash
+}
+
+/* Let the plane finish its flight before dismissing, so a fast boot doesn't turn
+   the splash into a flicker — then remove it so it can never eat a tap. */
+const SPLASH_MIN_MS = 1700;
+const splashStart = Date.now();
+
+function hideSplash() {
+  const el = $("splash");
+  if (!el) return;
+  const wait = Math.max(0, SPLASH_MIN_MS - (Date.now() - splashStart));
+  setTimeout(() => {
+    el.classList.add("is-hiding");
+    setTimeout(() => el.remove(), 500);
+  }, wait);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => { boot(); hideSplash(); });
+} else {
+  boot();
+  hideSplash();
+}
     </script>
   </body>
 </html>

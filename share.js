@@ -78,6 +78,19 @@
     return url.toString();
   }
 
+  /* The room id + secret are a capability token. Once they're persisted locally we
+     drop them from the address bar, so no tile/geocode request leaks them in a
+     Referer header and they stay out of the visible URL. The share link itself is
+     still available via Copy link. (They can't live in the fragment — the app uses
+     hash routing.) */
+  function stripCredentialsFromUrl() {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("room") && !url.searchParams.has("key")) return;
+    url.searchParams.delete("room");
+    url.searchParams.delete("key");
+    window.history.replaceState({}, "", url);
+  }
+
   function applyRemote(payload) {
     applyingRemote = true;
     try {
@@ -91,9 +104,35 @@
   let retryCount = 0;
   let retryTimer = null;
 
+  /* Saves overwrite the whole document, so pushing on top of someone else's newer
+     save would silently discard their work. Check first and hand the decision to
+     the user. This narrows the window but can't close it — two devices can still
+     pass the check at the same instant. */
+  async function remoteIsAhead() {
+    try {
+      const { data, error } = await supabase.rpc("fetch_shared_budget", {
+        p_id: roomId,
+        p_secret: roomSecret,
+      });
+      if (error || !data?.payload) return false;
+      const remoteAt = data.updated_at || "";
+      if (!lastRemoteUpdatedAt || remoteAt <= lastRemoteUpdatedAt) return false;
+      pendingRemoteInfo = { by: data.payload.lastEditedBy || "Someone", at: data.payload.lastEditedAt || remoteAt };
+      return true;
+    } catch {
+      return false; // can't tell — let the save attempt proceed and report its own error
+    }
+  }
+
   async function saveRemote() {
     if (!sharedMode || !supabase) return;
     clearTimeout(retryTimer);
+    if (await remoteIsAhead()) {
+      updateSyncDot(true);
+      setSyncStatus(`${pendingRemoteInfo.by} saved changes — tap Sync before saving`, "pending");
+      window.VacationApp.showUpdateToast?.(pendingRemoteInfo.by);
+      return; // pendingSave stays true; the user's edits are kept locally
+    }
     saveInFlight = true;
     setSyncStatus("Saving…", "busy");
     let failed = false;
@@ -125,6 +164,8 @@
       retryTimer = setTimeout(() => saveRemote().catch(console.error), delay);
     } else {
       setSyncStatus("Save failed — check your connection, edits kept locally", "error");
+      // The pill is easy to miss; make a give-up visible.
+      window.VacationApp.showSyncErrorToast?.("Couldn't save to the cloud — your edits are kept on this device.");
     }
   }
 
@@ -287,10 +328,7 @@
       rememberRoom(roomId, roomSecret);
       lastRemoteUpdatedAt = new Date().toISOString();
       lastSyncAt = Date.now();
-      const url = new URL(window.location.href);
-      url.searchParams.set("room", roomId);
-      url.searchParams.set("key", roomSecret);
-      window.history.replaceState({}, "", url);
+      stripCredentialsFromUrl();
       startUpdateChecks();
       markSavedChrome();
       setSyncStatus("Saved", "ok");
@@ -383,11 +421,8 @@
       roomSecret = key;
       sharedMode = true;
       rememberRoom(room, key);
-      // Keep the URL carrying the link so Copy/refresh stay consistent.
-      const url = new URL(window.location.href);
-      url.searchParams.set("room", room);
-      url.searchParams.set("key", key);
-      window.history.replaceState({}, "", url);
+      // A plain reload reconnects from the remembered room, so the URL needn't carry the secret.
+      stripCredentialsFromUrl();
       lastRemoteUpdatedAt = data.updated_at || null;
       lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || "" };
       applyRemote(data.payload); // initial load: no diff — everything would be "new"
