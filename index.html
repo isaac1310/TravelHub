@@ -482,8 +482,11 @@ h1, h2, h3, h4, .brand__name {
 .checklist li svg { width: 18px; height: 18px; color: var(--brand-hover); }
 .checklist label { flex: 1; cursor: pointer; }
 .checklist .done { text-decoration: line-through; color: var(--muted); }
-.checklist__add { display: flex; gap: 0.5rem; align-items: center; }
-.checklist__add input[type="text"] { flex: 1; }
+.checklist__add { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+/* min-width:0 overrides the flex default of min-width:auto — without it the input
+   refuses to shrink below its intrinsic width and pushes the Add button off-screen
+   on narrow viewports. flex-wrap then handles the case where it's still too tight. */
+.checklist__add input[type="text"] { flex: 1 1 11rem; min-width: 0; }
 .shared-list__doc { display: inline-flex; width: 20px; color: var(--muted); }
 .shared-list__doc svg { width: 20px; height: 20px; }
 
@@ -989,6 +992,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .members::-webkit-scrollbar { display: none; }
         .members .member { flex: none; border-radius: 999px; padding: 0.45rem 0.9rem 0.45rem 0.5rem; display: flex; align-items: center; gap: 0.5rem; }
         .members .member .member__trips { display: none; }
+
+        /* Note input takes its own row so Attach and Add stay side by side */
+        .checklist__add input[type="text"] { flex: 1 1 100%; }
 
         /* Map: taller canvas + stops list styled as a sheet */
         /* align-items must be stretch here: the desktop rule's `start` would size the
