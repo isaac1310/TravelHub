@@ -102,16 +102,19 @@ h1, h2, h3, h4, .brand__name {
   align-items: center;
   gap: 0.45rem;
   line-height: 1.1;
-  min-height: 40px;
+  min-height: 44px;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease,
     transform 0.05s ease, box-shadow 0.15s ease;
 }
 .btn:focus-visible { outline: none; box-shadow: var(--ring); }
 .btn:active { transform: translateY(1px); }
 
-.btn--primary { background: var(--brand); color: #fff; }
-.btn--primary:hover { background: var(--brand-hover); }
-.btn--primary:active { background: var(--brand-active); }
+/* Near-black primary, coral demoted to accent — the core of the 2a direction.
+   `--brand` itself is untouched: it still drives pins, progress fills, the route
+   dots, act icons and focus rings, which is where the warmth belongs. */
+.btn--primary { background: #2c2a28; color: #fff; }
+.btn--primary:hover { background: #413d3a; }
+.btn--primary:active { background: #1f1d1c; }
 
 .btn--secondary { background: var(--peach); color: #6b4a3a; }
 .btn--secondary:hover { background: var(--peach-hover); }
@@ -129,13 +132,13 @@ h1, h2, h3, h4, .brand__name {
 .btn--danger { background: transparent; color: var(--danger); }
 .btn--danger:hover { background: var(--danger-bg); }
 
-.btn--small { padding: 0.32rem 0.7rem; font-size: 0.8rem; min-height: 34px; }
+.btn--small { padding: 0.32rem 0.7rem; font-size: 0.8rem; min-height: 44px; }
 
 .btn:disabled,
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .icon-btn {
-  width: 42px; height: 42px;
+  width: 44px; height: 44px;
   border-radius: var(--radius-pill);
   border: none;
   display: inline-flex; align-items: center; justify-content: center;
@@ -420,13 +423,25 @@ h1, h2, h3, h4, .brand__name {
 .route__link { flex: 1 1 24px; height: 2px; min-width: 20px; background: repeating-linear-gradient(90deg, var(--brand-hover) 0 5px, transparent 5px 10px); opacity: 0.6; }
 
 .day { display: grid; grid-template-columns: 92px 1fr; gap: 1rem; margin-bottom: 1rem; }
+/* The date rail is the fold control — a real button, so it's focusable and
+   announced. It was a plain div until v1.9.1. */
 .day__date {
   text-align: center; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 0.6rem 0.4rem; box-shadow: var(--shadow); align-self: start;
+  font: inherit; color: inherit; cursor: pointer; width: 100%; display: block;
 }
-.day__date .dow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-hover); font-weight: 700; }
-.day__date .dnum { font-family: "Poppins", sans-serif; font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
-.day__date .mon { font-size: 0.74rem; color: var(--muted); }
+.day__date:hover { border-color: var(--brand); }
+.day__date .dow { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-hover); font-weight: 700; }
+.day__date .dnum { display: block; font-family: "Poppins", sans-serif; font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+.day__date .mon { display: block; font-size: 0.74rem; color: var(--muted); }
+/* A folded day keeps its date and says what's inside, so you know what you're opening. */
+.day--collapsed .day__date .dnum { font-size: 1.2rem; }
+.day__summary {
+  align-self: start; min-height: 44px; width: 100%; text-align: start;
+  background: none; border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  padding: 0.6rem 0.9rem; color: var(--muted); font: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.day__summary:hover { border-color: var(--brand); color: var(--ink, #3b2b26); }
 .day__items { display: flex; flex-direction: column; gap: 0.55rem; }
 .act {
   display: flex; align-items: center; gap: 0.75rem;
@@ -438,8 +453,24 @@ h1, h2, h3, h4, .brand__name {
 .act__icon--hotel { background: #f0e6fb; color: #7c4fc4; }
 .act__icon--flight { background: #dcf1f4; color: #2f8a9b; }
 .act__body { min-width: 0; }
-.act__title { font-weight: 600; font-size: 0.92rem; }
-.act__sub { color: var(--muted); font-size: 0.8rem; }
+/* Both were inline spans, so a title and its subtitle ran together as one
+   paragraph and wrapped mid-phrase ("Stop 1 Place" / "1"). Pre-existing; the
+   number badges made it obvious. */
+.act__title { display: block; font-weight: 600; font-size: 0.92rem; }
+.act__sub { display: block; color: var(--muted); font-size: 0.8rem; }
+/* The map pin number, shown on the timeline card so "stop 3" means the same
+   reservation in both tabs. Sits on the type icon rather than taking its own
+   column, so it costs no width in an already dense row. */
+.act__icon { position: relative; }
+.act__stopno {
+  position: absolute; inset-block-start: -5px; inset-inline-end: -5px;
+  min-width: 17px; height: 17px; padding: 0 3px; box-sizing: border-box;
+  border-radius: 999px; background: #3b2b26; color: #fff;
+  font-size: 0.62rem; font-weight: 700; line-height: 17px; text-align: center;
+  border: 1.5px solid var(--card, #fff);
+  direction: ltr; font-variant-numeric: tabular-nums;
+}
+
 /* ---- Bidirectional text -------------------------------------------------
    The trip data is bilingual. `unicode-bidi: plaintext` makes each element pick
    its own direction from its first strong character, so a Hebrew trip name reads
@@ -810,6 +841,15 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       }
       .mapstop__pin--nogeo { background: #b9aca4; }
       .mapstop__body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+/* Locate and Maps as 44px icons rather than text pills — a stop row already
+   carries a pin, a title and a subtitle, and two 44px pills push it to wrap
+   at 375px. Same touch target, a third of the width. */
+.icon-btn--stop {
+  flex: none; width: 44px; height: 44px; background: transparent; color: var(--muted);
+  text-decoration: none;
+}
+.icon-btn--stop:hover { background: var(--cream); color: var(--brand-hover); }
+.icon-btn--stop svg { width: 19px; height: 19px; }
       .map-pin {
         display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 5px; box-sizing: border-box;
         border-radius: 50% 50% 50% 4px;
@@ -1191,7 +1231,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
               <h2 id="funds-heading" class="panel__heading">Fund additions &amp; budget rolls</h2>
               <ul id="fund-history" class="history-list"></ul>
               <p id="fund-history-empty" class="empty-state" hidden>
-                No fund additions or budget rolls yet.
+                No money added yet — use “Add funds” to record what’s in the pot.
               </p>
             </section>
           </section>
@@ -1611,7 +1651,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.9.0";
+const APP_VERSION = "v1.9.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -2602,7 +2642,7 @@ function renderTripCard(trip) {
   const pct = budget > 0 ? Math.min(100, (committed / budget) * 100) : committed > 0 ? 100 : 0;
   const expensesHtml =
     trip.expenses.length === 0
-      ? `<li class="empty-state">No expenses yet.</li>`
+      ? `<li class="empty-state">Nothing booked yet — add an expense to start tracking this budget.</li>`
       : trip.expenses.map((e) => renderExpenseItem(trip, e)).join("");
 
   return `
@@ -2900,7 +2940,9 @@ function openItemDialog(tripId, item = null, defaults = {}) {
   $("item-dialog-title").textContent = item ? "Edit reservation" : "Add reservation";
   // Disclosure: open on desktop or when editing an item that uses those fields
   const more = $("item-more");
-  if (more) more.open = window.innerWidth > 900 || !!(item && (item.confirmation || item.notes));
+  // Open when adding (notes are usually the point), on desktop, or when editing
+  // an item that already has them. Only a bare edit on mobile stays folded.
+  if (more) more.open = window.innerWidth > 900 || !item || !!(item.confirmation || item.notes);
 
   if (item) {
     form.type.value = item.type;
@@ -3476,6 +3518,17 @@ let itineraryTripId = null;
 let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let bookingsFilter = "all"; // all | flight | hotel | other
+/* ISO dates whose timeline day is folded shut. Deliberately NOT in `state`:
+   saveState() calls notifyLocalChange(), so a collapse would sync to everyone
+   else's device as an edit. Per-device, per-session, and reset when the trip
+   changes so one trip's dates can't leak into another. */
+let collapsedDays = new Set();
+
+/* Switching trips clears the folds — the ISO keys belong to the old trip's dates. */
+function setItineraryTrip(id) {
+  if (itineraryTripId !== id) collapsedDays = new Set();
+  itineraryTripId = id;
+}
 let leafletMap = null;
 let mapResizeObserver = null;
 let mapApplyView = null;      // re-applies the intended zoom/centre after a canvas resize
@@ -3714,7 +3767,7 @@ function renderItinerary() {
   }
 
   if (!itineraryTripId || !tripsWithDates.some((t) => t.id === itineraryTripId)) {
-    itineraryTripId = tripsWithDates[0].id;
+    setItineraryTrip(tripsWithDates[0].id);
   }
 
   sw.innerHTML = tripsWithDates
@@ -3723,7 +3776,7 @@ function renderItinerary() {
     )
     .join("");
   sw.querySelectorAll("[data-trip]").forEach((b) =>
-    b.addEventListener("click", () => { itineraryTripId = b.getAttribute("data-trip"); renderItinerary(); })
+    b.addEventListener("click", () => { setItineraryTrip(b.getAttribute("data-trip")); renderItinerary(); })
   );
 
   const trip = state.trips.find((t) => t.id === itineraryTripId);
@@ -3764,6 +3817,28 @@ function dayEntryKey(e) {
 }
 
 /* Items shown on a given day: dated on it, or a hotel checkout entry */
+/* Which entries earn a map pin, and what number each gets within its day.
+   Both tabs call this so a "3" on the timeline is the same reservation as pin 3
+   on the map — previously the map numbered them alone and the timeline showed
+   nothing to connect the two.
+
+   Deliberately ignores mapDayFilter: numbering restarts per day, so it must not
+   depend on which day is currently in view. */
+function isMappable(e) {
+  return !e.checkout && e.item.type !== "flight" && e.item.type !== "hotel" && e.item.location.name;
+}
+
+function stopNumbers(trip, iso) {
+  const numbers = new Map();
+  let n = 0;
+  for (const e of itemsForDay(trip, iso)) {
+    if (!isMappable(e)) continue;
+    n += 1;
+    numbers.set(e.item.id, String(n));
+  }
+  return numbers;
+}
+
 function itemsForDay(trip, iso) {
   const out = [];
   for (const item of tripItems(trip)) {
@@ -3789,7 +3864,10 @@ function fmtTimeRange(item) {
   return item.endTime ? `${item.startTime}–${item.endTime}` : item.startTime;
 }
 
-function itemCard({ item, checkout }) {
+/* `stopNo` is the map pin number for this reservation, or undefined for the ones
+   that never appear on the map: flights, hotel check-in and check-out, and
+   anything without a location. */
+function itemCard({ item, checkout }, stopNo) {
   const title = checkout ? `Check-out · ${item.title}` : itemCardTitle(item);
   /* Airport pairs, flight numbers and confirmation codes are latin strings with
      separators. Inside a Hebrew line the bidi algorithm reorders those separators
@@ -3807,7 +3885,9 @@ function itemCard({ item, checkout }) {
 
   return `
     <div class="act">
-      <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}</span>
+      <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}${
+        stopNo ? `<span class="act__stopno" aria-label="Map stop ${stopNo}">${stopNo}</span>` : ""
+      }</span>
       <span class="act__body">
         <span class="act__title">${escapeHtml(title)}</span>
         <span class="act__sub">${subParts.join(" · ")}</span>
@@ -3859,18 +3939,29 @@ function renderTimelineTab(trip) {
   const dayHtml = days
     .map((d) => {
       const iso = isoOf(d);
-      const entries = itemsForDay(trip, iso).map(itemCard);
+      const numbers = stopNumbers(trip, iso); // same numbers the map pins use
+      const entries = itemsForDay(trip, iso).map((e) => itemCard(e, numbers.get(e.item.id)));
       entries.push(
         `<button type="button" class="act act--add" data-add-item="${iso}">${ICONS.explore}<span class="act__body"><span class="act__title">Add reservation</span></span></button>`
       );
+      /* The date rail becomes the fold control. It was a plain <div> — not
+         focusable, not announced — so making it a button fixes that too. */
+      const collapsed = collapsedDays.has(iso);
+      const count = itemsForDay(trip, iso).length;
       return `
-        <div class="day" id="day-${iso}">
-          <div class="day__date">
-            <div class="dow">${fmtDow(d)}</div>
-            <div class="dnum">${d.getDate()}</div>
-            <div class="mon">${d.toLocaleDateString("en-GB", { month: "short" })}</div>
-          </div>
-          <div class="day__items">${entries.join("")}</div>
+        <div class="day ${collapsed ? "day--collapsed" : ""}" id="day-${iso}">
+          <button type="button" class="day__date" data-day-toggle="${iso}"
+                  aria-expanded="${collapsed ? "false" : "true"}"
+                  aria-label="${collapsed ? "Expand" : "Collapse"} ${escapeHtml(fmtDow(d))} ${d.getDate()}">
+            <span class="dow">${fmtDow(d)}</span>
+            <span class="dnum">${d.getDate()}</span>
+            <span class="mon">${d.toLocaleDateString("en-GB", { month: "short" })}</span>
+          </button>
+          ${collapsed
+            ? `<button type="button" class="day__summary" data-day-toggle="${iso}">${
+                count ? `${count} reservation${count === 1 ? "" : "s"}` : "Nothing planned"
+              }</button>`
+            : `<div class="day__items">${entries.join("")}</div>`}
         </div>`;
     })
     .join("");
@@ -3888,11 +3979,26 @@ function renderTimelineTab(trip) {
   view.innerHTML = `${strip}${route}${dayHtml}${fab}`;
   bindItemActions(view, trip);
 
+  view.querySelectorAll("[data-day-toggle]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const iso = btn.getAttribute("data-day-toggle");
+      if (collapsedDays.has(iso)) collapsedDays.delete(iso); else collapsedDays.add(iso);
+      renderItinerary(); // the Set is applied in the template, not toggled on the node
+      document.getElementById(`day-${iso}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    })
+  );
+
   view.querySelectorAll("[data-strip-day]").forEach((chip) =>
     chip.addEventListener("click", () => {
-      view.querySelectorAll("[data-strip-day]").forEach((c) => c.classList.remove("is-active"));
-      chip.classList.add("is-active");
-      document.getElementById(`day-${chip.getAttribute("data-strip-day")}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const iso = chip.getAttribute("data-strip-day");
+      // Jumping to a folded day should open it — otherwise you scroll to a sliver.
+      if (collapsedDays.has(iso)) {
+        collapsedDays.delete(iso);
+        renderItinerary();
+      }
+      document.querySelectorAll("[data-strip-day]").forEach((c) => c.classList.remove("is-active"));
+      document.querySelector(`[data-strip-day="${iso}"]`)?.classList.add("is-active");
+      document.getElementById(`day-${iso}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     })
   );
   view.querySelector("[data-fab-add]")?.addEventListener("click", () => {
@@ -4049,9 +4155,9 @@ function renderMapsTab(trip) {
   let sidebar = "";
 
   for (const iso of isoFilter) {
-    const stops = itemsForDay(trip, iso)
-      .filter((e) => !e.checkout && e.item.type !== "flight" && e.item.type !== "hotel" && e.item.location.name);
+    const stops = itemsForDay(trip, iso).filter(isMappable);
     if (!stops.length) continue;
+    const numbers = stopNumbers(trip, iso); // same source the timeline reads
 
     const d = parseISO(iso);
     const hotel = tripHotelForDay(trip, iso);
@@ -4069,20 +4175,18 @@ function renderMapsTab(trip) {
             <span class="act__title">${escapeHtml(hotel.title)}</span>
             <span class="act__sub">Start of the day${hotelGeo ? "" : " · no location yet"}</span>
           </span>
-          ${hotelGeo ? "" : `<button type="button" class="btn btn--small btn--ghost" data-locate-item="${hotel.id}">Locate</button>`}
-          <a class="btn btn--small btn--ghost" href="${gmapsLink(hotel, trip)}" target="_blank" rel="noopener">Maps ↗</a>
+          ${hotelGeo ? "" : `<button type="button" class="icon-btn icon-btn--stop" data-locate-item="${hotel.id}" aria-label="Find this place on the map" title="Locate"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg></button>`}
+          <a class="icon-btn icon-btn--stop" href="${gmapsLink(hotel, trip)}" target="_blank" rel="noopener" aria-label="Open in Google Maps" title="Open in Google Maps"><svg viewBox="0 0 24 24" fill="none"><path d="M14 5h5v5M19 5l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></a>
         </div>`;
       if (hotelGeo) prevLoc = hotel.location;
     }
 
-    let stopNo = 0; // restarts each day
     for (const e of stops) {
-      stopNo += 1;
       /* Stash the label on the entry so the marker loop can read it directly.
          It used to recompute via entries.indexOf(e) — identity-based, O(n²), and
          it indexed the unfiltered list while iterating the filtered one, so list
          and map agreed only by accident. */
-      e.label = String(stopNo);
+      e.label = numbers.get(e.item.id);
       entries.push(e);
       const geo = e.item.location.lat !== null;
       const leg = prevLoc && geo ? legLabel(prevLoc, e.item.location) : "";
@@ -4095,8 +4199,8 @@ function renderMapsTab(trip) {
             <span class="act__title">${escapeHtml(e.item.title)}</span>
             <span class="act__sub">${escapeHtml(e.item.location.name)}${when ? " · " + escapeHtml(when) : ""}</span>
           </span>
-          ${geo ? "" : `<button type="button" class="btn btn--small btn--ghost" data-locate-item="${e.item.id}">Locate</button>`}
-          <a class="btn btn--small btn--ghost" href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener">Maps ↗</a>
+          ${geo ? "" : `<button type="button" class="icon-btn icon-btn--stop" data-locate-item="${e.item.id}" aria-label="Find this place on the map" title="Locate"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg></button>`}
+          <a class="icon-btn icon-btn--stop" href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener" aria-label="Open in Google Maps" title="Open in Google Maps"><svg viewBox="0 0 24 24" fill="none"><path d="M14 5h5v5M19 5l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></a>
         </div>`;
       if (geo) prevLoc = e.item.location;
     }
@@ -4434,7 +4538,7 @@ function docsUsageLabel() {
 
 function documentListHtml() {
   if (!state.documents.length) {
-    return `<p class="empty-state">No documents uploaded yet.</p>`;
+    return `<p class="empty-state">No documents yet — attach a ticket or confirmation below.</p>`;
   }
   return `<ul class="checklist">${state.documents
     .map(
@@ -4782,7 +4886,7 @@ function openChangesDialog() {
           return `<div class="change-line"><strong>${escapeHtml(c.by)}</strong> ${escapeHtml(c.text)}${time ? ` <span style="color:var(--muted);font-size:0.78rem">· ${escapeHtml(time)}</span>` : ""}</div>`;
         })
         .join("")
-    : `<p class="empty-state">No recent changes from the family.</p>`;
+    : `<p class="empty-state">Nothing new since your last sync.</p>`;
   openDialog($("dialog-changes"));
 }
 

@@ -42,7 +42,9 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 |---|---|
 | Switch trip | switcher tabs, `data-trip` |
 | Timeline ↔ Maps | `data-subtab` |
-| Jump to a day | date strip, `data-strip-day` → `scrollIntoView` |
+| Jump to a day | date strip, `data-strip-day` → un-collapses if folded, then `scrollIntoView` |
+| **Fold / unfold a day** | `data-day-toggle` on the date rail — *added v1.9.1*. Per-device, never synced |
+| **Stop numbers** | Timeline cards show the map pin number (`.act__stopno`) for reservations that appear on the map — *added v1.9.1* |
 | **Edit the trip** | `data-edit-trip` in the section head — *added v1.9.0* |
 | Add a reservation | per-day add button (pre-fills that day) |
 | Edit a reservation | `data-edit-item`, and ⋯ → Edit |

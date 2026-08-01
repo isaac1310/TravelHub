@@ -102,6 +102,7 @@
       threeWayMerge();
       baselineLifecycle();
       polishV19();
+      polishV191();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -694,6 +695,140 @@
       // Scope to the itinerary screen — the Trips hero has its own edit button.
       const container = document.getElementById("itinerary-view")?.parentElement;
       return truthy(container?.querySelector("[data-edit-trip]"), "edit-trip button on the itinerary screen");
+    });
+  }
+
+  /* ===== 1b6. v1.9.1 — shared numbering, folds, touch ===== */
+
+  function polishV191() {
+    group("v1.9.1");
+
+    const datedTrip = () => state.trips.find((t) => t.startDate && t.endDate);
+
+    check("the timeline badge is the same number as the map pin", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      const isos = eachDay(trip).map(isoOf);
+      for (const iso of isos) {
+        const numbers = stopNumbers(trip, iso);
+        if (!numbers.size) continue;
+        // Rebuild the map side for this day and compare against the shared source.
+        const mapped = itemsForDay(trip, iso).filter(isMappable).map((e) => numbers.get(e.item.id));
+        const expected = mapped.map((_, i) => String(i + 1));
+        if (mapped.join(",") !== expected.join(",")) {
+          return `${iso}: numbering is ${mapped.join(",")}, expected ${expected.join(",")}`;
+        }
+      }
+      return true;
+    });
+
+    check("only mappable reservations are numbered", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      for (const iso of eachDay(trip).map(isoOf)) {
+        const numbers = stopNumbers(trip, iso);
+        for (const e of itemsForDay(trip, iso)) {
+          const numbered = numbers.has(e.item.id);
+          if (numbered !== Boolean(isMappable(e))) {
+            return `${e.item.type}${e.checkout ? " (checkout)" : ""} numbered=${numbered}`;
+          }
+        }
+      }
+      return true;
+    });
+
+    check("numbering ignores the day filter", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = eachDay(trip).map(isoOf)[0];
+      const before = [...stopNumbers(trip, iso).entries()].join("|");
+      const prev = mapDayFilter;
+      mapDayFilter = iso;
+      const during = [...stopNumbers(trip, iso).entries()].join("|");
+      mapDayFilter = prev;
+      return eq(during, before, "numbers changed with the filter");
+    });
+
+    /* The fold is per-device UI state. If it ever reached `state`, saveState()
+       would call notifyLocalChange() and push it to the whole family. */
+    check("collapsing a day never touches the synced payload", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      const iso = eachDay(trip).map(isoOf)[0];
+      const before = JSON.stringify(window.VacationApp.getPayload());
+      collapsedDays.add(iso);
+      renderItinerary();
+      const after = JSON.stringify(window.VacationApp.getPayload());
+      collapsedDays.delete(iso);
+      renderItinerary();
+      return eq(after, before, "payload changed when a day was collapsed");
+    });
+
+    check("a collapsed day hides its items but keeps its date", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      const iso = eachDay(trip).map(isoOf)[0];
+      collapsedDays.add(iso);
+      renderItinerary();
+      const el = document.getElementById(`day-${iso}`);
+      const hasItems = !!el?.querySelector(".day__items");
+      const toggle = el?.querySelector("[data-day-toggle]");
+      const expanded = toggle?.getAttribute("aria-expanded");
+      collapsedDays.delete(iso);
+      renderItinerary();
+      if (hasItems) return "items still rendered while collapsed";
+      if (!toggle) return "no toggle button on the day";
+      return eq(expanded, "false", "aria-expanded while collapsed");
+    });
+
+    check("the day toggle is a real button, focusable and labelled", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      renderItinerary();
+      const toggle = document.querySelector("[data-day-toggle]");
+      if (!toggle) return "no day toggle rendered";
+      if (toggle.tagName !== "BUTTON") return `toggle is a <${toggle.tagName.toLowerCase()}>, not a button`;
+      return truthy(toggle.getAttribute("aria-label"), "aria-label");
+    });
+
+    check("notes are open when adding, folded on a bare mobile edit", () => {
+      const more = document.getElementById("item-more");
+      if (!more) return "disclosure not found";
+      const trip = datedTrip();
+      if (!trip) return true;
+      openItemDialog(trip.id, null);           // add
+      const onAdd = more.open;
+      closeDialog(document.getElementById("dialog-item"));
+      const bare = state.items.find((i) => !i.confirmation && !i.notes);
+      let onEdit = null;
+      if (bare) {
+        openItemDialog(trip.id, bare);
+        onEdit = more.open;
+        closeDialog(document.getElementById("dialog-item"));
+      }
+      if (!onAdd) return "notes folded when adding";
+      // On desktop the disclosure is open regardless; only assert the mobile rule.
+      if (bare && window.innerWidth <= 900 && onEdit) return "notes open on a bare edit at mobile width";
+      return true;
+    });
+
+    check("interactive controls meet the 44px touch target", () => {
+      const probe = document.createElement("div");
+      probe.innerHTML = '<button class="btn">a</button><button class="btn btn--small">b</button><button class="icon-btn">c</button>';
+      document.body.appendChild(probe);
+      const sizes = [...probe.children].map((el) => {
+        const cs = getComputedStyle(el);
+        return { cls: el.className, h: parseFloat(cs.minHeight) || parseFloat(cs.height) };
+      });
+      probe.remove();
+      const small = sizes.filter((s) => s.h < 44);
+      return small.length ? small.map((s) => `${s.cls}=${s.h}px`).join(", ") : true;
     });
   }
 
