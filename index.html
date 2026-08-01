@@ -458,16 +458,14 @@ h1, h2, h3, h4, .brand__name {
    number badges made it obvious. */
 .act__title { display: block; font-weight: 600; font-size: 0.92rem; }
 .act__sub { display: block; color: var(--muted); font-size: 0.8rem; }
-/* The map pin number, shown on the timeline card so "stop 3" means the same
-   reservation in both tabs. Sits on the type icon rather than taking its own
-   column, so it costs no width in an already dense row. */
-.act__icon { position: relative; }
+/* The map pin number, sitting just before the text so it reads as a label for
+   the row rather than a decoration on the icon. Shaped like the map pin
+   (.map-pin / .mapstop__pin) so the connection between the two is obvious. */
 .act__stopno {
-  position: absolute; inset-block-start: -5px; inset-inline-end: -5px;
-  min-width: 17px; height: 17px; padding: 0 3px; box-sizing: border-box;
-  border-radius: 999px; background: #3b2b26; color: #fff;
-  font-size: 0.62rem; font-weight: 700; line-height: 17px; text-align: center;
-  border: 1.5px solid var(--card, #fff);
+  flex: none; align-self: center;
+  min-width: 22px; height: 22px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 50% 50% 50% 4px; background: #3b2b26; color: #fff;
+  font-size: 0.72rem; font-weight: 700; line-height: 22px; text-align: center;
   direction: ltr; font-variant-numeric: tabular-nums;
 }
 
@@ -1030,6 +1028,27 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           background: var(--brand); color: #fff; box-shadow: 0 8px 22px rgba(221, 109, 93, 0.45);
         }
         .fab svg { width: 26px; height: 26px; }
+
+        /* Phones: the date rail becomes a full-width header above the day.
+           As a 66px side column it took ~77px off every card — at 375px that
+           left the title about 69px to wrap in. The sticky strip above already
+           handles jumping between days, so the rail only needs to be the fold
+           control, and it reads better as a header anyway. */
+        .day { display: block; }
+        .day__date {
+          display: flex; align-items: baseline; gap: 0.45rem;
+          width: 100%; text-align: start; padding: 0.5rem 0.8rem; margin-bottom: 0.5rem;
+        }
+        .day__date .dow { font-size: 0.68rem; }
+        .day__date .dnum { font-size: 1.05rem; }
+        .day__date .mon { font-size: 0.72rem; }
+        .day--collapsed .day__date .dnum { font-size: 1.05rem; }
+        .day__date::after {
+          content: "⌃"; margin-inline-start: auto; color: var(--muted);
+          font-size: 0.8rem; line-height: 1; transform: translateY(2px);
+        }
+        .day--collapsed .day__date::after { transform: translateY(-2px) rotate(180deg); }
+        .day__summary { margin-bottom: 0.5rem; }
 
         /* Sticky day strip */
         .daystrip {
@@ -1651,7 +1670,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.9.1";
+const APP_VERSION = "v1.9.2";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -3885,9 +3904,8 @@ function itemCard({ item, checkout }, stopNo) {
 
   return `
     <div class="act">
-      <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}${
-        stopNo ? `<span class="act__stopno" aria-label="Map stop ${stopNo}">${stopNo}</span>` : ""
-      }</span>
+      <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}</span>
+      ${stopNo ? `<span class="act__stopno" aria-label="Map stop ${stopNo}">${stopNo}</span>` : ""}
       <span class="act__body">
         <span class="act__title">${escapeHtml(title)}</span>
         <span class="act__sub">${subParts.join(" · ")}</span>
