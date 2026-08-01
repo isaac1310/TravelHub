@@ -101,6 +101,7 @@
       joinMerge();
       threeWayMerge();
       baselineLifecycle();
+      polishV19();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -603,6 +604,96 @@
       const bytes = JSON.stringify(shaped).length;
       if (JSON.stringify(shaped).includes("AAAA")) return "document body leaked into the base";
       return bytes < 50000 ? true : `base is ${bytes} bytes, expected well under 50KB`;
+    });
+  }
+
+  /* ===== 1b5. v1.9.0 — pins, Maps links, bidi ===== */
+
+  function polishV19() {
+    group("v1.9.0");
+
+    check("gmapsLink uses coordinates when the stop is geocoded", () => {
+      const item = { title: "Hotel Ibis", location: { name: "Hotel Ibis", lat: 48.8629, lng: 2.3364 } };
+      const url = gmapsLink(item, { destination: "Paris, France" });
+      if (!url.includes("48.8629,2.3364")) return "did not use coordinates: " + url;
+      return url.includes("Ibis") ? "still searching by name: " + url : true;
+    });
+
+    check("gmapsLink falls back to a name search without coordinates", () => {
+      const item = { title: "Somewhere", location: { name: "Le Comptoir", lat: null, lng: null } };
+      const url = gmapsLink(item, { destination: "Paris" });
+      return url.includes("Le%20Comptoir") || url.includes("Le+Comptoir")
+        ? true : "name missing from fallback: " + url;
+    });
+
+    /* The bug this replaced: letters[idx % 26] gave stop 27 a second "A", on both
+       the map and the list, with nothing to tell them apart. */
+    check("stop numbers restart each day and never duplicate within one", () => {
+      const trip = state.trips.find((t) => t.startDate && t.endDate);
+      if (!trip) return true; // nothing dated to render
+      itineraryTripId = trip.id;
+      itinerarySubTab = "maps";
+      mapDayFilter = "all";
+      renderItinerary();
+      const byDay = new Map();
+      let currentDay = null;
+      document.querySelectorAll("#itinerary-view .map-day-head, #itinerary-view .mapstop__pin").forEach((el) => {
+        if (el.classList.contains("map-day-head")) { currentDay = el.textContent; byDay.set(currentDay, []); return; }
+        if (el.classList.contains("mapstop__pin--hotel")) return;
+        if (currentDay) byDay.get(currentDay).push(el.textContent.trim());
+      });
+      for (const [day, labels] of byDay) {
+        if (!labels.length) continue;
+        if (new Set(labels).size !== labels.length) return `duplicate stop number on ${day}: ${labels.join(",")}`;
+        if (labels[0] !== "1") return `${day} starts at ${labels[0]}, not 1`;
+        if (labels.some((l) => !/^\d+$/.test(l))) return `non-numeric label on ${day}: ${labels.join(",")}`;
+      }
+      return true;
+    });
+
+    check("map pins carry the same labels as the list rows", () => {
+      if (typeof L === "undefined") return true; // CDN blocked
+      const rows = [...document.querySelectorAll("#itinerary-view .mapstop__pin")]
+        .filter((el) => !el.classList.contains("mapstop__pin--hotel"))
+        .filter((el) => !el.classList.contains("mapstop__pin--nogeo"))
+        .map((el) => el.textContent.trim());
+      const pins = [...document.querySelectorAll(".map-pin")]
+        .filter((el) => !el.classList.contains("map-pin--hotel"))
+        .map((el) => el.textContent.trim());
+      if (!pins.length) return true; // nothing geocoded in the seed data
+      return eq(pins.join(","), rows.join(","), "pin labels vs row labels");
+    });
+
+    check("user text picks its own direction, times and codes stay LTR", () => {
+      const probe = document.createElement("div");
+      probe.innerHTML = '<span class="act__title">x</span><span class="act__time">08:30</span><span class="ltr">TO3450</span>';
+      document.body.appendChild(probe);
+      // Read the values out while the probe is still in the document — a detached
+      // element's computed style is empty, which silently fails every assertion.
+      const title = getComputedStyle(probe.querySelector(".act__title")).unicodeBidi;
+      const timeDir = getComputedStyle(probe.querySelector(".act__time")).direction;
+      const codeBidi = getComputedStyle(probe.querySelector(".ltr")).unicodeBidi;
+      probe.remove();
+      if (title !== "plaintext") return `.act__title unicode-bidi is "${title}", expected plaintext`;
+      if (timeDir !== "ltr") return `.act__time direction is "${timeDir}", expected ltr`;
+      if (!/isolate/.test(codeBidi)) return `.ltr unicode-bidi is "${codeBidi}", expected isolate`;
+      return true;
+    });
+
+    check("text inputs accept Hebrew with auto direction", () => {
+      const missing = [...document.querySelectorAll('input[type="text"], textarea')]
+        .filter((el) => el.getAttribute("dir") !== "auto");
+      return missing.length ? `${missing.length} input(s) without dir="auto"` : true;
+    });
+
+    check("the itinerary screen offers a trip edit", () => {
+      const trip = state.trips.find((t) => t.startDate && t.endDate);
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      renderItinerary();
+      // Scope to the itinerary screen — the Trips hero has its own edit button.
+      const container = document.getElementById("itinerary-view")?.parentElement;
+      return truthy(container?.querySelector("[data-edit-trip]"), "edit-trip button on the itinerary screen");
     });
   }
 

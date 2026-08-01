@@ -440,6 +440,25 @@ h1, h2, h3, h4, .brand__name {
 .act__body { min-width: 0; }
 .act__title { font-weight: 600; font-size: 0.92rem; }
 .act__sub { color: var(--muted); font-size: 0.8rem; }
+/* ---- Bidirectional text -------------------------------------------------
+   The trip data is bilingual. `unicode-bidi: plaintext` makes each element pick
+   its own direction from its first strong character, so a Hebrew trip name reads
+   right-to-left while an English one is untouched — and a mixed line like
+   "Tel Aviv תל אביב" stops scrambling. Doing it in CSS covers every render site
+   at once instead of threading dir="auto" through ~30 template literals. */
+.act__title, .act__sub, .mapstop__body, .expense-item__label, .who,
+.tripcard__body, .tripcard__row, .change-line,
+.checklist label, .section-head h2, .section-head p,
+h1, h2, h3, .hero h1, .hero p {
+  unicode-bidi: plaintext;
+}
+
+/* LTR islands. Times need only a direction; strings that mix latin with
+   punctuation or arrows ("TO3450 · TLV → CDG", "₪1,200") need isolation, or the
+   bidi algorithm reorders the separators around them inside a Hebrew line. */
+.act__time, .ltr { direction: ltr; unicode-bidi: isolate; }
+.money { direction: ltr; unicode-bidi: isolate; font-variant-numeric: tabular-nums; }
+
 .act__time { margin-left: auto; color: var(--muted); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
 .act--add { border-style: dashed; background: transparent; color: var(--muted); cursor: pointer; font: inherit; width: 100%; justify-content: flex-start; }
 .act--add:hover { border-color: var(--brand); color: var(--brand-hover); background: var(--cream-2); }
@@ -781,16 +800,22 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       .map-list { display: flex; flex-direction: column; gap: 0.6rem; }
       .map-list__title { margin: 0 0 0.2rem; font-size: 1.15rem; }
       .mapstop { display: flex; align-items: center; gap: 0.6rem; }
+      /* min-width rather than a fixed width: a two-digit stop number would clip
+         in a 28px box. Numbers are LTR even when the surrounding text is Hebrew. */
       .mapstop__pin {
-        flex: none; width: 28px; height: 28px; border-radius: 50% 50% 50% 4px; display: grid; place-items: center;
+        flex: none; min-width: 28px; height: 28px; padding: 0 5px; box-sizing: border-box;
+        border-radius: 50% 50% 50% 4px; display: grid; place-items: center;
         background: #3b2b26; color: #fff; font-size: 0.8rem; font-weight: 700;
+        direction: ltr; font-variant-numeric: tabular-nums;
       }
       .mapstop__pin--nogeo { background: #b9aca4; }
       .mapstop__body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
       .map-pin {
-        display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50% 50% 50% 4px;
+        display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 5px; box-sizing: border-box;
+        border-radius: 50% 50% 50% 4px;
         background: #3b2b26; color: #fff; font-weight: 700; font-size: 0.85rem;
         border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transform: rotate(0deg);
+        direction: ltr; font-variant-numeric: tabular-nums;
       }
       .map-day-head { font-weight: 700; font-size: 0.85rem; margin: 0.5rem 0 0.1rem; color: var(--ink, #3b2b26); }
       .map-day-head:first-child { margin-top: 0; }
@@ -1204,7 +1229,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <div id="whoami-options" class="whoami-options"></div>
         <label class="field">
           <span class="field__label">Or type a name</span>
-          <input type="text" name="name" maxlength="40" placeholder="e.g. Grandma" />
+          <input type="text" dir="auto" name="name" maxlength="40" placeholder="e.g. Grandma" />
         </label>
         <div class="dialog__actions">
           <button type="submit" class="btn btn--primary">That's me</button>
@@ -1275,7 +1300,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </p>
         <label class="field">
           <span class="field__label">Share link</span>
-          <input type="text" name="link" id="join-link" inputmode="url" autocomplete="off"
+          <input type="text" dir="auto" name="link" id="join-link" inputmode="url" autocomplete="off"
                  placeholder="https://…/?room=…&amp;key=…" />
         </label>
         <p class="dialog__hint" id="join-error" style="color:var(--danger,#c0392b)" hidden></p>
@@ -1301,6 +1326,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <button type="button" class="sheet-item" data-item-action="move-down">
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14m0 0-5-5m5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Move down
+        </button>
+        <button type="button" class="sheet-item" data-item-action="maps" hidden>
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg>
+          Open in Google Maps
         </button>
         <button type="button" class="sheet-item sheet-item--danger" data-item-action="delete">
           <svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1336,7 +1365,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </label>
         <label class="field">
           <span class="field__label">Note (optional)</span>
-          <input type="text" name="note" maxlength="200" />
+          <input type="text" dir="auto" name="note" maxlength="200" />
         </label>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
@@ -1351,7 +1380,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <input type="hidden" name="tripId" />
         <label class="field">
           <span class="field__label">Trip name</span>
-          <input type="text" name="name" required maxlength="80" />
+          <input type="text" dir="auto" name="name" required maxlength="80" />
         </label>
         <label class="field">
           <span class="field__label">Year</span>
@@ -1363,7 +1392,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </label>
         <label class="field">
           <span class="field__label">Destination (city, country)</span>
-          <input type="text" name="destination" maxlength="120" placeholder="e.g. London, UK" />
+          <input type="text" dir="auto" name="destination" maxlength="120" placeholder="e.g. London, UK" />
         </label>
         <div class="roll-years">
           <label class="field">
@@ -1377,7 +1406,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </div>
         <label class="field">
           <span class="field__label">Travelers (comma separated)</span>
-          <input type="text" name="travelers" maxlength="200" placeholder="e.g. Itzik, Moran" />
+          <input type="text" dir="auto" name="travelers" maxlength="200" placeholder="e.g. Itzik, Moran" />
         </label>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
@@ -1427,7 +1456,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </label>
         <label class="field">
           <span class="field__label">Note (optional)</span>
-          <input type="text" name="note" maxlength="200" />
+          <input type="text" dir="auto" name="note" maxlength="200" />
         </label>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
@@ -1443,7 +1472,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <input type="hidden" name="expenseId" />
         <label class="field">
           <span class="field__label">Description</span>
-          <input type="text" name="label" required maxlength="120" />
+          <input type="text" dir="auto" name="label" required maxlength="120" />
         </label>
         <label class="field">
           <span class="field__label">Category</span>
@@ -1507,27 +1536,27 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </select>
         <label class="field">
           <span class="field__label" id="item-title-label">Title</span>
-          <input type="text" name="title" required maxlength="120" />
+          <input type="text" dir="auto" name="title" required maxlength="120" />
         </label>
         <div data-item-group="flight" hidden>
           <div class="roll-years">
             <label class="field">
               <span class="field__label">Flight #</span>
-              <input type="text" name="flightNo" maxlength="20" placeholder="e.g. W6 7061" />
+              <input type="text" dir="auto" name="flightNo" maxlength="20" placeholder="e.g. W6 7061" />
             </label>
             <label class="field">
               <span class="field__label">Confirmation #</span>
-              <input type="text" name="confirmationF" maxlength="40" />
+              <input type="text" dir="auto" name="confirmationF" maxlength="40" />
             </label>
           </div>
           <div class="roll-years">
             <label class="field">
               <span class="field__label">Depart airport</span>
-              <input type="text" name="departAirport" maxlength="60" placeholder="e.g. TLV" />
+              <input type="text" dir="auto" name="departAirport" maxlength="60" placeholder="e.g. TLV" />
             </label>
             <label class="field">
               <span class="field__label">Arrival airport</span>
-              <input type="text" name="arrivalAirport" maxlength="60" placeholder="e.g. LTN" />
+              <input type="text" dir="auto" name="arrivalAirport" maxlength="60" placeholder="e.g. LTN" />
             </label>
           </div>
         </div>
@@ -1554,7 +1583,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <div data-item-group="notflight">
           <label class="field field--suggest">
             <span class="field__label">Location (place name or address)</span>
-            <input type="text" name="locationName" maxlength="160" placeholder="Start typing, e.g. London Eye" autocomplete="off" />
+            <input type="text" dir="auto" name="locationName" maxlength="160" placeholder="Start typing, e.g. London Eye" autocomplete="off" />
             <input type="hidden" name="locLat" />
             <input type="hidden" name="locLng" />
             <div class="loc-suggest" id="loc-suggest" hidden></div>
@@ -1564,11 +1593,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <summary>+ Confirmation &amp; notes</summary>
           <label class="field" data-item-group2="notflight">
             <span class="field__label">Confirmation #</span>
-            <input type="text" name="confirmation" maxlength="40" />
+            <input type="text" dir="auto" name="confirmation" maxlength="40" />
           </label>
           <label class="field">
             <span class="field__label">Notes (optional)</span>
-            <input type="text" name="notes" maxlength="300" />
+            <input type="text" dir="auto" name="notes" maxlength="300" />
           </label>
         </details>
         <div class="dialog__actions">
@@ -1582,7 +1611,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.8.1";
+const APP_VERSION = "v1.9.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -3702,12 +3731,17 @@ function renderItinerary() {
   body.innerHTML = `
     <div class="section-head">
       <div><h2>${nameWithCity(trip)}</h2><p>${fmtDateRange(trip)} · ${escapeHtml((trip.travelers || []).join(", "))}</p></div>
+      <button type="button" class="btn btn--small btn--ghost" data-edit-trip="${escapeHtml(trip.id)}">Edit trip</button>
     </div>
     <div class="switcher switcher--sub" role="tablist" aria-label="Itinerary view">
       <button type="button" role="tab" class="${itinerarySubTab === "timeline" ? "is-active" : ""}" data-subtab="timeline">Timeline</button>
       <button type="button" role="tab" class="${itinerarySubTab === "maps" ? "is-active" : ""}" data-subtab="maps">Maps</button>
     </div>
     <div id="itinerary-view"></div>`;
+
+  // Renaming a trip while planning it: the Trips card has an Edit button, this
+  // screen didn't, and this is where you're looking when the name is wrong.
+  body.querySelector("[data-edit-trip]")?.addEventListener("click", () => openTripDialog(trip));
 
   body.querySelectorAll("[data-subtab]").forEach((b) =>
     b.addEventListener("click", () => { itinerarySubTab = b.getAttribute("data-subtab"); renderItinerary(); })
@@ -3757,14 +3791,18 @@ function fmtTimeRange(item) {
 
 function itemCard({ item, checkout }) {
   const title = checkout ? `Check-out · ${item.title}` : itemCardTitle(item);
+  /* Airport pairs, flight numbers and confirmation codes are latin strings with
+     separators. Inside a Hebrew line the bidi algorithm reorders those separators
+     unless each atom is isolated, so they're wrapped rather than escaped inline. */
+  const ltr = (s) => `<span class="ltr">${escapeHtml(s)}</span>`;
   const subParts = [];
   if (item.type === "flight" && item.departAirport && item.arrivalAirport) {
-    subParts.push(`${item.departAirport} → ${item.arrivalAirport}`);
+    subParts.push(ltr(`${item.departAirport} → ${item.arrivalAirport}`));
   }
-  if (item.type === "flight" && item.flightNo) subParts.push(item.flightNo);
-  if (!checkout && item.location.name && item.type !== "flight") subParts.push(item.location.name);
-  if (item.confirmation) subParts.push(`Conf: ${item.confirmation}`);
-  if (item.notes) subParts.push(item.notes);
+  if (item.type === "flight" && item.flightNo) subParts.push(ltr(item.flightNo));
+  if (!checkout && item.location.name && item.type !== "flight") subParts.push(escapeHtml(item.location.name));
+  if (item.confirmation) subParts.push(`Conf: ${ltr(item.confirmation)}`);
+  if (item.notes) subParts.push(escapeHtml(item.notes));
   const time = checkout ? item.endTime || "" : fmtTimeRange(item);
 
   return `
@@ -3772,7 +3810,7 @@ function itemCard({ item, checkout }) {
       <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}</span>
       <span class="act__body">
         <span class="act__title">${escapeHtml(title)}</span>
-        <span class="act__sub">${escapeHtml(subParts.join(" · "))}</span>
+        <span class="act__sub">${subParts.join(" · ")}</span>
       </span>
       ${time ? `<span class="act__time">${escapeHtml(time)}</span>` : ""}
       ${checkout ? "" : `<button type="button" class="act__more" data-item-more="${item.id}" aria-label="Actions" title="Actions"><svg viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg></button>`}
@@ -3893,6 +3931,9 @@ function openItemActionsSheet(trip, itemId) {
   if (!item) return;
   const dlg = $("dialog-item-actions");
   $("item-actions-title").textContent = item.title;
+  // Only offer Maps for somewhere you could actually go.
+  const hasPlace = Boolean(item.location?.name || item.location?.lat != null);
+  dlg.querySelector('[data-item-action="maps"]').hidden = !hasPlace;
   dlg.querySelectorAll("[data-item-action]").forEach((b) => {
     b.onclick = () => {
       closeDialog(dlg);
@@ -3900,6 +3941,7 @@ function openItemActionsSheet(trip, itemId) {
       if (action === "edit") openItemDialog(trip.id, item);
       else if (action === "move-up") moveItemInDay(trip, itemId, -1);
       else if (action === "move-down") moveItemInDay(trip, itemId, 1);
+      else if (action === "maps") window.open(gmapsLink(item, trip), "_blank", "noopener");
       else if (action === "delete") deleteItem(itemId);
     };
   });
@@ -3957,8 +3999,15 @@ function tripHotelForDay(trip, iso) {
   return hotels.find((h) => h.date && h.date <= iso && (!h.endDate || iso <= h.endDate)) || hotels[0] || null;
 }
 
+/* Prefer coordinates when we have them. Searching by name sends Google looking for
+   "Hotel Ibis, Paris" and it can land on a different branch entirely; the pin we
+   already geocoded is the place the user actually meant. */
 function gmapsLink(item, trip) {
-  const q = `${item.location.name}, ${trip.destination || ""}`.replace(/,\s*$/, "");
+  const loc = item.location || {};
+  if (loc.lat != null && loc.lng != null) {
+    return `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`;
+  }
+  const q = `${loc.name || item.title || ""}, ${trip?.destination || ""}`.replace(/,\s*$/, "").replace(/^,\s*/, "");
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
@@ -3989,13 +4038,15 @@ function renderMapsTab(trip) {
 
   const isoFilter = mapDayFilter === "all" ? dayIsos : [mapDayFilter];
   const hasLeaflet = typeof L !== "undefined";
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-  // Per-day: the hotel is the default starting point; stops get global letters.
-  const entries = []; // all lettered stops (for pins), in sidebar order
+  /* Stops are numbered 1,2,3 within each day, so "stop 3" means the third thing
+     that day. The previous A,B,C wrapped at 26 (`letters[idx % 26]`), which a
+     10-day trip with three stops a day already exceeded — you got a second "A"
+     on both the map and the list with nothing to tell them apart. Per-day
+     numbering makes the wrap unreachable. */
+  const entries = []; // numbered stops (for pins), in sidebar order
   const hotelPins = new Map(); // hotel item id -> item (deduped for map pins)
   let sidebar = "";
-  let letterIdx = 0;
 
   for (const iso of isoFilter) {
     const stops = itemsForDay(trip, iso)
@@ -4019,21 +4070,27 @@ function renderMapsTab(trip) {
             <span class="act__sub">Start of the day${hotelGeo ? "" : " · no location yet"}</span>
           </span>
           ${hotelGeo ? "" : `<button type="button" class="btn btn--small btn--ghost" data-locate-item="${hotel.id}">Locate</button>`}
+          <a class="btn btn--small btn--ghost" href="${gmapsLink(hotel, trip)}" target="_blank" rel="noopener">Maps ↗</a>
         </div>`;
       if (hotelGeo) prevLoc = hotel.location;
     }
 
+    let stopNo = 0; // restarts each day
     for (const e of stops) {
+      stopNo += 1;
+      /* Stash the label on the entry so the marker loop can read it directly.
+         It used to recompute via entries.indexOf(e) — identity-based, O(n²), and
+         it indexed the unfiltered list while iterating the filtered one, so list
+         and map agreed only by accident. */
+      e.label = String(stopNo);
       entries.push(e);
-      const letter = letters[letterIdx % letters.length];
-      letterIdx += 1;
       const geo = e.item.location.lat !== null;
       const leg = prevLoc && geo ? legLabel(prevLoc, e.item.location) : "";
       if (leg) sidebar += `<div class="mapstop-leg">↓ ${escapeHtml(leg)}</div>`;
       const when = e.item.startTime || "";
       sidebar += `
         <div class="mapstop">
-          <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}">${letter}</span>
+          <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}">${e.label}</span>
           <span class="mapstop__body">
             <span class="act__title">${escapeHtml(e.item.title)}</span>
             <span class="act__sub">${escapeHtml(e.item.location.name)}${when ? " · " + escapeHtml(when) : ""}</span>
@@ -4124,17 +4181,15 @@ function renderMapsTab(trip) {
     const icon = L.divIcon({ className: "", html: `<span class="map-pin map-pin--hotel">${ICONS.hotel}</span>`, iconSize: [32, 32], iconAnchor: [16, 32] });
     L.marker([lat, lng], { icon })
       .addTo(leafletMap)
-      .bindPopup(`<strong>${escapeHtml(h.title)}</strong><br>Your hotel — start of the day`);
+      .bindPopup(`<strong>${escapeHtml(h.title)}</strong><br>Your hotel — start of the day<br><a href="${gmapsLink(h, trip)}" target="_blank" rel="noopener">Open in Google Maps ↗</a>`);
   });
   located.forEach((e) => {
-    const idx = entries.indexOf(e);
-    const letter = letters[idx % letters.length];
     const { lat, lng } = e.item.location;
     bounds.push([lat, lng]);
-    const icon = L.divIcon({ className: "", html: `<span class="map-pin">${letter}</span>`, iconSize: [30, 30], iconAnchor: [15, 30] });
+    const icon = L.divIcon({ className: "", html: `<span class="map-pin">${e.label}</span>`, iconSize: [30, 30], iconAnchor: [15, 30] });
     L.marker([lat, lng], { icon })
       .addTo(leafletMap)
-      .bindPopup(`<strong>${escapeHtml(e.item.title)}</strong><br>${escapeHtml(e.item.location.name)}${e.item.startTime ? "<br>" + escapeHtml(fmtTimeRange(e.item)) : ""}`);
+      .bindPopup(`<strong>${escapeHtml(e.item.title)}</strong><br>${escapeHtml(e.item.location.name)}${e.item.startTime ? "<br>" + escapeHtml(fmtTimeRange(e.item)) : ""}<br><a href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener">Open in Google Maps ↗</a>`);
   });
   mapApplyView = withViewGuard(bounds.length === 1
     ? () => leafletMap.setView(bounds[0], 14)
@@ -4275,7 +4330,7 @@ function renderFamily() {
     <div class="card" style="padding:1.1rem 1.3rem">
       <ul class="checklist" id="shared-list">${listRows}</ul>
       <div class="checklist__add">
-        <input type="text" id="checklist-input" placeholder="Add a note (e.g. Passports)" maxlength="80" />
+        <input type="text" dir="auto" id="checklist-input" placeholder="Add a note (e.g. Passports)" maxlength="80" />
         <label class="btn btn--outline" style="cursor:pointer;white-space:nowrap" title="Attach a document">
           📎 Attach
           <input type="file" id="family-doc-upload" accept="application/pdf,image/*" multiple hidden />
