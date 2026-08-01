@@ -331,8 +331,12 @@ h1, h2, h3, h4, .brand__name {
   margin-bottom: 1.6rem;
   isolation: isolate;
 }
+/* Kept as fallbacks; coverFor() now supplies the gradient inline per trip. */
 .hero--paris { background: linear-gradient(135deg, #f2a08f 0%, #ef8e7f 45%, #e07a86 100%); }
 .hero--bratislava { background: linear-gradient(135deg, #e8967f 0%, #d97e8a 50%, #9d7bb0 100%); }
+/* The generated motif sits behind the text and never intercepts a tap. */
+.cover__art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.hero > *:not(.cover__art), .tripcard__cover > *:not(.cover__art) { position: relative; z-index: 1; }
 .hero::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background:
@@ -565,6 +569,20 @@ h1, h2, h3, .hero h1, .hero p {
   border-radius: var(--radius); padding: 1.3rem; margin-bottom: 1.3rem; box-shadow: var(--shadow);
 }
 .panel__heading { margin: 0 0 1rem; font-size: 1.05rem; }
+
+/* The one number you came for, ahead of the breakdown. */
+.answer-card {
+  background: #2c2a28; color: #fff; border-radius: var(--radius-md, 16px);
+  padding: 1.1rem 1.2rem; margin-bottom: 0.9rem; display: flex; flex-direction: column; gap: 0.15rem;
+}
+.answer-card__label { font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.72; font-weight: 700; }
+.answer-card__value { font-family: "Poppins", sans-serif; font-size: 2.1rem; font-weight: 700; line-height: 1.05; }
+.answer-card--clear .answer-card__value { color: #9fe0bf; }
+.answer-card__sub { font-size: 0.82rem; opacity: 0.75; }
+.answer-card__bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,0.2); margin-top: 0.7rem; }
+.answer-card__bar > span { background: #6bb3a8; }
+.answer-card__bar > .answer-card__bar--due { background: var(--brand, #ef8e7f); }
+.answer-card__legend { font-size: 0.72rem; opacity: 0.65; margin-top: 0.35rem; }
 
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.9rem; }
 .stat { padding: 0.9rem 1rem; border-radius: var(--radius-sm); background: var(--cream-2); border: 1px solid var(--border); }
@@ -838,7 +856,35 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         direction: ltr; font-variant-numeric: tabular-nums;
       }
       .mapstop__pin--nogeo { background: #b9aca4; }
-      .mapstop__body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+      /* The selected day's stops as a swipeable row, so map and list are both usable
+   without scrolling between them. Same snap-scroll idiom as .daystrip. */
+.stopreel {
+  display: flex; gap: 0.5rem; overflow-x: auto; scrollbar-width: none;
+  scroll-snap-type: x proximity; padding: 0 0 0.6rem; margin-bottom: 0.2rem;
+}
+.stopreel::-webkit-scrollbar { display: none; }
+.stopreel__card {
+  flex: none; scroll-snap-align: start; width: 148px; min-height: 66px;
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+  gap: 0.1rem 0.5rem; align-items: center; text-align: start;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 0.5rem 0.6rem; cursor: pointer; font: inherit;
+}
+.stopreel__card:disabled { opacity: 0.55; cursor: default; }
+.stopreel__card.is-active { border-color: #3b2b26; box-shadow: 0 0 0 1px #3b2b26; }
+.stopreel__pin {
+  grid-row: 1 / span 2; min-width: 24px; height: 24px; padding: 0 5px; box-sizing: border-box;
+  border-radius: 50% 50% 50% 4px; background: #3b2b26; color: #fff;
+  font-size: 0.74rem; font-weight: 700; line-height: 24px; text-align: center;
+  direction: ltr; font-variant-numeric: tabular-nums;
+}
+.stopreel__title { font-weight: 600; font-size: 0.82rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stopreel__sub { color: var(--muted); font-size: 0.72rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dest-rows { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.4rem; }
+.dest-row { display: flex; gap: 0.4rem; align-items: center; }
+.dest-row input { flex: 1; min-width: 0; }
+.mapstop__body { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 /* Locate and Maps as 44px icons rather than text pills — a stop row already
    carries a pin, a title and a subtitle, and two 44px pills push it to wrap
    at 375px. Same touch target, a third of the width. */
@@ -1232,6 +1278,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 
             <section class="panel panel--global" aria-labelledby="global-heading">
               <h2 id="global-heading" class="panel__heading">Overview</h2>
+              <div id="global-answer"></div>
               <div id="global-stats" class="stats-grid"></div>
             </section>
 
@@ -1449,10 +1496,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label">Budget (₪)</span>
           <input type="number" name="budget" min="0" step="0.01" required />
         </label>
-        <label class="field">
-          <span class="field__label">Destination (city, country)</span>
-          <input type="text" dir="auto" name="destination" maxlength="120" placeholder="e.g. London, UK" />
-        </label>
+        <div class="field">
+          <span class="field__label">Destinations (city, country)</span>
+          <!-- One row per city. Rows rather than a delimiter because the comma
+               already separates city from country. -->
+          <div id="dest-rows" class="dest-rows"></div>
+          <button type="button" class="btn btn--small btn--ghost" id="dest-add">+ Add another destination</button>
+        </div>
         <div class="roll-years">
           <label class="field">
             <span class="field__label">Start date</span>
@@ -1670,7 +1720,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.9.2";
+const APP_VERSION = "v1.10.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -1830,7 +1880,21 @@ function normalizeTripMeta(trip) {
   trip.id = safeId(trip.id);
   trip.name = String(trip.name ?? "");
   trip.year = Number(trip.year) || 0;
-  trip.destination = trip.destination || "";
+  /* A trip can pass through several cities. `destinations` is the real list;
+     `destination` is kept as its first entry so the nine existing readers — the
+     trip title, geocoding bias, gmapsLink's fallback, the map list heading, the
+     sync diff — keep working untouched. A legacy string payload migrates to a
+     one-item list for free. */
+  let list = Array.isArray(trip.destinations)
+    ? trip.destinations.map((d) => String(d ?? "").trim()).filter(Boolean)
+    : [];
+  /* Fall back to the mirror whenever the list is empty. Order-independent on
+     purpose: migrateToV2 runs after this and writes `destination` straight onto
+     the trip, so keying off "is it an array" left migrated trips with a name and
+     an empty list. */
+  if (!list.length && trip.destination) list = [String(trip.destination).trim()];
+  trip.destinations = list.filter(Boolean);
+  trip.destination = trip.destinations[0] || "";
   trip.startDate = trip.startDate || "";
   trip.endDate = trip.endDate || "";
   trip.travelers = Array.isArray(trip.travelers) ? trip.travelers.map((t) => String(t ?? "")) : [];
@@ -2176,6 +2240,12 @@ function normalizeState(data) {
   data.lastEditedBy = typeof data.lastEditedBy === "string" ? data.lastEditedBy : "";
   data.lastEditedAt = typeof data.lastEditedAt === "string" ? data.lastEditedAt : "";
   if (!data.version || data.version < 2) migrateToV2(data);
+  /* migrateToV2 writes trip.destination straight from TRIP_META, after the trips
+     were normalized — so re-derive the list or a migrated trip renders with no
+     destination until the next save. */
+  data.trips.forEach((t) => {
+    if (!(t.destinations || []).length && t.destination) t.destinations = [String(t.destination).trim()];
+  });
   return data;
 }
 
@@ -2573,6 +2643,21 @@ function renderGlobal() {
 
   const yearNote = selectedYear === "all" ? "all trips" : `trips in ${selectedYear}`;
 
+  /* Lead with the one number you actually came for. It used to be the fifth of
+     seven equal tiles, which made you read the whole grid to find it. Removed
+     from the grid rather than repeated. */
+  $("global-answer").innerHTML = `
+    <div class="answer-card ${totalDue > 0 ? "" : "answer-card--clear"}">
+      <span class="answer-card__label">Still to pay · ${yearNote}</span>
+      <span class="answer-card__value money">${formatMoney(totalDue)}</span>
+      <span class="answer-card__sub">of ${formatMoney(totalBudget)} planned · ${formatMoney(state.currentFunds)} in the pot</span>
+      <span class="answer-card__bar" aria-hidden="true">
+        <span style="width:${totalBudget > 0 ? Math.min(100, (totalPaid / totalBudget) * 100) : 0}%"></span>
+        <span class="answer-card__bar--due" style="width:${totalBudget > 0 ? Math.min(100, (totalDue / totalBudget) * 100) : 0}%"></span>
+      </span>
+      <span class="answer-card__legend">${formatMoney(totalPaid)} paid · ${formatMoney(totalDue)} still to pay</span>
+    </div>`;
+
   $("global-stats").innerHTML = `
     <div class="stat">
       <span class="stat__label">Current funds</span>
@@ -2589,10 +2674,6 @@ function renderGlobal() {
     <div class="stat">
       <span class="stat__label">Paid (${yearNote})</span>
       <span class="stat__value">${formatMoney(totalPaid)}</span>
-    </div>
-    <div class="stat ${totalDue > 0 ? "stat--warn" : "stat--ok"}">
-      <span class="stat__label">Still to pay (${yearNote})</span>
-      <span class="stat__value">${formatMoney(totalDue)}</span>
     </div>
     <div class="stat ${vsBudget < 0 ? "stat--warn" : "stat--ok"}">
       <span class="stat__label">Funds vs budget</span>
@@ -2856,7 +2937,7 @@ function openTripDialog(trip = null) {
     form.name.value = trip.name;
     form.year.value = trip.year;
     form.budget.value = trip.budget;
-    form.destination.value = trip.destination || "";
+    renderDestRows(trip.destinations || []);
     form.startDate.value = trip.startDate || "";
     form.endDate.value = trip.endDate || "";
     form.travelers.value = (trip.travelers || []).join(", ");
@@ -2865,9 +2946,42 @@ function openTripDialog(trip = null) {
     form.tripId.value = "";
     form.year.value = selectedYear === "all" ? new Date().getFullYear() : Number(selectedYear);
     form.budget.value = "";
+    renderDestRows([]);
   }
 
   openDialog($("dialog-trip"));
+}
+
+/* One input per destination. Always renders at least one row so the field never
+   looks missing, and the remove button only appears once there's more than one. */
+function renderDestRows(values) {
+  const wrap = $("dest-rows");
+  const list = values.length ? values : [""];
+  wrap.innerHTML = list
+    .map(
+      (v, i) => `
+      <div class="dest-row">
+        <input type="text" dir="auto" class="dest-input" maxlength="120"
+               placeholder="${i === 0 ? "e.g. Paris, France" : "e.g. Lyon, France"}"
+               value="${escapeHtml(v)}" />
+        <button type="button" class="icon-btn icon-btn--stop" data-dest-remove="${i}"
+                aria-label="Remove this destination" title="Remove" ${list.length > 1 ? "" : "hidden"}>
+          <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+      </div>`
+    )
+    .join("");
+  wrap.querySelectorAll("[data-dest-remove]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const next = readDestRows();
+      next.splice(Number(b.getAttribute("data-dest-remove")), 1);
+      renderDestRows(next);
+    })
+  );
+}
+
+function readDestRows() {
+  return [...document.querySelectorAll("#dest-rows .dest-input")].map((i) => i.value.trim());
 }
 
 function openExpenseDialog(tripId, expense = null) {
@@ -3126,25 +3240,57 @@ async function geocodeItem(itemId) {
     return true;
   }
   const trip = state.trips.find((t) => t.id === item.tripId);
-  const city = (trip?.destination || "").split(",")[0].trim();
-  const q = city && !item.location.name.toLowerCase().includes(city.toLowerCase())
-    ? `${item.location.name} ${city}`
-    : item.location.name;
   try {
-    const res = await fetch(`https://photon.komoot.io/api/?limit=1&q=${encodeURIComponent(q)}`);
-    if (!res.ok) return false;
-    const data = await res.json();
-    const coords = data.features?.[0]?.geometry?.coordinates;
-    const lng = Number(coords?.[0]), lat = Number(coords?.[1]);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-    item.location.lng = lng;
-    item.location.lat = lat;
+    const hit = await geocodeBiasedToTrip(item.location.name, trip);
+    if (!hit) return false;
+    item.location.lng = hit.lng;
+    item.location.lat = hit.lat;
     saveState();
     if (currentScreenId() === "itinerary" && itinerarySubTab === "maps") renderItinerary();
     return true;
   } catch {
     return false;
   }
+}
+
+/* Cities to bias a lookup towards, in trip order. */
+function tripCities(trip) {
+  return (trip?.destinations || [])
+    .map((d) => String(d).split(",")[0].trim())
+    .filter(Boolean);
+}
+
+/* A multi-city trip can't bias every lookup to the first city — on a Paris→Lyon
+   trip that resolves a Lyon restaurant to a Paris one with the same name. So ask
+   Photon once per destination and keep the best-scoring hit. Single-city trips
+   make exactly one request, as before. */
+async function geocodeBiasedToTrip(name, trip) {
+  const cities = tripCities(trip);
+  const queries = cities.length
+    ? cities.map((c) => (name.toLowerCase().includes(c.toLowerCase()) ? name : `${name} ${c}`))
+    : [name];
+  const seen = new Set();
+  const unique = queries.filter((q) => !seen.has(q) && seen.add(q));
+
+  const results = await Promise.all(
+    unique.map(async (q) => {
+      try {
+        const res = await fetch(`https://photon.komoot.io/api/?limit=1&q=${encodeURIComponent(q)}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        const f = data.features?.[0];
+        const coords = f?.geometry?.coordinates;
+        const lng = Number(coords?.[0]), lat = Number(coords?.[1]);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+        // Photon has no score field; prefer a named, more specific result.
+        const rank = (f.properties?.name ? 2 : 0) + (f.properties?.street || f.properties?.housenumber ? 1 : 0);
+        return { lat, lng, rank };
+      } catch {
+        return null;
+      }
+    })
+  );
+  return results.filter(Boolean).sort((a, b) => b.rank - a.rank)[0] || null;
 }
 
 /* ---------- Location autocomplete (Photon) ---------- */
@@ -3160,7 +3306,11 @@ async function showLocSuggestions(query) {
   const el = $("loc-suggest");
   if (!el) return;
   const trip = state.trips.find((t) => t.id === $("form-item").tripId.value);
-  const city = (trip?.destination || "").split(",")[0].trim();
+  /* Bias to the city only when there's exactly one. On a multi-city trip,
+     picking one would hide the other's results — and photonLabel already names
+     each result's city, so an unbiased search lets you see which is which. */
+  const cities = tripCities(trip);
+  const city = cities.length === 1 ? cities[0] : "";
   const q = city && !query.toLowerCase().includes(city.toLowerCase()) ? `${query} ${city}` : query;
   try {
     locSuggestAbort?.abort();
@@ -3277,7 +3427,8 @@ function handleTripSubmit(e) {
 
   if (!name || budget < 0) return;
 
-  const destination = form.destination.value.trim();
+  const destinations = readDestRows().filter(Boolean);
+  const destination = destinations[0] || "";
   const startDate = form.startDate.value;
   const endDate = form.endDate.value;
   const travelers = form.travelers.value.split(",").map((s) => s.trim()).filter(Boolean);
@@ -3288,9 +3439,9 @@ function handleTripSubmit(e) {
 
   if (id) {
     const trip = state.trips.find((t) => t.id === id);
-    if (trip) Object.assign(trip, { name, year, budget, destination, startDate, endDate, travelers });
+    if (trip) Object.assign(trip, { name, year, budget, destination, destinations, startDate, endDate, travelers });
   } else {
-    const trip = { id: uid("trip"), name, year, budget, expenses: [], destination, startDate, endDate, travelers };
+    const trip = { id: uid("trip"), name, year, budget, expenses: [], destination, destinations, startDate, endDate, travelers };
     normalizeTripMeta(trip);
     state.trips.push(trip);
   }
@@ -3407,6 +3558,7 @@ function bindEvents() {
 
   $("form-funds").addEventListener("submit", handleFundsSubmit);
   $("form-trip").addEventListener("submit", handleTripSubmit);
+  $("dest-add").addEventListener("click", () => renderDestRows([...readDestRows(), ""]));
   $("form-expense").addEventListener("submit", handleExpenseSubmit);
   $("form-item").addEventListener("submit", handleItemSubmit);
   $("form-item").type.addEventListener("change", syncItemTypeFields);
@@ -3557,6 +3709,59 @@ let mapUserMoved = false;     // the user panned/zoomed — stop re-applying the
 /* Trip meta now lives on the trip itself (persisted since v2). */
 function getMeta(trip) { return trip || {}; }
 
+/* ---- Trip covers ---------------------------------------------------------
+   Generated from the destination, so there's no photo to store, no upload, no
+   network, and nothing added to the synced payload. Replaces a two-value
+   keyword (`paris` | `bratislava`) where every other destination silently fell
+   back to the Paris gradient — a Tokyo trip literally looked like Paris.
+
+   The motif is abstract on purpose. A keyword classifier mapping city names to
+   scenes would confidently give Tokyo mountains, and a wrong landmark is worse
+   than no landmark. Arcs and a horizon read as "somewhere" without claiming
+   to be anywhere. */
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return Math.abs(h);
+}
+
+/* Warm hues only, so a cover never clashes with the coral accent. */
+function coverFor(trip) {
+  const key = (getMeta(trip).destinations || [])[0] || getMeta(trip).destination || trip.name || "trip";
+  const h = hashString(key.toLowerCase());
+  /* Hue alone isn't enough separation: constrained to warm tones, two cities can
+     land 4 degrees apart and look identical. Saturation and lightness come from
+     different bits of the hash so neighbours still read as different places. */
+  const hue = 6 + (h % 50);                    // 6–56: coral through amber
+  /* Wrap the second hue back into the same warm band. Letting it run free sent
+     an amber cover into yellow-green, which fought the coral accent. */
+  const hue2 = 6 + ((hue - 6 + 14 + ((h >> 7) % 20)) % 50);
+  const sat = 48 + ((h >> 11) % 26);           // 48–74
+  /* Dark enough that the white hero title clears contrast on every cover. */
+  const light = 44 + ((h >> 17) % 12);         // 44–56
+  const seed = h % 1000;
+  return {
+    css: `linear-gradient(135deg, hsl(${hue} ${sat}% ${light}%) 0%, hsl(${hue} ${sat - 4}% ${light - 6}%) 45%, hsl(${hue2} ${sat - 10}% ${light - 12}%) 100%)`,
+    seed,
+    key,
+  };
+}
+
+/* One inline SVG, scaled by its container — the same art works at a 200px hero
+   and a 96px card without a second asset. */
+function coverArt(seed) {
+  const a = 12 + (seed % 22);       // arc offset
+  const b = 30 + ((seed >> 3) % 26); // horizon height
+  const c = 8 + ((seed >> 5) % 30);  // dot position
+  return `
+    <svg class="cover__art" viewBox="0 0 200 100" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 ${b + 22} Q 50 ${b - a} 100 ${b + 6} T 200 ${b + 14}" fill="none" stroke="rgba(255,255,255,.30)" stroke-width="1.4"/>
+      <path d="M0 ${b + 40} Q 60 ${b + 10} 120 ${b + 30} T 200 ${b + 26}" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1.2"/>
+      <circle cx="${150 + (seed % 30)}" cy="${18 + (seed % 12)}" r="${7 + (seed % 6)}" fill="rgba(255,255,255,.16)"/>
+      <circle cx="${c}" cy="${72 + (seed % 10)}" r="2.5" fill="rgba(255,255,255,.28)"/>
+    </svg>`;
+}
+
 function cityOf(trip) { return (getMeta(trip).destination || "").split(",")[0].trim(); }
 function nameWithCity(trip) {
   const c = cityOf(trip);
@@ -3685,13 +3890,13 @@ function renderTripsScreen() {
   const hero = $("trips-hero");
   if (trip) {
     const meta = getMeta(trip);
-    const cover = meta.cover === "bratislava" ? "bratislava" : "paris";
     const range = fmtDateRange(meta);
     const travellers = (meta.travelers || [])
       .map((n) => avatar(n)).join("");
     const daysUntil = trip.startDate ? Math.ceil((parseISO(trip.startDate) - new Date()) / 86400000) : null;
     hero.innerHTML = `
-      <div class="hero hero--${cover}">
+      <div class="hero" style="background:${coverFor(trip).css}">
+        ${coverArt(coverFor(trip).seed)}
         <span class="hero__plane">${ICONS.plane}</span>
         <div class="hero__kicker">Next trip${daysUntil > 0 ? ` · in ${daysUntil} days` : ""}</div>
         <h2 class="hero__title">${nameWithCity(trip)}</h2>
@@ -3742,19 +3947,23 @@ function renderTripOverviewCard(trip) {
   const budget = Number(trip.budget);
   const pct = budget > 0 ? Math.min(100, (committed / budget) * 100) : 0;
   const over = committed > budget;
-  const cover = meta.cover === "bratislava" ? "bratislava" : "paris";
   const range = fmtDateRange(meta);
   const nights = nightsBetween(meta);
   const travellers = (meta.travelers || []).map((n) => avatar(n)).join("");
 
   return `
     <article class="tripcard">
-      <div class="tripcard__cover hero--${cover}">
+      <div class="tripcard__cover" style="background:${coverFor(trip).css}">
+        ${coverArt(coverFor(trip).seed)}
         <span class="tag">${trip.year}</span>
         <h3>${escapeHtml(trip.name)}</h3>
       </div>
       <div class="tripcard__body">
-        <div class="tripcard__row">${ICONS.trips}<span>${escapeHtml(meta.destination || "Destination to be set")}</span></div>
+        <div class="tripcard__row">${ICONS.trips}<span>${
+          (meta.destinations || []).length
+            ? escapeHtml(meta.destinations.join(" · ")) // "·" not "," — comma means city/country
+            : "Destination to be set"
+        }</span></div>
         <div class="tripcard__row">${ICONS.calendar}<span>${range ? `${range} · ${nights} night${nights === 1 ? "" : "s"}` : "Add dates in Budget"}</span></div>
         ${travellers ? `<div class="avatar-stack">${travellers}</div>` : ""}
         <div class="mini-progress"><div class="mini-progress__bar ${over ? "mini-progress__bar--over" : ""}" style="width:${pct}%"></div></div>
@@ -3943,15 +4152,15 @@ function renderTimelineTab(trip) {
   const view = $("itinerary-view");
   const days = eachDay(trip);
   const originCity = "Home";
-  const destCity = (trip.destination || trip.name).split(",")[0];
-
+  /* Home → each destination in order → Home. Was a fixed three-stop template,
+     so a Paris→Lyon trip could only ever show Paris. */
+  const destCities = (trip.destinations || []).length
+    ? trip.destinations.map((d) => d.split(",")[0].trim()).filter(Boolean)
+    : [(trip.destination || trip.name).split(",")[0]];
+  const stop = (label) => `<span class="route__stop"><span class="dot"></span>${escapeHtml(label)}</span>`;
   const route = `
     <div class="route" aria-label="Trip route">
-      <span class="route__stop"><span class="dot"></span>${escapeHtml(originCity)}</span>
-      <span class="route__link"></span>
-      <span class="route__stop"><span class="dot"></span>${escapeHtml(destCity)}</span>
-      <span class="route__link"></span>
-      <span class="route__stop"><span class="dot"></span>${escapeHtml(originCity)}</span>
+      ${[originCity, ...destCities, originCity].map(stop).join('<span class="route__link"></span>')}
     </div>`;
 
   const dayHtml = days
@@ -4227,8 +4436,34 @@ function renderMapsTab(trip) {
   const listHtml = sidebar ||
     `<p class="empty-state">No located reservations ${mapDayFilter === "all" ? "yet" : "on this day"}. Add a location to a reservation to see it here.</p>`;
 
+  /* A day's stops as a swipeable row under the map, so you can flick through
+     them without scrolling the map out of view. Only for a single day — with
+     "All" there's no one day to show, and the grouped list below already covers
+     it (and keeps the travel legs, which sit *between* rows). */
+  let carousel = "";
+  if (mapDayFilter !== "all") {
+    const dayStops = itemsForDay(trip, mapDayFilter).filter(isMappable);
+    const nums = stopNumbers(trip, mapDayFilter);
+    if (dayStops.length) {
+      carousel = `
+        <div class="stopreel" role="list" aria-label="Stops on this day">
+          ${dayStops
+            .map((e) => {
+              const geo = e.item.location.lat !== null;
+              return `<button type="button" role="listitem" class="stopreel__card" data-focus-stop="${escapeHtml(e.item.id)}" ${geo ? "" : "disabled"}>
+                <span class="stopreel__pin">${nums.get(e.item.id) || ""}</span>
+                <span class="stopreel__title">${escapeHtml(e.item.title)}</span>
+                <span class="stopreel__sub">${escapeHtml(e.item.startTime || e.item.location.name || "")}</span>
+              </button>`;
+            })
+            .join("")}
+        </div>`;
+    }
+  }
+
   view.innerHTML = `
     <div class="daychips">${chips}</div>
+    ${carousel}
     <div class="map-layout">
       ${hasLeaflet
         ? `<div id="map-canvas" class="map-canvas"></div>`
@@ -4267,6 +4502,7 @@ function renderMapsTab(trip) {
   }
 
   const located = entries.filter((e) => e.item.location.lat !== null);
+  const stopMarkers = new Map(); // item id -> Leaflet marker, for carousel focus
   leafletMap = L.map("map-canvas", { scrollWheelZoom: false });
   const canvas = $("map-canvas");
   /* The canvas is often still 0×0 on the first pass (the mobile sheet, or simply
@@ -4309,10 +4545,29 @@ function renderMapsTab(trip) {
     const { lat, lng } = e.item.location;
     bounds.push([lat, lng]);
     const icon = L.divIcon({ className: "", html: `<span class="map-pin">${e.label}</span>`, iconSize: [30, 30], iconAnchor: [15, 30] });
-    L.marker([lat, lng], { icon })
+    // Keep the marker so a carousel tap can focus it; they used to be discarded.
+    stopMarkers.set(e.item.id, L.marker([lat, lng], { icon })
       .addTo(leafletMap)
-      .bindPopup(`<strong>${escapeHtml(e.item.title)}</strong><br>${escapeHtml(e.item.location.name)}${e.item.startTime ? "<br>" + escapeHtml(fmtTimeRange(e.item)) : ""}<br><a href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener">Open in Google Maps ↗</a>`);
+      .bindPopup(`<strong>${escapeHtml(e.item.title)}</strong><br>${escapeHtml(e.item.location.name)}${e.item.startTime ? "<br>" + escapeHtml(fmtTimeRange(e.item)) : ""}<br><a href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener">Open in Google Maps ↗</a>`));
   });
+
+  /* Tapping a carousel card centres that pin and opens it. Counts as user
+     intent, so mapUserMoved is set — otherwise the resize auto-fit would
+     immediately drag the view back to the whole day. */
+  view.querySelectorAll("[data-focus-stop]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const marker = stopMarkers.get(btn.getAttribute("data-focus-stop"));
+      if (!marker) return;
+      mapUserMoved = true;
+      /* Not animated: openPopup's auto-pan interrupts an in-flight zoom, which
+         left the map at the old zoom and a half-panned centre. Instant is also
+         the better feel for a tap-to-focus. */
+      leafletMap.setView(marker.getLatLng(), Math.max(leafletMap.getZoom(), 15), { animate: false });
+      marker.openPopup();
+      view.querySelectorAll("[data-focus-stop]").forEach((b) => b.classList.remove("is-active"));
+      btn.classList.add("is-active");
+    })
+  );
   mapApplyView = withViewGuard(bounds.length === 1
     ? () => leafletMap.setView(bounds[0], 14)
     : () => leafletMap.fitBounds(bounds, { padding: [30, 30] }));
@@ -4828,7 +5083,10 @@ function diffStates(prevRaw, nextRaw) {
   for (const t of next.trips) {
     const p = prevTrips.get(t.id);
     if (!p) { out.push({ screens: ["trips"], text: `added trip ${t.name}` }); continue; }
-    if (p.name !== t.name || p.destination !== t.destination || p.startDate !== t.startDate || p.endDate !== t.endDate) {
+    // destinations is an array — !== compares by reference and would report a
+    // change on every sync, so it needs the same JSON compare travelers uses.
+    if (p.name !== t.name || JSON.stringify(p.destinations) !== JSON.stringify(t.destinations)
+        || p.startDate !== t.startDate || p.endDate !== t.endDate) {
       out.push({ screens: ["trips"], text: `edited trip ${t.name}` });
     }
     if (JSON.stringify(p.travelers) !== JSON.stringify(t.travelers)) {

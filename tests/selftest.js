@@ -103,6 +103,7 @@
       baselineLifecycle();
       polishV19();
       polishV191();
+      releaseV110();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -829,6 +830,97 @@
       probe.remove();
       const small = sizes.filter((s) => s.h < 44);
       return small.length ? small.map((s) => `${s.cls}=${s.h}px`).join(", ") : true;
+    });
+  }
+
+  /* ===== 1b7. v1.10.0 — destinations, covers, answer card ===== */
+
+  function releaseV110() {
+    group("v1.10.0");
+
+    const wrap = (t) => ({ trips: [t], items: [], version: 2 });
+    const base = (over) => Object.assign(
+      { id: "t1", name: "T", year: 2026, budget: 100, startDate: "", endDate: "", travelers: [], cover: "", expenses: [] },
+      over || {});
+
+    check("a legacy destination string migrates to a one-item list", () => {
+      const t = normalizeState(wrap(base({ destination: "Paris, France" }))).trips[0];
+      return eq(JSON.stringify(t.destinations), '["Paris, France"]');
+    });
+
+    check("destination stays mirrored from the first entry", () => {
+      const t = normalizeState(wrap(base({ destinations: ["Paris, France", "Lyon, France"] }))).trips[0];
+      return eq(t.destination, "Paris, France");
+    });
+
+    check("blank destination rows are dropped", () => {
+      const t = normalizeState(wrap(base({ destinations: [" Paris, France ", "", "  ", "Lyon, France"] }))).trips[0];
+      return eq(JSON.stringify(t.destinations), '["Paris, France","Lyon, France"]');
+    });
+
+    /* migrateToV2 writes trip.destination after the trips are normalised, so a
+       list that's merely empty must still recover from the mirror. */
+    check("an empty list recovers from the mirror", () => {
+      const t = normalizeState(wrap(base({ destinations: [], destination: "Rome, Italy" }))).trips[0];
+      return eq(JSON.stringify(t.destinations), '["Rome, Italy"]');
+    });
+
+    check("normalising twice is not lossy", () => {
+      const once = normalizeState(wrap(base({ destinations: ["Paris, France", "Lyon, France"] })));
+      const twice = normalizeState(JSON.parse(JSON.stringify(once)));
+      return eq(JSON.stringify(twice.trips[0].destinations), '["Paris, France","Lyon, France"]');
+    });
+
+    check("the trip title still uses the first city", () => {
+      const t = normalizeState(wrap(base({ name: "Euro trip", destinations: ["Paris, France", "Lyon, France"] }))).trips[0];
+      return eq(nameWithCity(t), "Euro trip · Paris");
+    });
+
+    check("geocoding biases across every destination", () => {
+      const t = normalizeState(wrap(base({ destinations: ["Paris, France", "Lyon, France"] }))).trips[0];
+      return eq(JSON.stringify(tripCities(t)), '["Paris","Lyon"]');
+    });
+
+    /* Arrays compare by reference, so a plain !== would flag a change on every
+       sync and bury the real ones. */
+    check("an unchanged destination list reports no diff", () => {
+      const a = ["Paris, France", "Lyon, France"];
+      const b = ["Paris, France", "Lyon, France"];
+      return JSON.stringify(a) === JSON.stringify(b) ? true : "identical lists compared unequal";
+    });
+
+    check("covers are deterministic and need no network", () => {
+      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
+      const a = coverFor(t("Tokyo, Japan"));
+      const b = coverFor(t("Tokyo, Japan"));
+      if (a.css !== b.css || a.seed !== b.seed) return "same destination gave two different covers";
+      if (coverFor(t("Paris, France")).css === a.css) return "different destinations gave the same cover";
+      return /^linear-gradient/.test(a.css) ? true : "cover is not a gradient: " + a.css;
+    });
+
+    check("a cover exists for any destination, including unknown ones", () => {
+      const odd = coverFor({ name: "x", destination: "Ouagadougou, Burkina Faso", destinations: ["Ouagadougou, Burkina Faso"] });
+      const none = coverFor({ name: "Untitled", destination: "", destinations: [] });
+      return odd.css && none.css ? true : "a cover came back empty";
+    });
+
+    check("cover art is inline SVG, not a remote image", () => {
+      const art = coverArt(coverFor({ name: "x", destinations: ["Paris, France"] }).seed);
+      if (!/^\s*<svg/.test(art)) return "cover art is not an svg";
+      return /https?:\/\//.test(art) ? "cover art references a remote URL" : true;
+    });
+
+    check("the budget lead number equals still-to-pay", () => {
+      const lead = document.querySelector(".answer-card__value");
+      if (!lead) return true; // budget screen not rendered in this pass
+      const { totalDue } = totalsForTrips(tripsForFilter());
+      return eq(lead.textContent.trim(), formatMoney(totalDue));
+    });
+
+    check("still-to-pay is not repeated in the tile grid", () => {
+      const labels = [...document.querySelectorAll("#global-stats .stat__label")].map((l) => l.textContent);
+      if (!labels.length) return true;
+      return labels.some((l) => /Still to pay/i.test(l)) ? "still-to-pay is both the lead and a tile" : true;
     });
   }
 

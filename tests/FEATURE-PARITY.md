@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.9.0**.
+Every user-reachable action in the app, as of **v1.10.0**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -31,6 +31,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Open the featured trip's itinerary | hero CTA |
 | Edit the featured trip | `data-edit-trip` on the hero |
 | Edit any trip | `.btn-edit-trip` on trip cards |
+| **Multiple destinations** | Repeatable rows in the trip dialog — *v1.10.0*. `destination` stays mirrored from the first |
 | Add a trip | `btn-add-trip`, and the app-bar `+` |
 | Delete a trip | inside the trip dialog (cascades to its reservations) |
 | Step cards | Day by Day · Route · Explore attractions · Check |
@@ -53,6 +54,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | ⋯ action sheet | `dialog-item-actions`: Edit · Move up · Move down · **Open in Google Maps** · Delete |
 | Geocode a place | `data-locate-item` ("Locate") |
 | Filter the map by day | day chips, `mapDayFilter` |
+| **Same-day stops carousel** | `data-focus-stop` — *v1.10.0*. Shown for a single day; tap centres the map and opens that pin |
 | Collapse/expand the stops sheet | tap `.map-list__title` (≤900px) |
 | Open a stop in Google Maps | "Maps ↗" per stop, **the hotel row**, and **both marker popups** — *coords since v1.9.0* |
 | Retry the map | `btn-map-retry` when Leaflet fails to load |
@@ -68,6 +70,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Mark an expense paid | per-expense action |
 | Expand a trip's expenses | expenses fold |
 | Category breakdown | rendered per trip |
+| **Still-to-pay answer card** | Leads the Overview — *v1.10.0*. Removed from the tile grid, not duplicated |
 
 ## Bookings
 
@@ -125,5 +128,5 @@ has unsaved edits.
 
 ## Diagnostics
 
-`?selftest=1` runs 76 checks and prints a pass/fail panel. It refuses to run while joined to
+`?selftest=1` runs 97 checks and prints a pass/fail panel. It refuses to run while joined to
 a shared room, because it stubs `localStorage.setItem` to throw.
