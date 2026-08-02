@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.10.0**.
+Every user-reachable action in the app, as of **v1.10.1**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -43,7 +43,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 |---|---|
 | Switch trip | switcher tabs, `data-trip` |
 | Timeline ↔ Maps | `data-subtab` |
-| Jump to a day | date strip, `data-strip-day` → un-collapses if folded, then `scrollIntoView` |
+| Jump to a day | date strip, `data-strip-day` → selects + scrolls. Deliberately does NOT unfold (v1.10.1) |
 | **Fold / unfold a day** | `data-day-toggle` on the date rail — *added v1.9.1*. Per-device, never synced |
 | **Stop numbers** | Timeline cards show the map pin number (`.act__stopno`) for reservations that appear on the map — *added v1.9.1* |
 | **Edit the trip** | `data-edit-trip` in the section head — *added v1.9.0* |
@@ -54,8 +54,8 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | ⋯ action sheet | `dialog-item-actions`: Edit · Move up · Move down · **Open in Google Maps** · Delete |
 | Geocode a place | `data-locate-item` ("Locate") |
 | Filter the map by day | day chips, `mapDayFilter` |
-| **Same-day stops carousel** | `data-focus-stop` — *v1.10.0*. Shown for a single day; tap centres the map and opens that pin |
-| Collapse/expand the stops sheet | tap `.map-list__title` (≤900px) |
+| **Tap a stop to focus it** | `data-focus-stop` on the row body — *v1.10.1*. Centres the map and opens that pin; the Locate and Maps buttons sit outside it. The v1.10.0 carousel was removed (it never rendered) |
+| Collapse/expand the stops sheet | tap `.map-list__title` (≤900px, and only while the filter is "All" — a selected day lists in full) |
 | Open a stop in Google Maps | "Maps ↗" per stop, **the hotel row**, and **both marker popups** — *coords since v1.9.0* |
 | Retry the map | `btn-map-retry` when Leaflet fails to load |
 
@@ -102,7 +102,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.9.0 · <sha>` — selectable |
+| Build version | `TravelHub v1.10.1 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
@@ -128,5 +128,5 @@ has unsaved edits.
 
 ## Diagnostics
 
-`?selftest=1` runs 97 checks and prints a pass/fail panel. It refuses to run while joined to
+`?selftest=1` runs 104 checks and prints a pass/fail panel. It refuses to run while joined to
 a shared room, because it stubs `localStorage.setItem` to throw.

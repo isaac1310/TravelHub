@@ -104,6 +104,7 @@
       polishV19();
       polishV191();
       releaseV110();
+      releaseV1101();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -889,27 +890,8 @@
       return JSON.stringify(a) === JSON.stringify(b) ? true : "identical lists compared unequal";
     });
 
-    check("covers are deterministic and need no network", () => {
-      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
-      const a = coverFor(t("Tokyo, Japan"));
-      const b = coverFor(t("Tokyo, Japan"));
-      if (a.css !== b.css || a.seed !== b.seed) return "same destination gave two different covers";
-      if (coverFor(t("Paris, France")).css === a.css) return "different destinations gave the same cover";
-      return /^linear-gradient/.test(a.css) ? true : "cover is not a gradient: " + a.css;
-    });
-
-    check("a cover exists for any destination, including unknown ones", () => {
-      const odd = coverFor({ name: "x", destination: "Ouagadougou, Burkina Faso", destinations: ["Ouagadougou, Burkina Faso"] });
-      const none = coverFor({ name: "Untitled", destination: "", destinations: [] });
-      return odd.css && none.css ? true : "a cover came back empty";
-    });
-
-    check("cover art is inline SVG, not a remote image", () => {
-      const art = coverArt(coverFor({ name: "x", destinations: ["Paris, France"] }).seed);
-      if (!/^\s*<svg/.test(art)) return "cover art is not an svg";
-      return /https?:\/\//.test(art) ? "cover art references a remote URL" : true;
-    });
-
+    /* The three generated-cover checks that lived here were removed in v1.10.1:
+       coverFor() no longer exists. Monuments are covered in the v1.10.1 group. */
     check("the budget lead number equals still-to-pay", () => {
       const lead = document.querySelector(".answer-card__value");
       if (!lead) return true; // budget screen not rendered in this pass
@@ -921,6 +903,159 @@
       const labels = [...document.querySelectorAll("#global-stats .stat__label")].map((l) => l.textContent);
       if (!labels.length) return true;
       return labels.some((l) => /Still to pay/i.test(l)) ? "still-to-pay is both the lead and a tile" : true;
+    });
+  }
+
+  /* ===== 1b8. v1.10.1 — ordering, fold, selected day, monuments ===== */
+
+  function releaseV1101() {
+    group("v1.10.1");
+
+    const datedTrip = () => state.trips.find((t) => t.startDate && t.endDate);
+
+    const mkItem = (id, iso, tripId, over) => Object.assign({
+      id, tripId, type: "attraction", title: id, details: "", flightNo: "",
+      date: iso, endDate: "", startTime: "", endTime: "",
+      location: { name: id }, confirmation: "", notes: "",
+    }, over || {});
+
+    /* Untimed items used to tie at the 1440 time-default and be separated only by
+       localeCompare on a random id, so they shuffled. */
+    check("untimed additions keep the order they were added", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = trip.startDate;
+      const keep = state.items;
+      try {
+        state.items = [];
+        const added = ["first", "second", "third"].map((n) => {
+          const it = normalizeItem(mkItem(n, iso, trip.id));
+          it.sortIndex = nextDayPosition(trip.id, iso);
+          state.items.push(it);
+          return n;
+        });
+        const shown = itemsForDay(trip, iso).map((e) => e.item.title);
+        return eq(shown.join(","), added.join(","), "render order vs insertion order");
+      } finally { state.items = keep; }
+    });
+
+    check("a timed addition still sorts by time, not to the end", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = trip.startDate;
+      const keep = state.items;
+      try {
+        state.items = [];
+        const late = normalizeItem(mkItem("untimed", iso, trip.id));
+        late.sortIndex = nextDayPosition(trip.id, iso);
+        state.items.push(late);
+        state.items.push(normalizeItem(mkItem("early", iso, trip.id, { startTime: "08:00" })));
+        return eq(itemsForDay(trip, iso).map((e) => e.item.title).join(","), "early,untimed");
+      } finally { state.items = keep; }
+    });
+
+    /* handleItemSubmit rebuilds the item from the form, which carries no
+       sortIndex — so Object.assign was resetting it and every edit undid a
+       reorder. */
+    check("editing an item preserves its manual position", () => {
+      const original = normalizeItem(mkItem("x", "2026-09-16", "t"));
+      original.sortIndex = 1465;
+      const rebuilt = normalizeItem({ ...original, title: "renamed" });
+      rebuilt.sortIndex = original.sortIndex; // the fix
+      Object.assign(original, rebuilt);
+      return eq(original.sortIndex, 1465);
+    });
+
+    check("the untimed migration is deterministic and idempotent", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = trip.startDate;
+      const payload = () => ({
+        trips: [{ ...trip, expenses: [] }],
+        items: ["zc", "za", "zb"].map((n) => mkItem(n, iso, trip.id, { sortIndex: 0 })),
+        version: 2,
+      });
+      const a = normalizeState(payload());
+      const b = normalizeState(payload());
+      const key = (s) => JSON.stringify(s.items.map((i) => [i.id, i.sortIndex]).sort());
+      if (key(a) !== key(b)) return "two devices produced different positions";
+      const again = normalizeState(JSON.parse(JSON.stringify(a)));
+      if (key(again) !== key(a)) return "re-running the migration changed the positions";
+      return a.items.every((i) => i.sortIndex > 0) ? true : "an item was left unpositioned";
+    });
+
+    check("the date strip selects a day without unfolding it", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      const iso = eachDay(trip).map(isoOf)[0];
+      collapsedDays.add(iso);
+      renderItinerary();
+      document.querySelector(`[data-strip-day="${iso}"]`)?.click();
+      const stillFolded = collapsedDays.has(iso);
+      const selected = timelineDayIso === iso;
+      collapsedDays.delete(iso);
+      renderItinerary();
+      if (!stillFolded) return "tapping the chip unfolded the day";
+      return selected ? true : "the chip did not become the selected day";
+    });
+
+    check("the active chip survives a re-render", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      timelineDayIso = eachDay(trip).map(isoOf)[1];
+      renderItinerary();
+      const active = document.querySelector(".daychip.is-active")?.getAttribute("data-strip-day");
+      return eq(active, timelineDayIso, "active chip after render");
+    });
+
+    check("a new reservation defaults to the selected day", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const isos = eachDay(trip).map(isoOf);
+      const prevSub = itinerarySubTab, prevMap = mapDayFilter, prevDay = timelineDayIso;
+      try {
+        itinerarySubTab = "timeline"; mapDayFilter = "all"; timelineDayIso = isos[2];
+        if (defaultAddDate(isos) !== isos[2]) return "timeline selection ignored";
+        itinerarySubTab = "maps"; mapDayFilter = isos[1];
+        if (defaultAddDate(isos) !== isos[1]) return "maps day filter ignored";
+        timelineDayIso = null; mapDayFilter = "all"; itinerarySubTab = "timeline";
+        return isos.includes(defaultAddDate(isos)) ? true : "fallback returned a date outside the trip";
+      } finally { itinerarySubTab = prevSub; mapDayFilter = prevMap; timelineDayIso = prevDay; }
+    });
+
+    check("a monument is chosen per city, with a fallback", () => {
+      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
+      const paris = monumentFor(t("Paris, France"));
+      if (paris !== monumentFor(t("PARIS, France"))) return "matching is case sensitive";
+      if (paris === monumentFor(t("Rome, Italy"))) return "two cities share one monument";
+      if (monumentFor(t("Pressburg")) !== monumentFor(t("Bratislava"))) return "alias not matched";
+      const unknown = monumentFor(t("Nowhere, Atlantis"));
+      return unknown === MONUMENTS.generic ? true : "an unknown city did not fall back";
+    });
+
+    check("cover art is inline, right-aligned and never stretched", () => {
+      const art = coverArt({ name: "x", destinations: ["Paris, France"] });
+      if (/https?:\/\//.test(art)) return "cover art fetches something remote";
+      if (!/preserveAspectRatio="xMaxYMax meet"/.test(art)) return "aspect ratio would stretch the monument";
+      return /<svg/.test(art) ? true : "cover art is not an svg";
+    });
+
+    check("the carousel is gone and the day list is not truncated", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      itinerarySubTab = "maps";
+      mapDayFilter = eachDay(trip).map(isoOf)[0];
+      renderItinerary();
+      const reel = document.querySelector(".stopreel");
+      const collapsed = document.getElementById("map-list")?.classList.contains("map-list--collapsed");
+      mapDayFilter = "all";
+      if (reel) return "the carousel is still rendered";
+      return collapsed ? "the list is still collapsed for a selected day" : true;
     });
   }
 
