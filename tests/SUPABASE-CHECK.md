@@ -5,6 +5,10 @@ refuses to run at all in a shared room, because it stubs `localStorage.setItem` 
 throw and a partial restore would corrupt real trip data and then sync it. So
 everything backend-facing is checked here instead.
 
+**Viewports:** run the visual parts at **412 × 915 (Galaxy S24 Ultra — the real device)**,
+375 × 812 (narrow guard) and 1280 × 800. Everything up to v1.10.0 was checked at 375 only,
+which is a proxy, not the phone in your pocket.
+
 **Time:** ~8 minutes. **Run after any release that touches `share.js`, the schema, or sync.**
 
 > **Rate limit:** `create_shared_budget` allows **20 new rooms per hour, project-wide**
