@@ -105,6 +105,7 @@
       polishV191();
       releaseV110();
       releaseV1101();
+      releaseV1102();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -1056,6 +1057,198 @@
       mapDayFilter = "all";
       if (reel) return "the carousel is still rendered";
       return collapsed ? "the list is still collapsed for a selected day" : true;
+    });
+  }
+
+  /* ===== 1b9. v1.10.2 — tap a card to edit, press and hold to drag ===== */
+
+  function releaseV1102() {
+    group("v1.10.2");
+
+    const datedTrip = () => state.trips.find((t) => t.startDate && t.endDate);
+
+    const mk = (id, iso, tripId, over) => Object.assign({
+      id, tripId, type: "attraction", title: id, details: "", flightNo: "",
+      date: iso, endDate: "", startTime: "", endTime: "",
+      location: { name: id }, confirmation: "", notes: "", sortIndex: 0,
+    }, over || {});
+
+    /* The card carried no item id at all before v1.10.2, so a delegated tap
+       handler had nothing to read. This is the precondition for both features. */
+    check("timeline cards expose their item id", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      renderItinerary();
+      const cards = [...document.querySelectorAll("#itinerary-body .act")];
+      if (!cards.length) return true;
+      const real = cards.filter((c) => !c.classList.contains("act--add"));
+      if (!real.length) return true;
+      return real.every((c) => c.hasAttribute("data-item")) ? true : "a reservation card has no data-item";
+    });
+
+    /* "Add reservation" is itself an .act. A blanket closest(".act") handler
+       would hijack it, so it must never carry an item id. */
+    check("the add button is not a tap-to-edit target", () => {
+      const adds = [...document.querySelectorAll("#itinerary-body .act--add")];
+      return adds.every((a) => !a.hasAttribute("data-item")) ? true : "act--add carries data-item";
+    });
+
+    check("check-out rows are marked and not draggable", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const keep = state.items;
+      try {
+        state.items = [
+          mk("v2-hotel", trip.startDate, trip.id, {
+            type: "hotel", title: "Hotel", endDate: trip.endDate, endTime: "11:00",
+          }),
+        ];
+        itineraryTripId = trip.id;
+        renderItinerary();
+        const co = document.querySelector("#itinerary-body .act--checkout");
+        if (!co) return "no check-out row rendered";
+        if (!co.hasAttribute("data-item")) return "the check-out row is not tappable";
+        // The drag handler selects on :not(.act--checkout) — this class is the guard.
+        return co.matches(".act[data-item]:not(.act--checkout)")
+          ? "the check-out row would still lift" : true;
+      } finally {
+        state.items = keep;
+        renderItinerary();
+      }
+    });
+
+    /* placeItemAtIndex is the drop. Index counts slots in the day EXCLUDING the
+       item being moved, so 0 means first. */
+    check("a drop lands the item at the target slot", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = trip.startDate;
+      const keep = state.items;
+      try {
+        state.items = ["a", "b", "c", "d"].map((id, i) =>
+          mk(id, iso, trip.id, { sortIndex: 1450 + i * 10 })
+        );
+        // Move "a" (first) to slot 2 of the remaining [b, c, d] → b, c, a, d.
+        if (!placeItemAtIndex(trip, "a", 2)) return "placeItemAtIndex reported no change";
+        const order = itemsForDay(trip, iso).map((e) => e.item.id);
+        return order.join(",") === "b,c,a,d" ? true : "order is " + order.join(",");
+      } finally { state.items = keep; }
+    });
+
+    check("a drop leaves the other items' relative order intact", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = trip.startDate;
+      const keep = state.items;
+      try {
+        state.items = ["a", "b", "c", "d", "e"].map((id, i) =>
+          mk(id, iso, trip.id, { sortIndex: 1450 + i * 10 })
+        );
+        placeItemAtIndex(trip, "d", 0);
+        const order = itemsForDay(trip, iso).map((e) => e.item.id);
+        return order.join(",") === "d,a,b,c,e" ? true : "order is " + order.join(",");
+      } finally { state.items = keep; }
+    });
+
+    /* Every untimed item migrated to 1450 + 10n in v1.10.1, and a midpoint
+       between two equal keys wouldn't move at all. moveItemInDay nudges; so must this. */
+    check("a drop between equal sort keys still moves the item", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = trip.startDate;
+      const keep = state.items;
+      try {
+        /* Four equal keys, dropping into slot 1 — the only shape that puts an
+           equal key on BOTH sides, so the midpoint lands back on the item's own
+           value. Slot 0 and the last slot take the /2 and +10 branches instead
+           and would pass without the nudge. Fractional indices can't honour the
+           exact slot when every neighbour ties; moving at all is the contract. */
+        state.items = ["a", "b", "c", "d"].map((id) => mk(id, iso, trip.id, { sortIndex: 1450 }));
+        const before = itemsForDay(trip, iso).map((e) => e.item.id).join(",");
+        placeItemAtIndex(trip, "a", 1);
+        const after = itemsForDay(trip, iso).map((e) => e.item.id).join(",");
+        return after !== before ? true : "the item did not move (" + after + ")";
+      } finally { state.items = keep; }
+    });
+
+    check("a drop past the end appends rather than overflowing the day", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = trip.startDate;
+      const keep = state.items;
+      try {
+        state.items = ["a", "b", "c"].map((id, i) => mk(id, iso, trip.id, { sortIndex: 1450 + i * 10 }));
+        placeItemAtIndex(trip, "a", 99);
+        const order = itemsForDay(trip, iso).map((e) => e.item.id);
+        const moved = state.items.find((i) => i.id === "a");
+        if (moved.date !== iso) return "the drop changed the item's day";
+        return order.join(",") === "b,c,a" ? true : "order is " + order.join(",");
+      } finally { state.items = keep; }
+    });
+
+    /* A drag is confined to its own day: the drop never touches item.date. */
+    check("a drop never moves an item to another day", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const keep = state.items;
+      try {
+        state.items = [
+          mk("a", trip.startDate, trip.id, { sortIndex: 1450 }),
+          mk("z", trip.endDate, trip.id, { sortIndex: 1450 }),
+        ];
+        placeItemAtIndex(trip, "a", 99);
+        return state.items.find((i) => i.id === "a").date === trip.startDate
+          ? true : "the item changed day";
+      } finally { state.items = keep; }
+    });
+
+    check("sort keys stay positive", () => {
+      const trip = datedTrip();
+      if (!trip) return true;
+      const iso = trip.startDate;
+      const keep = state.items;
+      try {
+        state.items = ["a", "b"].map((id, i) => mk(id, iso, trip.id, { sortIndex: 0.02 + i * 0.01 }));
+        placeItemAtIndex(trip, "b", 0);
+        return state.items.every((i) => i.sortIndex > 0) ? true : "a sortIndex hit zero or below";
+      } finally { state.items = keep; }
+    });
+
+    /* The lifted card is position:fixed against the viewport. A later @media block
+       sets `.act { position: relative }` at the same specificity — which silently won
+       until the rule was doubled to `.act.act--lifted`. The data assertions all still
+       passed while the card rendered in the wrong place, so this is checked directly. */
+    check("a lifted card is positioned against the viewport, above the FAB", () => {
+      const probe = document.querySelector("#itinerary-body .act[data-item]");
+      if (!probe) return true;
+      probe.classList.add("act--lifted");
+      const cs = getComputedStyle(probe);
+      const pos = cs.position;
+      const z = Number(cs.zIndex);
+      probe.classList.remove("act--lifted");
+      if (pos !== "fixed") return "position is " + pos + ", not fixed";
+      return z > 35 ? true : "z-index " + z + " does not clear the FAB";
+    });
+
+    check("the gesture handlers are bound to the static container", () => {
+      renderItinerary();
+      const body = document.getElementById("itinerary-body");
+      if (!body) return true;
+      const before = body.dataset.gesturesBound;
+      renderItinerary();
+      // Binding is idempotent: a re-render must not stack a second set of listeners.
+      return before === "1" && body.dataset.gesturesBound === "1"
+        ? true : "gestures are not bound exactly once";
+    });
+
+    /* Drag is pointer-only. The buttons are the keyboard and assistive path and
+       were explicitly kept — losing them would strand keyboard users. */
+    check("the move up/down buttons survive", () => {
+      renderItinerary();
+      return document.querySelector("#itinerary-body [data-move-item]")
+        ? true : "the move buttons are gone";
     });
   }
 
