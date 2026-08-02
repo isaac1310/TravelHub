@@ -460,6 +460,24 @@ h1, h2, h3, h4, .brand__name {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 0.7rem 0.9rem; box-shadow: var(--shadow);
 }
+/* Tap-to-edit and press-and-hold-to-drag (v1.10.2).
+   The callout suppression stops Android/iOS popping a text-selection bubble
+   during the 450ms hold; the drag itself only disables selection while active. */
+.act[data-item] { cursor: pointer; -webkit-touch-callout: none; }
+.act--add { cursor: pointer; }
+body.is-dragging { user-select: none; -webkit-user-select: none; }
+/* Doubled class deliberately: a later `@media` block sets `.act { position: relative }`,
+   which has the same specificity and would otherwise win on source order — leaving the
+   lifted card positioned against its own box instead of the viewport. */
+.act.act--lifted {
+  position: fixed; z-index: 60; margin: 0; pointer-events: none;
+  box-shadow: 0 12px 28px rgba(60, 40, 30, 0.28); border-color: var(--brand);
+  transform: scale(1.02); opacity: 0.97;
+}
+.act-placeholder {
+  border: 1px dashed var(--brand); border-radius: var(--radius-sm);
+  background: var(--brand-soft); opacity: 0.6;
+}
 .act__icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; background: var(--brand-soft); color: var(--brand-hover); }
 .act__icon svg { width: 18px; height: 18px; }
 .act__icon--hotel { background: #f0e6fb; color: #7c4fc4; }
@@ -1717,7 +1735,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.10.1";
+const APP_VERSION = "v1.10.2";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -4041,6 +4059,7 @@ function renderItinerary() {
   const tripsWithDates = state.trips.filter((t) => getMeta(t).startDate);
   const sw = $("itinerary-switcher");
   const body = $("itinerary-body");
+  bindTimelineGestures(); // idempotent — binds once to the static container
 
   if (tripsWithDates.length === 0) {
     sw.innerHTML = "";
@@ -4197,8 +4216,10 @@ function itemCard({ item, checkout }, stopNo) {
   if (item.notes) subParts.push(escapeHtml(item.notes));
   const time = checkout ? item.endTime || "" : fmtTimeRange(item);
 
+  /* data-item makes the whole card a tap target (edit) and a drag handle.
+     .act--checkout marks the rows that can be tapped but never lifted. */
   return `
-    <div class="act">
+    <div class="act${checkout ? " act--checkout" : ""}" data-item="${escapeHtml(item.id)}">
       <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}</span>
       ${stopNo ? `<span class="act__stopno" aria-label="Map stop ${stopNo}">${stopNo}</span>` : ""}
       <span class="act__body">
@@ -4384,6 +4405,211 @@ function moveItemInDay(trip, itemId, dir) {
   if (newKey === keys[target]) newKey = keys[target] + dir * 0.5;
   item.sortIndex = Math.max(0.01, newKey);
   saveState();
+  renderItinerary();
+}
+
+/* Drop an item at an absolute slot within its day. `targetIdx` counts positions
+   in the day *excluding* the item being moved, so 0 means "first". Uses the same
+   midpoint idiom as moveItemInDay, including its tie nudge — equal keys are common
+   because untimed items all migrated to 1450+10n. Check-out rows count as slots:
+   they can't be lifted, but they're real positions and their keys bound a drop.
+   Returns true when something actually changed. Does not save or render. */
+function placeItemAtIndex(trip, itemId, targetIdx) {
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) return false;
+  const entries = itemsForDay(trip, item.date);
+  const from = entries.findIndex((e) => !e.checkout && e.item.id === itemId);
+  if (from < 0) return false;
+
+  const rest = entries.filter((_, i) => i !== from);
+  const keys = rest.map(dayEntryKey);
+  const t = Math.max(0, Math.min(targetIdx, rest.length));
+  const before = t > 0 ? keys[t - 1] : null;
+  const after = t < keys.length ? keys[t] : null;
+
+  let newKey;
+  if (before === null && after === null) newKey = 1450;
+  else if (before === null) newKey = after / 2;
+  else if (after === null) newKey = before + 10;
+  else newKey = (before + after) / 2;
+  if (newKey === before || newKey === after) newKey = (before ?? after) + 0.5;
+
+  newKey = Math.max(0.01, newKey);
+  if (newKey === item.sortIndex) return false;
+  item.sortIndex = newKey;
+  return true;
+}
+
+/* ---------- Timeline gestures: tap to edit, press-and-hold to drag ----------
+   Delegated once from #itinerary-body, which is a static node — #itinerary-view
+   and everything under it is replaced by innerHTML on every render, so per-node
+   listeners here would die on the first re-render (and mid-gesture). */
+const DRAG_HOLD_MS = 450;
+const DRAG_SLOP_PX = 8;
+const DRAG_EDGE_PX = 72;
+
+let dragCtx = null;        // set from pointerdown; { pending | active }
+let suppressNextClick = false;
+
+function currentItineraryTrip() {
+  return state.trips.find((t) => t.id === itineraryTripId) || null;
+}
+
+function bindTimelineGestures() {
+  const body = $("itinerary-body");
+  if (!body || body.dataset.gesturesBound) return;
+  body.dataset.gesturesBound = "1";
+
+  body.addEventListener("click", (e) => {
+    if (suppressNextClick) { suppressNextClick = false; e.preventDefault(); e.stopPropagation(); return; }
+    const card = e.target.closest(".act[data-item]");
+    if (!card) return;
+    /* Every control in a card is a <button>. .act--add is itself a button with no
+       data-item, so it never reaches here — but .act__actions is opacity:0 and
+       still hit-testable on desktop, hence the second guard. */
+    if (e.target.closest("button, .act__actions")) return;
+    const item = state.items.find((i) => i.id === card.getAttribute("data-item"));
+    if (item) openItemDialog(item.tripId, item);
+  });
+
+  body.addEventListener("pointerdown", onDragPointerDown);
+}
+
+function onDragPointerDown(e) {
+  if (dragCtx || e.button > 0 || !e.isPrimary) return;
+  const card = e.target.closest(".act[data-item]:not(.act--checkout)");
+  if (!card || e.target.closest("button, .act__actions")) return;
+  const list = card.parentElement;
+  if (!list || !list.classList.contains("day__items")) return;
+
+  dragCtx = {
+    card, list, active: false, pointerId: e.pointerId,
+    startX: e.clientX, startY: e.clientY, lastY: e.clientY,
+    itemId: card.getAttribute("data-item"),
+    timer: setTimeout(() => activateDrag(), DRAG_HOLD_MS),
+  };
+  window.addEventListener("pointermove", onDragPointerMove, { passive: false });
+  window.addEventListener("pointerup", onDragPointerUp);
+  window.addEventListener("pointercancel", onDragPointerUp);
+  window.addEventListener("touchmove", blockTouchScroll, { passive: false });
+  document.addEventListener("selectstart", preventDefaultEvent);
+  document.addEventListener("contextmenu", preventDefaultEvent);
+}
+
+function preventDefaultEvent(e) { e.preventDefault(); }
+function blockTouchScroll(e) { if (dragCtx?.active) e.preventDefault(); }
+
+function activateDrag() {
+  const ctx = dragCtx;
+  if (!ctx || ctx.active) return;
+  const rect = ctx.card.getBoundingClientRect();
+  ctx.active = true;
+  ctx.grabX = ctx.startX - rect.left;
+  ctx.grabY = ctx.startY - rect.top;
+
+  const ph = document.createElement("div");
+  ph.className = "act-placeholder";
+  ph.style.height = rect.height + "px";
+  ctx.list.insertBefore(ph, ctx.card);
+  ctx.placeholder = ph;
+
+  ctx.card.classList.add("act--lifted");
+  ctx.card.style.width = rect.width + "px";
+  ctx.card.style.left = rect.left + "px";
+  ctx.card.style.top = rect.top + "px";
+  document.body.classList.add("is-dragging");
+  try { ctx.card.setPointerCapture(ctx.pointerId); } catch { /* capture is a nicety */ }
+  if (navigator.vibrate) navigator.vibrate(12);
+  moveLiftedCard(ctx.startY);
+}
+
+function onDragPointerMove(e) {
+  const ctx = dragCtx;
+  if (!ctx) return;
+  if (!ctx.active) {
+    // Moving before the hold fires means this was a scroll or a swipe, not a drag.
+    if (Math.abs(e.clientY - ctx.startY) > DRAG_SLOP_PX || Math.abs(e.clientX - ctx.startX) > DRAG_SLOP_PX) {
+      endDrag(false);
+    }
+    return;
+  }
+  e.preventDefault();
+  ctx.lastY = e.clientY;
+  ctx.lastX = e.clientX;
+  moveLiftedCard(e.clientY, e.clientX);
+  autoScrollForDrag(e.clientY);
+}
+
+function moveLiftedCard(y, x) {
+  const ctx = dragCtx;
+  if (!ctx?.active) return;
+  ctx.card.style.top = y - ctx.grabY + "px";
+  if (x != null) ctx.card.style.left = x - ctx.grabX + "px";
+  positionPlaceholder(y);
+}
+
+/* The placeholder lands above the first sibling whose midpoint is below the
+   pointer. Siblings are .act[data-item] only — .act--add is excluded, so a card
+   can never be dropped after the "Add reservation" button. */
+function positionPlaceholder(y) {
+  const ctx = dragCtx;
+  const siblings = [...ctx.list.querySelectorAll(".act[data-item]")].filter((n) => n !== ctx.card);
+  let idx = siblings.length;
+  for (let i = 0; i < siblings.length; i++) {
+    const r = siblings[i].getBoundingClientRect();
+    if (y < r.top + r.height / 2) { idx = i; break; }
+  }
+  ctx.targetIdx = idx;
+  const ref = siblings[idx] || null;
+  if (ref) ctx.list.insertBefore(ctx.placeholder, ref);
+  else {
+    const add = ctx.list.querySelector(".act--add");
+    ctx.list.insertBefore(ctx.placeholder, add || null);
+  }
+}
+
+/* The window scrolls — there is no inner scroll container — so dragging toward
+   an edge has to drive the page itself or long days are unreachable. */
+function autoScrollForDrag(y) {
+  const h = window.innerHeight;
+  let dy = 0;
+  if (y < DRAG_EDGE_PX) dy = -Math.ceil((DRAG_EDGE_PX - y) / 5);
+  else if (y > h - DRAG_EDGE_PX) dy = Math.ceil((y - (h - DRAG_EDGE_PX)) / 5);
+  if (dy) window.scrollBy(0, dy);
+}
+
+function onDragPointerUp() {
+  endDrag(true);
+}
+
+function endDrag(commit) {
+  const ctx = dragCtx;
+  if (!ctx) return;
+  dragCtx = null;
+  clearTimeout(ctx.timer);
+  window.removeEventListener("pointermove", onDragPointerMove);
+  window.removeEventListener("pointerup", onDragPointerUp);
+  window.removeEventListener("pointercancel", onDragPointerUp);
+  window.removeEventListener("touchmove", blockTouchScroll);
+  document.removeEventListener("selectstart", preventDefaultEvent);
+  document.removeEventListener("contextmenu", preventDefaultEvent);
+
+  if (!ctx.active) return;   // never lifted: leave the pending click alone
+
+  ctx.card.classList.remove("act--lifted");
+  ctx.card.removeAttribute("style");
+  ctx.placeholder?.remove();
+  document.body.classList.remove("is-dragging");
+  try { ctx.card.releasePointerCapture(ctx.pointerId); } catch { /* already gone */ }
+  // A lift always consumes its release, so a drag never also opens the editor.
+  suppressNextClick = true;
+  setTimeout(() => { suppressNextClick = false; }, 350);
+
+  const trip = currentItineraryTrip();
+  if (!commit || !trip) { renderItinerary(); return; }
+  // The re-render is deferred to here: renderItinerary() replaces #itinerary-view
+  // wholesale and would destroy the node under the finger mid-gesture.
+  if (placeItemAtIndex(trip, ctx.itemId, ctx.targetIdx ?? 0)) saveState();
   renderItinerary();
 }
 

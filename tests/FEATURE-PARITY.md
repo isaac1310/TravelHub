@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.10.1**.
+Every user-reachable action in the app, as of **v1.10.2**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -48,8 +48,9 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | **Stop numbers** | Timeline cards show the map pin number (`.act__stopno`) for reservations that appear on the map — *added v1.9.1* |
 | **Edit the trip** | `data-edit-trip` in the section head — *added v1.9.0* |
 | Add a reservation | per-day add button (pre-fills that day) |
-| Edit a reservation | `data-edit-item`, and ⋯ → Edit |
-| Reorder within a day | `data-move-item` + `data-move-dir`, and ⋯ → Move up/down |
+| Edit a reservation | **Tap the card body** (*v1.10.2*), `data-edit-item`, and ⋯ → Edit. The ⋯ button, the hover cluster and "Add reservation" are all excluded from the card tap |
+| **Tap a check-out row** | Opens the underlying hotel — *v1.10.2*. Same thing its Edit button already did |
+| Reorder within a day | **Press and hold ~450 ms, then drag** (*v1.10.2*), `data-move-item` + `data-move-dir`, and ⋯ → Move up/down. Drag is pointer-only and confined to one day; the ↑/↓ buttons stay as the keyboard and assistive path. Moving before the hold fires scrolls the page instead, and a completed drag never also opens the editor |
 | Delete a reservation | `data-delete-item`, and ⋯ → Delete |
 | ⋯ action sheet | `dialog-item-actions`: Edit · Move up · Move down · **Open in Google Maps** · Delete |
 | Geocode a place | `data-locate-item` ("Locate") |
@@ -102,7 +103,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.10.1 · <sha>` — selectable |
+| Build version | `TravelHub v1.10.2 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
@@ -128,5 +129,5 @@ has unsaved edits.
 
 ## Diagnostics
 
-`?selftest=1` runs 104 checks and prints a pass/fail panel. It refuses to run while joined to
+`?selftest=1` runs 116 checks and prints a pass/fail panel. It refuses to run while joined to
 a shared room, because it stubs `localStorage.setItem` to throw.
