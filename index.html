@@ -416,8 +416,13 @@ h1, h2, h3, h4, .brand__name {
    Travelling gets a solid fill because "you are on this trip now" is the one state worth
    interrupting for; the rest stay quiet on the coral. */
 .tripcard__cover .tag--timing { right: auto; left: 0.8rem; background: rgba(44,42,40,0.55); color: #fff; font-weight: 600; }
-.tripcard__cover .tag--travelling { background: var(--ok, #3f9b7c); }
-.tripcard__cover .tag--past { background: rgba(44,42,40,0.38); }
+/* Hardcoded, not a token: there is no --ok in this file, and `var(--ok, …)` would silently
+   restyle this badge the day someone defines one. */
+.tripcard__cover .tag--travelling { background: #2f7d63; }
+/* 0.55 measures 5.57-6.81:1 for white over the cover gradient; 0.38 gave only 3.97:1 at the
+   gradient's light end, which fails for 11px text. Measured, not eyeballed — the release's
+   contrast check only covered the opaque surface tokens, so these badges slipped past it. */
+.tripcard__cover .tag--past { background: rgba(44,42,40,0.58); }
 .tripcard__cover h3 { margin: 0; color: #fff; font-size: 1.25rem; }
 .tripcard__body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; }
 .tripcard__row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.86rem; }
@@ -4237,6 +4242,18 @@ function router() {
   else if (id === "family") { addBtn.setAttribute("aria-label", "Add checklist item"); addBtn.title = "Add checklist item"; }
   else { addBtn.setAttribute("aria-label", "New trip"); addBtn.title = "New trip"; }
 
+  /* Leaving the itinerary has to stop the scroll spy. Screens are hidden with display:none,
+     so its day nodes survive with all-zero rects — every day then reads as "above the header",
+     the last day wins, and scrolling an unrelated screen would rewrite timelineDayIso (which
+     is what the FAB pre-fills) and smooth-scroll a hidden chip. renderItinerary re-arms it. */
+
+
+  /* Leaving the itinerary has to stop the scroll spy. Screens are hidden with display:none,
+     so its day nodes survive with all-zero rects — every day then reads as "above the header",
+     the last day wins, and scrolling an unrelated screen would rewrite timelineDayIso (which
+     is what the FAB pre-fills) and smooth-scroll a hidden chip. renderItinerary re-arms it. */
+  if (id !== "itinerary") teardownDayScrollSpy();
+
   renderActiveShellScreen();
   window.scrollTo({ top: 0, behavior: "auto" });
 }
@@ -4534,6 +4551,7 @@ function renderItinerary() {
   bindTimelineGestures(); // idempotent — binds once to the static container
 
   if (tripsWithDates.length === 0) {
+    teardownDayScrollSpy(); // no strip to track, and the nodes it watched are about to go
     sw.innerHTML = "";
     body.innerHTML = `<div class="empty-card"><h3>No dated trips yet</h3><p>Add start and end dates to a trip to build a day-by-day itinerary.</p></div>`;
     return;
@@ -4570,7 +4588,7 @@ function renderItinerary() {
       </div>
       <div id="daystrip-slot"></div>
     </div>
-    <div id="itinerary-view" role="tabpanel" aria-label="${escapeHtml(nameWithCity(trip))}"></div>`;
+    <div id="itinerary-view" role="tabpanel" aria-label="${nameWithCity(trip)}"></div>`;
 
   // Renaming a trip while planning it: the Trips card has an Edit button, this
   // screen didn't, and this is where you're looking when the name is wrong.
@@ -5989,6 +6007,7 @@ window.VacationApp = {
   mergeWithBase: (basePayload, remotePayload) => {
     const { state: merged, stats } = merge3(basePayload, state, remotePayload);
     if (!merged) return stats;
+    // merge3 already returns normalizeState(merged), so this is a clean payload.
     state = merged;
     saveState();
     render();
@@ -5997,7 +6016,7 @@ window.VacationApp = {
   /* Has this device drifted from the last synced copy? Catches edits that never
      reached the server — the tab closed inside the save debounce, or the retries ran
      out — which a plain reload would otherwise silently overwrite.
-     Documents compare by id only: that's all the base stores. */
+     The base no longer reduces anything — see hasLocalChangesSince below. */
   /* A merge ran, so the What's-new list must say so. Without this it shows only the
      other person's diff, which reads as "my edits were dropped" when they weren't. */
   noteMerged: (by) => {

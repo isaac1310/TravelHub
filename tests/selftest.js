@@ -2112,6 +2112,77 @@
         ? true : "the shared checklist is missing";
     });
 
+    check("a legacy payload cannot reach live state through a merge", () => {
+      /* Raised in review as a live bug — merge3 starts from `{ ...remote }`, so a payload from
+         a device still on v1.10.5 looked like it would put `documents` back into state. It does
+         not: merge3 returns `normalizeState(merged)`, which strips the key. Kept as a guard,
+         because that single normalise is now the only thing standing between an old client's
+         base64 and both localStorage and the next outbound push. */
+      const legacy = {
+        trips: [makeTrip({ id: "t1" })], items: [], version: 2,
+        documents: [{ id: "d1", name: "old.pdf", size: 10, dataUrl: "data:application/pdf;base64,AAA" }],
+      };
+      const before = structuredClone(state);
+      try {
+        const stats = window.VacationApp.mergeWithBase(normalizeState(structuredClone(legacy)), legacy);
+        if (!stats) return "the merge returned nothing";
+        if ("documents" in state) return "documents came back into live state";
+        const stored = localStorage.getItem(STORAGE_KEY) || "";
+        return stored.includes("base64") ? "base64 reached localStorage" : true;
+      } finally {
+        state = before;
+        saveState();
+      }
+    });
+
+    check("the merge base never stores legacy attachments", () => {
+      /* The other half of the same review finding. Four of writeMergeBase's call sites pass a
+         payload straight from the server; storing one verbatim could exceed the localStorage
+         quota, and its catch then DELETES the base — after which the next pull has no base and
+         wholesale-replaces, discarding local edits. */
+      const KEY = "travelhub-sync-base";
+      const prev = localStorage.getItem(KEY);
+      try {
+        const big = "data:application/pdf;base64," + "A".repeat(200000);
+        window.VacationShare?.__writeMergeBaseForTest?.({
+          trips: [], items: [], version: 2,
+          documents: [{ id: "d1", name: "big.pdf", size: 1, dataUrl: big }],
+        });
+        const stored = localStorage.getItem(KEY);
+        if (stored === null) return skip("share.js did not expose the base writer");
+        if (stored.includes("base64")) return "attachment body was stored in the merge base";
+        return JSON.parse(stored).documents === undefined
+          ? true : "the documents key survived into the base";
+      } finally {
+        if (prev === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, prev);
+      }
+    });
+
+    check("leaving the itinerary stops the scroll spy", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      /* Deliberately NOT withItineraryVisible: its cleanup re-renders on a hidden screen, which
+         tears the spy down by itself — so wrapping this check made it pass with the fix removed.
+         Route to the itinerary for real, leave the spy armed, then route away. */
+      const prevHash = location.hash;
+      try {
+        location.hash = "#itinerary";
+        router();
+        if (!dayScrollHandler) return skip("desktop layout — spy never armed");
+        /* Screens are hidden with display:none, so the spy's day nodes survive with zero rects:
+           every day then reads as above the header, the last one wins, and scrolling an
+           unrelated screen rewrote timelineDayIso — which is what the FAB pre-fills. */
+        location.hash = "#budget";
+        router();
+        return dayScrollHandler ? "the scroll handler survived leaving the itinerary" : true;
+      } finally {
+        location.hash = prevHash || "#trips";
+        router();
+      }
+    });
+
     check("nothing still points at the removed document code", () => {
       const gone = ["docsTotalBytes", "docsUsageLabel", "documentListHtml", "addDocumentFiles",
                     "bindDocumentActions", "DOC_MAX_BYTES", "DOC_TOTAL_MAX_BYTES"];

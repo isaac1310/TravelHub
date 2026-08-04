@@ -164,8 +164,11 @@
      promise already running — would be wrong: syncNow() merges and then awaits a push, so it
      would be handed a save whose payload was captured BEFORE the merge, see it succeed, and
      mark the merged state saved without ever sending it. A queued follow-up runs a fresh save
-     body, which re-reads current state, so whoever waits is guaranteed their state reached the
-     server. The chain clears in `finally` so one network failure cannot wedge saving forever. */
+     body, which re-reads current state, so a waiter that resolves has had its state sent.
+     On a throw the chain rejects rather than resolving, so a waiter is never told a failed save
+     succeeded — but a queued follow-up is dropped, which is why pendingSave stays true and the
+     poll and reconnect paths remain the backstop. The chain clears in `finally` so one network
+     failure cannot wedge saving forever. */
   let savePromise = null;
   let saveQueued = false;
 
@@ -867,7 +870,15 @@
 
   function writeMergeBase(payload) {
     try {
-      localStorage.setItem(MERGE_BASE_KEY, JSON.stringify(payload));
+      /* Strip `documents` on the way in. Four of the six call sites pass a payload straight
+         from the server, and until every family device has upgraded past v1.10.5 that payload
+         still carries inline base64 attachments. Storing it verbatim could exceed the
+         localStorage quota, and the catch below then deletes the base — after which the next
+         pull has no base to compare against and does a wholesale replace, silently discarding
+         local edits that were never pushed. That is the exact failure the base exists to
+         prevent, so the reduce has to survive even though the app no longer produces the key. */
+      const { documents: _legacyDocs, ...clean } = payload || {};
+      localStorage.setItem(MERGE_BASE_KEY, JSON.stringify(clean));
     } catch {
       // A stale base is worse than none — it would make the merge confidently wrong.
       try { localStorage.removeItem(MERGE_BASE_KEY); } catch { /* private mode */ }
@@ -931,6 +942,9 @@
     checkForUpdates,
     _ts: ts, // exposed for the smoke test — timestamp comparison is easy to break silently
     _parseShareLink: parseShareLink, // ditto
+    /* Four call sites pass writeMergeBase a payload straight from the server, so what it
+       strips is load-bearing on the upgrade path — worth a check rather than a comment. */
+    __writeMergeBaseForTest: writeMergeBase,
     getSyncInfo: () => ({ lastSyncAt, lastEditor: lastEditorInfo, updatesAvailable: !!pendingRemoteInfo }),
     getRoomId: () => (sharedMode ? roomId : null),
     getShareUrl,
