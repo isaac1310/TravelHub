@@ -1754,7 +1754,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.10.3";
+const APP_VERSION = "v1.10.4";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -2956,6 +2956,13 @@ function render() {
   if (typeof renderActiveShellScreen === "function") renderActiveShellScreen();
 }
 
+/* How long after touching a <select> a backdrop tap is treated as the option list
+   closing rather than the user reaching outside the sheet. Long enough to cover the
+   popup's dismiss animation, short enough that a deliberate tap-outside still works
+   on the second try. Exposed for the self-test. */
+const SELECT_POPUP_GRACE_MS = 700;
+function nowMs() { return Date.now(); }
+
 /* A snapshot of the dialog's form when it opened, so a backdrop tap can tell
    "nothing typed yet" (safe to dismiss) from "half-filled" (don't discard it). */
 function formSignature(dialog) {
@@ -3003,11 +3010,27 @@ function setupDialogCloseHandlers() {
      reports the dialog itself as the target — clicks on content hit a child. */
   document.querySelectorAll("dialog").forEach((dialog) => {
     let startedOnBackdrop = false;
+    /* Android renders a <select>'s option list as an overlay across the upper part of the
+       screen — which, for a bottom-sheet dialog, is the backdrop. Dismissing it delivers
+       the tap through to the page at that coordinate, so the dialog reports a backdrop
+       tap and closed itself. The dirty-form guard below did not help, because the stray
+       tap arrives before `change` has made the form dirty. Hence the window: a backdrop
+       tap that lands right after touching a select is the popup closing, not the user
+       reaching outside the sheet. Fixes "picking Paid closes the Edit expense sheet". */
+    let selectTouchedAt = 0;
+    dialog.addEventListener("pointerdown", (e) => {
+      if (e.target.closest("select")) selectTouchedAt = nowMs();
+    }, true);
+    dialog.addEventListener("change", (e) => {
+      if (e.target.tagName === "SELECT") selectTouchedAt = nowMs();
+    }, true);
+
     // Track where the press began, so selecting text and releasing outside
     // doesn't count as a backdrop tap.
     dialog.addEventListener("pointerdown", (e) => { startedOnBackdrop = e.target === dialog; });
     dialog.addEventListener("click", (e) => {
       if (!startedOnBackdrop || e.target !== dialog) return;
+      if (nowMs() - selectTouchedAt < SELECT_POPUP_GRACE_MS) return;
       const sig = formSignature(dialog);
       // Never throw away typed input on a mis-tap — Cancel and Esc still work.
       if (sig !== null && sig !== dialog.dataset.openSignature) return;
