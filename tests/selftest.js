@@ -106,6 +106,7 @@
       releaseV110();
       releaseV1101();
       releaseV1102();
+      releaseV1103();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -1249,6 +1250,247 @@
       renderItinerary();
       return document.querySelector("#itinerary-body [data-move-item]")
         ? true : "the move buttons are gone";
+    });
+  }
+
+  /* ===== 1b10. v1.10.3 — expense ids, occlusion, overflow, blueprints v2 =====
+     The expense-id bug shipped in the very first commit and was invisible to every
+     existing check, because nothing here had ever round-tripped an expense through
+     the real dialog. These drive the form the way a person does. */
+
+  function releaseV1103() {
+    group("v1.10.3");
+
+    const form = () => document.getElementById("form-expense");
+    const fld = (n) => form().querySelector(`[name="${n}"]`);
+
+    /* Fill and submit the real form, so buildExpenseFromForm and handleExpenseSubmit
+       are both exercised — testing them apart is what let the bug through. */
+    function submitExpense(tripId, over, expense) {
+      openExpenseDialog(tripId, expense || null);
+      const v = Object.assign(
+        { label: "Selftest row", category: "Food", amount: "120", date: "2026-09-17",
+          status: "booked", amountPaid: "0", paidDate: "" },
+        over || {}
+      );
+      for (const [k, val] of Object.entries(v)) fld(k).value = val;
+      form().dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      closeDialog(document.getElementById("dialog-expense"));
+    }
+
+    const testTrip = () => state.trips[0];
+
+    check("a newly added expense has a real id", () => {
+      const trip = testTrip();
+      if (!trip) return true;
+      const before = trip.expenses.length;
+      submitExpense(trip.id, { label: "Row A" });
+      if (trip.expenses.length !== before + 1) return "the expense was not added";
+      const added = trip.expenses[trip.expenses.length - 1];
+      return added.id ? true : `id is ${JSON.stringify(added.id)}`;
+    });
+
+    check("editing an expense keeps its id", () => {
+      const trip = testTrip();
+      if (!trip) return true;
+      /* Seed the row directly with a known-good id rather than adding it through the
+         form. Going through the form first made this check useless: with the bug present
+         the added row already had id "", so "" was compared against "" and it passed. */
+      const seeded = makeExpense({ id: "exp-known-1", label: "Row B" });
+      trip.expenses.push(seeded);
+      submitExpense(trip.id, { label: "Row B renamed", amount: "250" }, seeded);
+      const after = trip.expenses.find((x) => x.label === "Row B renamed");
+      if (!after) return "the edit did not apply";
+      return eq(after.id, "exp-known-1", "id after edit");
+    });
+
+    check("two added expenses get distinct ids", () => {
+      const trip = testTrip();
+      if (!trip) return true;
+      submitExpense(trip.id, { label: "Row C" });
+      submitExpense(trip.id, { label: "Row D" });
+      const ids = trip.expenses.slice(-2).map((e) => e.id);
+      if (ids.some((i) => !i)) return `an id is empty: ${JSON.stringify(ids)}`;
+      return ids[0] !== ids[1] ? true : `both ids are ${ids[0]}`;
+    });
+
+    check("row actions still resolve an expense after an edit", () => {
+      const trip = testTrip();
+      if (!trip) return true;
+      submitExpense(trip.id, { label: "Row E" });
+      const added = trip.expenses[trip.expenses.length - 1];
+      submitExpense(trip.id, { label: "Row E edited" }, added);
+      const target = trip.expenses.find((x) => x.label === "Row E edited");
+      // This is the lookup every row button performs; an empty id made it fail silently.
+      return trip.expenses.find((x) => x.id === target.id) === target
+        ? true : "the row's own id no longer finds it";
+    });
+
+    check("the repair migration backfills an empty id and is idempotent", () => {
+      const broken = {
+        trips: [{ id: "trip-r", name: "R", year: 2026, budget: 100, expenses: [
+          makeExpense({ id: "", label: "Broken" }),
+          makeExpense({ id: "exp-keep", label: "Fine" }),
+        ] }],
+        items: [], version: 2,
+      };
+      const once = normalizeState(JSON.parse(JSON.stringify(broken)));
+      const exps = once.trips[0].expenses;
+      if (!exps[0].id) return "the empty id was not repaired";
+      if (exps[1].id !== "exp-keep") return "a good id was rewritten";
+      // Same input must give the same id on every device, or a sync duplicates the row.
+      const twice = normalizeState(JSON.parse(JSON.stringify(broken)));
+      if (twice.trips[0].expenses[0].id !== exps[0].id) return "the repaired id is not deterministic";
+      // And re-running over already-repaired data must not change anything.
+      const again = normalizeState(JSON.parse(JSON.stringify(once)));
+      return eq(again.trips[0].expenses[0].id, exps[0].id, "id after a second pass");
+    });
+
+    check("a repaired expense survives a merge instead of being dropped", () => {
+      // merge3List filters on `e.id`, so an empty id vanished on the next sync.
+      const mk = () => ({
+        trips: [{ id: "trip-r", name: "R", year: 2026, budget: 100,
+          expenses: [makeExpense({ id: "", label: "Broken" })] }],
+        items: [], version: 2,
+      });
+      const base = normalizeState(mk());
+      const local = normalizeState(JSON.parse(JSON.stringify(mk())));
+      const remote = normalizeState(JSON.parse(JSON.stringify(mk())));
+      const merged = merge3(base, local, remote).state;
+      if (!merged) return "the merge was blocked";
+      const exps = merged.trips.find((t) => t.id === "trip-r").expenses;
+      if (exps.length !== 1) return `expected 1 expense after merge, got ${exps.length}`;
+      return truthy(exps[0].id, "merged expense id");
+    });
+
+    check("two-up dialog rows can shrink below their inputs' natural width", () => {
+      const row = document.querySelector("#dialog-item .roll-years");
+      if (!row) return "no .roll-years row found";
+      const cols = getComputedStyle(row).gridTemplateColumns;
+      // `1fr` resolves to minmax(auto, 1fr) and could never shrink — that was the overflow.
+      const field = row.querySelector(".field");
+      if (field && getComputedStyle(field).minWidth !== "0px") return "the field can still force its column wider";
+      return /px/.test(cols) ? true : `unexpected columns: ${cols}`;
+    });
+
+    /* Layout checks need a real viewport. Some automation harnesses run the page at
+       0x0, where every rect is meaningless — measuring there reports failures that do
+       not exist. Skip rather than lie. */
+    const laidOut = () => window.innerWidth >= 320 && window.innerHeight >= 320;
+
+    /* Pin the dialog to the family's phone width rather than trusting the harness
+       viewport. At a roomy 514px `1fr 1fr` fits and this check passed against its own
+       mutant — the overflow only appears at ~412px and below. */
+    const PHONE_W = 412;
+
+    check("no dialog form scrolls sideways at phone width", () => {
+      if (!laidOut()) return true;
+      const bad = [];
+      document.querySelectorAll("dialog form").forEach((f) => {
+        const d = f.closest("dialog");
+        const wasOpen = d.open;
+        const prevStyle = d.style.cssText;
+        if (!wasOpen) d.showModal();
+        d.style.width = PHONE_W + "px";
+        d.style.maxWidth = PHONE_W + "px";
+        /* The per-type groups in #dialog-item are `hidden`, so their .roll-years rows had
+           zero width and could not overflow — the flight fields are exactly the ones that
+           clip. Reveal every group for the measurement, then put them back. */
+        const hidden = [...f.querySelectorAll("[data-item-group][hidden]")];
+        hidden.forEach((g) => { g.hidden = false; });
+        if (f.clientWidth > 0 && f.scrollWidth > f.clientWidth + 1) {
+          bad.push(`${d.id} ${f.scrollWidth}>${f.clientWidth}`);
+        }
+        hidden.forEach((g) => { g.hidden = true; });
+        d.style.cssText = prevStyle;
+        if (!wasOpen) d.close();
+      });
+      return bad.length ? bad.join(", ") : true;
+    });
+
+    check("the itinerary reserves enough room to clear the FAB", () => {
+      if (!laidOut()) return true;
+      /* The FAB is appended by renderItinerary, so it does not exist while the suite sits
+         on the Trips screen — without this the check returned true and passed its mutant. */
+      const trip = state.trips.find((t) => t.startDate && t.endDate);
+      if (!trip) return true;
+      const prevTrip = itineraryTripId;
+      itineraryTripId = trip.id;
+      renderItinerary();
+      try {
+        const view = document.getElementById("itinerary-view");
+        const fab = document.querySelector(".fab");
+        if (!view) return "the itinerary did not render";
+        const fabStyle = fab && getComputedStyle(fab);
+        if (!fabStyle || fabStyle.position !== "fixed") return true;  // desktop: no FAB
+        /* Computed values, not getBoundingClientRect: the itinerary screen may be
+           display:none while another tab is active, and every rect is then 0 — which
+           made this check pass against its own mutant. */
+        const reserved = parseFloat(getComputedStyle(view).paddingBottom) || 0;
+        const needed = (parseFloat(fabStyle.bottom) || 0) + (parseFloat(fabStyle.height) || 0);
+        return reserved >= needed
+          ? true : `reserved ${reserved}px but the FAB's top edge is ${Math.round(needed)}px up`;
+      } finally {
+        itineraryTripId = prevTrip;
+      }
+    });
+
+    check("a focused field is not left under the sticky action bar", () => {
+      if (!laidOut()) return true;
+      const d = document.getElementById("dialog-expense");
+      const wasOpen = d.open;
+      openExpenseDialog(state.trips[0] ? state.trips[0].id : "x");
+      const actions = d.querySelector(".dialog__actions");
+      if (getComputedStyle(actions).position !== "sticky") { if (!wasOpen) closeDialog(d); return true; }
+      /* Force a short scroll box. On a tall harness viewport the whole form fits, the bar
+         never pins over anything, and this passed with the fix entirely removed. A real
+         phone in landscape — or any 88dvh shorter than the form — is the failing case. */
+      const prevStyle = d.style.cssText;
+      d.style.maxHeight = "380px";
+      const status = d.querySelector('[name="status"]');
+      status.focus();
+      const overlap = status.closest(".field").getBoundingClientRect().bottom
+        - actions.getBoundingClientRect().top;
+      d.style.cssText = prevStyle;
+      if (!wasOpen) closeDialog(d);
+      // Padding reserves the room; the focusin handler does the scrolling.
+      return overlap <= 0 ? true : `the focused field is ${Math.round(overlap)}px under the Save bar`;
+    });
+
+    check("the itinerary step cards carry the featured trip", () => {
+      renderTripsScreen();
+      const card = document.querySelector('#steps .step-card[data-go="itinerary"]');
+      if (!card) return "no itinerary step card rendered";
+      const featured = featuredTrip();
+      if (!featured) return true;
+      return eq(card.getAttribute("data-trip-id"), featured.id, "step card trip id");
+    });
+
+    check("every blueprint has both a landmark and its city context", () => {
+      const keys = Object.keys(MONUMENTS);
+      if (keys.length < 19) return `only ${keys.length} cities`;
+      const bad = keys.filter((k) => !MONUMENTS[k] || !MONUMENTS[k].fg || !MONUMENTS[k].bg);
+      if (bad.length) return `missing a layer: ${bad.join(", ")}`;
+      const art = coverArt({ name: "x", destinations: ["Paris, France"] });
+      const paths = (art.match(/<path /g) || []).length;
+      return paths === 2 ? true : `coverArt drew ${paths} paths`;
+    });
+
+    check("the new cities each resolve to their own blueprint", () => {
+      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
+      const cases = {
+        telaviv: "Tel Aviv, Israel", jerusalem: "Jerusalem, Israel",
+        budapest: "Budapest, Hungary", berlin: "Berlin, Germany",
+        lisbon: "Lisboa, Portugal", madrid: "Madrid, Spain",
+        tokyo: "Tokyo, Japan", bangkok: "Bangkok, Thailand",
+      };
+      for (const [key, dest] of Object.entries(cases)) {
+        const got = monumentFor(t(dest));
+        if (got !== MONUMENTS[key]) return `${dest} did not resolve to ${key}`;
+        if (got === MONUMENTS.generic) return `${dest} fell back to generic`;
+      }
+      return monumentFor(t("Nowhere, Atlantis")) === MONUMENTS.generic
+        ? true : "an unknown city no longer falls back";
     });
   }
 

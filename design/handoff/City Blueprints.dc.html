@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:#fff; color:#111; font-family:"Inter",system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#c2542f; } a:hover { color:#9e421f; }
+  @keyframes bp-draw { from { stroke-dashoffset: 620; } to { stroke-dashoffset: 0; } }
+</style>
+</helmet>
+
+<div style="padding:40px 44px 64px; max-width:1500px;">
+  <div style="display:flex; flex-direction:column; gap:6px; max-width:760px; margin-bottom:14px;">
+    <div style="font-size:19px; font-weight:700; letter-spacing:-0.01em;">TravelHub city blueprints — v2</div>
+    <div style="font-size:13.5px; color:#666; line-height:1.55; text-wrap:pretty;">Each destination is now a landmark plus its city context — the bridge, river, rooftops, tram or tree that place it. Same contract as before: 210 × 100 grid, baseline at y = 88, anchored <span style="font-family:ui-monospace,monospace; font-size:12.5px;">xMaxYMax meet</span>. Two line treatments per city: <strong>A</strong> uniform weight, <strong>B</strong> depth weighting where context recedes. Each is shown large and at 110px to check it survives the small size.</div>
+  </div>
+  <div style="display:flex; gap:22px; align-items:center; padding:12px 0 24px; border-bottom:1px solid #eee; font-size:12.5px; color:#666;">
+    <span style="display:inline-flex; align-items:center; gap:7px;"><span style="width:22px; height:0; border-top:2px solid #111;"></span>Landmark</span>
+    <span style="display:inline-flex; align-items:center; gap:7px;"><span style="width:22px; height:0; border-top:1.2px solid #9a9a9a;"></span>City context (variant B)</span>
+    <span style="display:inline-flex; align-items:center; gap:7px;"><span style="width:22px; height:0; border-top:1px dashed #d4d4d4;"></span>Baseline y = 88</span>
+  </div>
+
+  <div style="padding:26px 0 6px;">
+    <div style="font-size:14px; font-weight:600; margin-bottom:4px;">Ideas — how the blueprints could live in the app</div>
+    <div style="font-size:12.5px; color:#8a8a8a; margin-bottom:16px;">Three treatments using the same paths, no new artwork needed.</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-bottom:14px;">
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="position:relative; background:#fbf7f3; border:1px solid #efe6dd; border-radius:16px; overflow:hidden; height:150px; box-shadow:0 4px 16px rgba(70,45,30,0.06);">
+          <svg viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" style="position:absolute; inset:0; width:100%; height:100%; opacity:0.9;" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{ demo.bg }}" stroke="#e4d8cc" stroke-width="1.2"></path>
+            <path d="{{ demo.fg }}" stroke="#ef8e7f" stroke-width="2.2"></path>
+          </svg>
+          <div style="position:relative; padding:16px 18px;">
+            <div style="font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:#9a9089; font-weight:600;">Next trip · in 46 days</div>
+            <div style="font-size:22px; font-weight:700; letter-spacing:-0.01em; color:#2c2a28;">Paris</div>
+            <div style="font-size:12px; color:#9a9089;">16 – 19 Sept · Itzik, Moran</div>
+          </div>
+        </div>
+        <div style="font-size:11.5px; color:#8a8a8a;"><strong style="color:#555;">Trip card watermark</strong> — landmark in coral, context in the card's own line colour; sits behind the text, right-baseline anchored.</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="position:relative; background:#2c2a28; border-radius:16px; overflow:hidden; height:150px;">
+          <svg viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" style="position:absolute; inset:0; width:100%; height:100%;" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{ demo.bg }}" stroke="rgba(255,255,255,0.28)" stroke-width="1.2"></path>
+            <path d="{{ demo.fg }}" stroke="#fff" stroke-width="2.2"></path>
+          </svg>
+          <div style="position:relative; padding:16px 18px; color:#fff;">
+            <div style="font-size:10px; letter-spacing:0.16em; text-transform:uppercase; opacity:0.6; font-weight:600;">Still to pay</div>
+            <div style="font-size:22px; font-weight:700; letter-spacing:-0.01em;">₪6,751</div>
+            <div style="font-size:12px; opacity:0.6;">Paris budget</div>
+          </div>
+        </div>
+        <div style="font-size:11.5px; color:#8a8a8a;"><strong style="color:#555;">Dark surfaces</strong> — white on ink for the budget answer card and headers; context at 28% white.</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="position:relative; background:#fcfcfc; border:1px solid #f0f0f0; border-radius:16px; overflow:hidden; height:150px;">
+          <svg viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" style="position:absolute; inset:0; width:100%; height:100%;" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{ demo.bg }}" stroke="#dcdcdc" stroke-width="1.2"></path>
+            <path d="{{ demo.fg }}" stroke="#111" stroke-width="2.2" stroke-dasharray="620" style="animation:bp-draw 3.2s ease-in-out infinite alternate;"></path>
+          </svg>
+          <div style="position:relative; padding:16px 18px;">
+            <div style="font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:#aaa; font-weight:600;">Loading / empty state</div>
+            <div style="font-size:15px; font-weight:600; color:#444;">Sketching your trip…</div>
+          </div>
+        </div>
+        <div style="font-size:11.5px; color:#8a8a8a;"><strong style="color:#555;">Draw-on animation</strong> — stroke-dash draw for loading, empty states, or the moment a trip is created. Static under reduced-motion.</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="position:relative; background:#fbf7f3; border:1px solid #efe6dd; border-radius:16px; height:150px; display:flex; align-items:center; justify-content:center; gap:22px;">
+          <span style="position:relative; display:inline-block; transform:rotate(-8deg);">
+            <svg viewBox="0 0 120 120" style="width:104px; height:104px; display:block;" fill="none">
+              <circle cx="60" cy="60" r="56" stroke="#b3552f" stroke-width="2" stroke-dasharray="4 5"></circle>
+              <circle cx="60" cy="60" r="47" stroke="#b3552f" stroke-width="1"></circle>
+              <g transform="translate(8,26) scale(0.5)"><path d="{{ demo.fg }}" stroke="#b3552f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path></g>
+              <text x="60" y="98" text-anchor="middle" fill="#b3552f" font-size="9" font-weight="700" letter-spacing="2" font-family="Inter,sans-serif">PARIS · 2026</text>
+            </svg>
+          </span>
+          <div style="max-width:120px;">
+            <div style="font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:#9a9089; font-weight:600;">Past trips</div>
+            <div style="font-size:14px; font-weight:600; color:#2c2a28;">Trip recap</div>
+          </div>
+        </div>
+        <div style="font-size:11.5px; color:#8a8a8a;"><strong style="color:#555;">Passport stamp</strong> — completed trips get their blueprint inside a rotated dashed stamp; a family logbook over time.</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="position:relative; background:repeating-linear-gradient(45deg,#f1ece6 0 14px,#e9e2da 14px 28px); border-radius:16px; height:150px; display:flex; align-items:center; justify-content:center; gap:26px;">
+          <svg viewBox="0 0 60 76" style="width:52px; height:auto; display:block;" fill="none">
+            <path d="M30 74C30 74 6 46 6 28a24 24 0 1 1 48 0c0 18-24 46-24 46Z" fill="#ef8e7f" stroke="#fff" stroke-width="2.5"></path>
+            <g transform="translate(9,10) scale(0.21)"><path d="{{ demo.fg }}" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></path></g>
+          </svg>
+          <svg viewBox="0 0 60 76" style="width:40px; height:auto; display:block; opacity:0.85;" fill="none">
+            <path d="M30 74C30 74 6 46 6 28a24 24 0 1 1 48 0c0 18-24 46-24 46Z" fill="#2c2a28" stroke="#fff" stroke-width="2.5"></path>
+            <g transform="translate(9,10) scale(0.21)"><path d="{{ pinAlt.fg }}" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"></path></g>
+          </svg>
+        </div>
+        <div style="font-size:11.5px; color:#8a8a8a;"><strong style="color:#555;">Map pin glyph</strong> — the landmark becomes each city's pin on the route map; coral = active trip, ink = other stops.</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="position:relative; background:#fbf7f3; border:1px solid #efe6dd; border-radius:16px; overflow:hidden; height:150px;">
+          <svg viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" style="position:absolute; right:-30px; top:8px; width:78%; height:auto; opacity:0.5;" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="{{ demo.bg }}" stroke="#e4d8cc" stroke-width="1.2"></path>
+            <path d="{{ demo.fg }}" stroke="#c8a595" stroke-width="2"></path>
+          </svg>
+          <div style="position:relative; padding:14px 16px;">
+            <div style="font-size:10px; letter-spacing:0.16em; text-transform:uppercase; color:#9a9089; font-weight:600;">Paris · Day 1</div>
+            <div style="font-size:19px; font-weight:700; color:#2c2a28;">Wednesday 16</div>
+          </div>
+          <div style="position:absolute; left:0; right:0; bottom:0; background:rgba(255,255,255,0.9); border-top:1px solid #efe6dd; padding:9px 16px; display:flex; gap:7px;">
+            <span style="width:38px; text-align:center; background:#2c2a28; color:#fff; border-radius:10px; padding:4px 0; font-size:12px; font-weight:700;">16</span>
+            <span style="width:38px; text-align:center; background:#fff; border:1px solid #efe6dd; border-radius:10px; padding:4px 0; font-size:12px; font-weight:700; color:#9a9089;">17</span>
+            <span style="width:38px; text-align:center; background:#fff; border:1px solid #efe6dd; border-radius:10px; padding:4px 0; font-size:12px; font-weight:700; color:#9a9089;">18</span>
+          </div>
+        </div>
+        <div style="font-size:11.5px; color:#8a8a8a;"><strong style="color:#555;">Day-header parallax</strong> — blueprint sits behind the day title at 50% scroll speed, fading as the list scrolls; a photo-free alternative header.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(430px,1fr)); gap:34px 30px; padding-top:26px;">
+    <sc-for list="{{ cities }}" as="c" hint-placeholder-count="6">
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; align-items:baseline; gap:9px; border-bottom:1px solid #f0f0f0; padding-bottom:7px;">
+          <span style="font-size:14px; font-weight:600; letter-spacing:-0.005em;">{{ c.city }}</span>
+          <span style="font-size:12px; color:#8a8a8a;">{{ c.landmark }}</span>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <div style="position:relative; background:#fcfcfc; border:1px solid #f0f0f0; border-radius:6px;">
+              <svg viewBox="0 0 210 100" style="width:100%; height:auto; display:block;" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M0 88 h210" stroke="#e6e6e6" stroke-width="1" stroke-dasharray="3 4"></path>
+                <path d="{{ c.bg }}"></path>
+                <path d="{{ c.fg }}"></path>
+              </svg>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:10.5px; font-weight:700; letter-spacing:0.12em; color:#aaa;">A · UNIFORM</span>
+              <span style="width:110px; margin-left:auto;">
+                <svg viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" style="width:110px; height:auto; display:block;" fill="none" stroke="#111" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="{{ c.bg }}"></path>
+                  <path d="{{ c.fg }}"></path>
+                </svg>
+              </span>
+            </div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <div style="position:relative; background:#fcfcfc; border:1px solid #f0f0f0; border-radius:6px;">
+              <svg viewBox="0 0 210 100" style="width:100%; height:auto; display:block;" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M0 88 h210" stroke="#e6e6e6" stroke-width="1" stroke-dasharray="3 4"></path>
+                <path d="{{ c.bg }}" stroke="{{ contextColor }}" stroke-width="{{ contextWeight }}"></path>
+                <path d="{{ c.fg }}" stroke="#111" stroke-width="{{ landmarkWeight }}"></path>
+              </svg>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:10.5px; font-weight:700; letter-spacing:0.12em; color:#aaa;">B · DEPTH</span>
+              <span style="width:110px; margin-left:auto;">
+                <svg viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" style="width:110px; height:auto; display:block;" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="{{ c.bg }}" stroke="{{ contextColor }}" stroke-width="{{ contextWeight }}"></path>
+                  <path d="{{ c.fg }}" stroke="#111" stroke-width="{{ landmarkWeight }}"></path>
+                </svg>
+              </span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;contextColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#9a9a9a&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;#9a9a9a&quot;,&quot;#bdbdbd&quot;,&quot;#c2542f&quot;,&quot;#111111&quot;],&quot;section&quot;:&quot;Variant B&quot;},&quot;contextWeight&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1.2,&quot;min&quot;:0.6,&quot;max&quot;:2.4,&quot;step&quot;:0.1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Variant B&quot;},&quot;landmarkWeight&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:2.2,&quot;min&quot;:1.4,&quot;max&quot;:3.4,&quot;step&quot;:0.1,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Variant B&quot;}}">
+const CITIES = [
+  { city: "Paris", landmark: "Eiffel Tower · Haussmann rooftops",
+    fg: "M100 8v10 M97 18h6 M97 18Q95 34 91 48Q86 70 76 88 M103 18Q105 34 109 48Q114 70 124 88 M93 36h14 M93 41h14 M93 36v5 M107 36v5 M92 44l16 13 M108 44l-16 13 M87 57h26 M86 62h28 M87 57v5 M113 57v5 M88 88Q100 64 112 88",
+    bg: "M34 88v-16h16v16 M34 72l8-6 8 6 M40 78h4 M152 88v-18h18v18 M152 70l9-7 9 7 M158 76h6 M26 88h160" },
+  { city: "Bratislava", landmark: "Castle · UFO bridge over the Danube",
+    fg: "M72 88V56h56v32 M72 56h56 M70 56V44h10v12 M70 44l5-8 5 8 M120 56V44h10v12 M120 44l5-8 5 8 M88 88V72h9v16 M103 88V72h9v16 M82 64h8 M110 64h8",
+    bg: "M146 88v-32 M138 56h16 M146 56L170 74 M132 74h48 M40 88v-12h12v12 M40 76l6-5 6 5 M28 88h158" },
+  { city: "London", landmark: "Elizabeth Tower · Parliament · Tower Bridge",
+    fg: "M92 88V42h14v46 M91 42h16 M91 36h16 M91 42v-6 M107 42v-6 M92 36Q98 31 100 20 102 31 108 36 M100 20v-6 M95 50a5 5 0 1 0 10 0 5 5 0 1 0-10 0 M100 47v3h3 M92 62h14 M92 76h14",
+    bg: "M58 88v-22h32v22 M62 66v-9 M70 66v-13 M78 66v-9 M86 66v-9 M118 88v-24h9v24 M148 88v-24h9v24 M122 64l1-5 M152 64l1-5 M127 76q11 7 21 0 M127 82h21 M48 88h118" },
+  { city: "Rome", landmark: "Colosseum · triumphal arch · cypress",
+    fg: "M68 88V54Q68 42 82 40l18-3Q132 34 132 54v34 M68 56h64 M68 76h64 M74 72v-7a4 4 0 0 1 8 0v7 M88 72v-7a4 4 0 0 1 8 0v7 M102 72v-7a4 4 0 0 1 8 0v7 M116 72v-7a4 4 0 0 1 8 0v7 M74 52v-5a4 4 0 0 1 8 0v5 M88 50v-5a4 4 0 0 1 8 0v5",
+    bg: "M38 88v-22h24v22 M38 66h24 M44 88v-13a6 6 0 0 1 12 0v13 M160 88v-9 M160 79q-6-6 0-21 6 15 0 21 M30 88h156" },
+  { city: "Barcelona", landmark: "Sagrada Família · Gaudí roofline",
+    fg: "M76 88V66q0-12 6-17 6 5 6 17v22 M82 49v-6 M79 43h6 M92 88V56q0-14 6-20 6 6 6 20v32 M98 36v-7 M95 29h6 M106 88V56q0-14 6-20 6 6 6 20v32 M112 36v-7 M109 29h6 M122 88V66q0-12 6-17 6 5 6 17v22 M128 49v-6 M125 43h6 M96 62h4 M110 62h4 M84 72h42",
+    bg: "M34 88v-13q8-8 16 0v13 M34 75h16 M40 81h5 M150 88v-11q9-7 18 0v11 M154 82h10 M28 88h158" },
+  { city: "Amsterdam", landmark: "Canal houses · bridge · water",
+    fg: "M62 88V60Q62 54 66 52 70 50 70 46h4Q74 50 78 52 82 54 82 60v28 M86 88V62h3v-5h3v-5h3v-5h6v5h3v5h3v5h3v26 M110 88V62l4-3v-5l6-6 6 6v5l4 3v26 M68 70h8 M92 66h8 M116 70h8 M68 80h8 M92 76h8 M116 80h8",
+    bg: "M34 84h26 M38 84q9-8 18 0 M144 84h20 M148 84q8-7 16 0 M150 88h16 M28 88h156" },
+  { city: "Prague", landmark: "Charles Bridge tower · castle spires",
+    fg: "M76 88V46h32v42 M76 46h32 M80 46l12-18 12 18 M92 28v-6 M72 46v-9l3-6 3 6v9 M106 46v-9l3-6 3 6v9 M85 88V70a7 7 0 0 1 14 0v18 M82 56h6 M96 56h6",
+    bg: "M120 88v-26h34v26 M120 62h34 M126 62v-14 M126 48l3-9 3 9 M144 62v-14 M144 48l3-9 3 9 M132 62v-8h8v8 M36 84h32 M40 84q7-7 14 0 M54 84q7-7 14 0 M28 88h158" },
+  { city: "Vienna", landmark: "St. Stephen's · Riesenrad",
+    fg: "M100 8v6 M97 14h6 M97 14Q95 32 91 46L88 56 M103 14Q105 32 109 46l3 10 M86 56h28 M88 56v32 M112 56v32 M94 88V73a6 6 0 0 1 12 0v15 M88 62l24 13 M112 62 88 75",
+    bg: "M156 88v-14 M146 72a10 10 0 1 0 20 0 10 10 0 1 0-20 0 M156 62v20 M146 72h20 M149 65l14 14 M163 65l-14 14 M40 88v-12h14v12 M40 76h14 M30 88h150" },
+  { city: "Athens", landmark: "Parthenon · Acropolis rock · olive tree",
+    fg: "M72 88V62 M82 88V62 M92 88V62 M102 88V62 M112 88V62 M122 88V62 M69 62h6 M79 62h6 M89 62h6 M99 62h6 M109 62h6 M119 62h6 M66 62h64 M66 56h64 M68 56l30-14 30 14 M76 53l22-10 20 9",
+    bg: "M156 88v-11 M146 77a10 8 0 0 1 20 0 10 8 0 0 1-20 0 M34 88q14-11 28-3 M46 82q8-4 14-2 M28 88h158" },
+  { city: "New York", landmark: "Empire State · midtown block",
+    fg: "M84 88v-8h32v8 M88 80V44h24v36 M92 44V32h16v12 M96 32v-8h8v8 M100 24V12 M94 76V48 M100 76V48 M106 76V48 M88 52h24",
+    bg: "M58 88v-26h14v26 M76 88v-40h14v40 M114 88v-34h14v34 M132 88v-22h16v22 M80 60h6 M118 66h6 M62 70h6 M136 74h8 M48 88h118" },
+  { city: "Tel Aviv", landmark: "Azrieli towers · palm · shoreline",
+    fg: "M76 88v-38h16v38 M84 50v-6 M98 88v-42h16v42 M98 46a8 6 0 0 1 16 0 M106 40v-4 M120 88l9-42 9 42",
+    bg: "M164 88v-19 M164 69q-11-4-13-12 M164 69q11-4 13-12 M164 69q-4-11 0-17 M34 83h16 M42 88h18 M28 88h154" },
+  { city: "Jerusalem", landmark: "Dome of the Rock · Old City wall",
+    fg: "M78 88V64h48v24 M78 64h48 M84 64v-8h36v8 M86 56h32 M88 56Q88 40 102 39 116 40 116 56 M102 39v-7 M99 32h6 M102 32v-5 M88 82v-6a3 3 0 0 1 6 0v6 M110 82v-6a3 3 0 0 1 6 0v6",
+    bg: "M40 88v-18h32v18 M40 70h32 M44 70v-5 M52 70v-5 M60 70v-5 M68 70v-5 M140 88v-22h24v22 M140 66h24 M144 66v-5 M152 66v-5 M160 66v-5 M178 88v-9 M178 79q-5-5 0-18 5 13 0 18 M32 88h154" },
+  { city: "Budapest", landmark: "Parliament dome · Chain Bridge",
+    fg: "M74 88V66h52v22 M74 66h52 M94 66V54q0-10 6-12 6 2 6 12v12 M100 42v-8 M98 34h4 M96 60h8 M80 66V56l2-6 2 6v10 M116 66V56l2-6 2 6v10 M80 88V76h8v12 M112 88V76h8v12 M88 78h24",
+    bg: "M142 88v-25h8v25 M172 88v-25h8v25 M146 63l1-4 M176 63l1-4 M150 70q13 8 22 0 M150 78h22 M36 88v-12h14v12 M36 76h14 M28 88h156" },
+  { city: "Berlin", landmark: "Fernsehturm · Brandenburg Gate",
+    fg: "M98 88l1-45h2l1 45 M93 36a7 7 0 1 0 14 0 7 7 0 1 0-14 0 M93 36h14 M100 29V12 M95 80h10",
+    bg: "M126 88v-22h44v22 M126 66h44 M132 88v-22 M142 88v-22 M154 88v-22 M164 88v-22 M140 62h16 M144 62v-5 M152 62v-5 M40 88v-14h16v14 M40 74h16 M32 88h150" },
+  { city: "Lisbon", landmark: "Tram 28 · hillside houses · 25 de Abril",
+    fg: "M76 88V70Q76 62 84 62h32Q124 62 124 70v18 M76 74h48 M82 74v-8h8v6 M96 74v-8h8v6 M110 74v-8h8v6 M95 62l5-7 5 7 M96 55h8 M76 80h48 M82 84a4 4 0 1 0 8 0 4 4 0 1 0-8 0 M102 84a4 4 0 1 0 8 0 4 4 0 1 0-8 0",
+    bg: "M36 88v-16h14v16 M36 72l7-6 7 6 M52 88v-12h12v12 M52 76l6-5 6 5 M140 88v-27h6v27 M172 88v-27h6v27 M146 68q14 10 26 0 M146 76h26 M30 88h154" },
+  { city: "Madrid", landmark: "Puerta de Alcalá · Metrópolis dome",
+    fg: "M70 88v-24h56v24 M70 64h56 M90 88v-15a8 8 0 0 1 16 0v15 M76 88v-9a4 4 0 0 1 8 0v9 M112 88v-9a4 4 0 0 1 8 0v9 M92 58h12 M96 58v-6",
+    bg: "M144 88v-26h22v26 M144 62a11 9 0 0 1 22 0 M155 53v-8 M152 45h6 M34 88v-14h14v14 M34 74h14 M28 88h154" },
+  { city: "Tokyo", landmark: "Tokyo Tower · pagoda · Fuji",
+    fg: "M100 8v10 M97 18h6 M97 18L91 34 M103 18l6 16 M93 34h14 M93 38h14 M93 34v4 M107 34v4 M91 38l-3 12 M109 38l3 12 M88 50h24 M88 55h24 M88 50v5 M112 50v5 M88 55 74 88 M112 55l14 33 M80 74h40 M84 88Q100 66 116 88",
+    bg: "M148 88v-24 M138 64h20 M141 64v-8h14v8 M138 56h20 M142 48h12 M148 42v-6 M136 72h24 M136 80h24 M28 84l16-18 6 6 8-10 14 22 M38 72h10 M24 88h160" },
+  { city: "Bangkok", landmark: "Wat Arun prang · temple roofs · river boat",
+    fg: "M100 10v8 M97 12l3-4 3 4 M92 88Q94 48 100 18 106 48 108 88 M96 42h8 M94 54h12 M93 66h14 M92 78h16 M76 88q2-22 7-28 5 6 7 28 M120 88q2-22 7-28 5 6 7 28",
+    bg: "M36 88v-12h28v12 M34 76l16-10 16 10 M40 66l10-6 10 6 M144 84h34l-4 4h-26z M158 84v-8 M158 78h10 M28 88h152" },
+  { city: "Generic skyline", landmark: "fallback for unmapped destinations",
+    fg: "M88 88v-46h18v46 M94 52h6 M94 64h6",
+    bg: "M52 88v-22h16v22 M72 88v-34h14v34 M110 88v-30h14v30 M128 88v-20h16v20 M76 62h6 M114 66h6 M56 74h8 M132 76h8 M44 88h118" }
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      cities: CITIES,
+      demo: CITIES[0],
+      pinAlt: CITIES[2],
+      contextColor: this.props.contextColor ?? "#9a9a9a",
+      contextWeight: this.props.contextWeight ?? 1.2,
+      landmarkWeight: this.props.landmarkWeight ?? 2.2
+    };
+  }
+}
+</script>
+</body>
+</html>
