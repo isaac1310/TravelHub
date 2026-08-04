@@ -451,6 +451,19 @@ h1, h2, h3, h4, .brand__name {
 .switcher button:focus-visible { outline: none; box-shadow: var(--ring); }
 .switcher button.is-active { background: var(--surface); color: var(--brand-active); box-shadow: var(--shadow); }
 
+/* Segmented control — three tap targets in place of a <select>. See the note by the Payment
+   status field: a native option list on Android delivers its dismissal in a way that closed the
+   whole bottom sheet, and two attempts to guard against that failed on the real device. */
+.segmented { display: flex; gap: 0.3rem; background: var(--cream); border-radius: var(--radius-pill); padding: 0.25rem; }
+.segmented button {
+  flex: 1; min-height: 44px; border: none; background: transparent; cursor: pointer;
+  font: inherit; font-weight: 600; font-size: 0.85rem; color: var(--muted);
+  border-radius: var(--radius-pill); padding: 0.4rem 0.5rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--brand-active); box-shadow: var(--shadow); }
+.segmented button:focus-visible { outline: none; box-shadow: var(--ring); }
+
 /* The trip switcher reads as tabs, not as a toggle (v1.11.0) — flat, no track, an underline
    on the active one. The Timeline/Maps switcher deliberately stays a pill toggle: choosing a
    trip is navigation, choosing a view is a mode, and they should not look interchangeable. */
@@ -618,9 +631,11 @@ h1, h2, h3, .hero h1, .hero p {
   padding: 0.6rem 0; border-bottom: 1px solid var(--border);
 }
 .checklist li:last-child { border-bottom: none; }
-.checklist input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--brand); flex: none; }
+.checklist input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--brand); flex: none; }
 .checklist li svg { width: 18px; height: 18px; color: var(--brand-hover); }
-.checklist label { flex: 1; cursor: pointer; }
+/* The label is `for` the checkbox, so making it fill the row turns the whole row into the tick
+   target rather than just a 24px box. */
+.checklist label { flex: 1; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .checklist .done { text-decoration: line-through; color: var(--muted); }
 .checklist__add { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 /* min-width:0 overrides the flex default of min-width:auto — without it the input
@@ -927,7 +942,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .splash { animation-delay: 0.6s; }
       }
 
-      .map-canvas { height: 440px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line, #e8ddd5); position: relative; }
+      /* z-index: 0, not auto. `position: relative` alone does NOT create a stacking context, so
+         Leaflet's own panes (z-index 200-700) competed directly with the sticky itinerary header
+         at z-index 20 and painted over it — visible as the map covering the Timeline/Maps toggle
+         when you switched tabs while scrolled down. A zero index contains them. */
+      .map-canvas { height: 440px; border-radius: 16px; overflow: hidden; border: 1px solid var(--line, #e8ddd5); position: relative; z-index: 0; }
       .map-hint {
         position: absolute; z-index: 500; left: 50%; top: 12px; transform: translateX(-50%);
         max-width: 22rem; padding: 0.55rem 0.9rem; border-radius: 12px; font-size: 0.85rem;
@@ -1194,7 +1213,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         /* Sticky header: the view toggle AND the day strip travel together (v1.11.0). The
            toggle used to scroll away, so switching to the map meant scrolling back up first. */
         .itin-sticky {
-          position: sticky; top: 0; z-index: 20; background: var(--bg);
+          /* Below the app bar, which is itself sticky at top:0 — see measureStickyHeader. */
+          position: sticky; top: var(--appbar-h, 71px); z-index: 19; background: var(--bg);
           padding-top: 0.4rem; margin: -0.4rem 0 0.6rem;
           box-shadow: 0 6px 10px -8px rgba(70, 45, 30, 0.25);
         }
@@ -1210,7 +1230,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .daychip.is-active .dc-dow { color: rgba(255,255,255,0.85); }
         /* Measured, not guessed — measureStickyHeader() publishes the real height, so this and
            the drag auto-scroll edge can never drift apart from it. */
-        .day { scroll-margin-top: calc(var(--itin-sticky-h, 84px) + 10px); }
+        .day { scroll-margin-top: calc(var(--appbar-h, 71px) + var(--itin-sticky-h, 84px) + 10px); }
 
         /* Toast above FAB/tabbar */
         .toast { bottom: calc(140px + env(safe-area-inset-bottom)); z-index: 45; }
@@ -1708,14 +1728,22 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label">Amount (₪)</span>
           <input type="number" name="amount" id="expense-amount" min="0.01" step="0.01" required />
         </label>
-        <label class="field">
-          <span class="field__label">Payment status</span>
-          <select name="status" required>
-            <option value="planned">Planned</option>
-            <option value="booked" selected>Booked</option>
-            <option value="paid">Paid</option>
-          </select>
-        </label>
+        <!-- Three tap targets, not a <select>. Twice now a fix for "picking Paid closes the
+             sheet" has failed on a real Android phone: v1.10.4 timed a window from touching the
+             select, v1.10.5 keyed off the select holding focus. Both were guesses about how the
+             OS delivers the option-list dismissal, and neither could be reproduced in any
+             browser available here. Removing the native popup removes the whole mechanism —
+             there is no option list left to dismiss. A hidden input keeps the form contract
+             (`name="status"`) identical for reading, writing and FormData. -->
+        <div class="field" role="group" aria-labelledby="expense-status-label">
+          <span class="field__label" id="expense-status-label">Payment status</span>
+          <input type="hidden" name="status" value="booked" />
+          <div class="segmented" id="expense-status">
+            <button type="button" data-status="planned">Planned</button>
+            <button type="button" data-status="booked">Booked</button>
+            <button type="button" data-status="paid">Paid</button>
+          </div>
+        </div>
         <label class="field">
           <span class="field__label">Amount paid (₪)</span>
           <input type="number" name="amountPaid" min="0" step="0.01" value="0" />
@@ -2539,6 +2567,36 @@ function syncExpensePaidDateVisibility() {
   if (wrap) wrap.hidden = amountPaid <= 0;
 }
 
+/* Set the payment status and reconcile the fields that depend on it. This used to live in the
+   form's `input` handler, keyed off `e.target.name === "status"`; a hidden input fires no input
+   event when set from script, so the logic moved here and both the buttons and
+   openExpenseDialog call it. `silent` skips the reconciliation when we are only reflecting a
+   value that is already correct, i.e. when opening the dialog on an existing expense. */
+function setExpenseStatus(value, silent) {
+  const form = $("form-expense");
+  if (!form) return;
+  const statusEl = expenseFormField(form, "status");
+  if (statusEl) statusEl.value = value;
+  $("expense-status")?.querySelectorAll("[data-status]").forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.getAttribute("data-status") === value))
+  );
+
+  if (!silent) {
+    const amountEl = expenseFormField(form, "amount");
+    const paidEl = expenseFormField(form, "amountPaid");
+    const paidDateEl = expenseFormField(form, "paidDate");
+    const amount = Number(amountEl?.value) || 0;
+    if (value === "paid" && amount > 0) {
+      paidEl.value = amount;
+      if (!paidDateEl.value) paidDateEl.value = todayISO();
+    } else if (value !== "paid" && Number(paidEl.value) >= amount && amount > 0) {
+      paidEl.value = 0;
+      paidDateEl.value = "";
+    }
+  }
+  syncExpensePaidDateVisibility();
+}
+
 function getYears() {
   const years = new Set(state.trips.map((t) => t.year));
   return [...years].sort((a, b) => b - a);
@@ -3198,11 +3256,11 @@ function openExpenseDialog(tripId, expense = null) {
     expenseFormField(form, "category").value = normalized.category;
     expenseFormField(form, "amount").value = normalized.amount;
     expenseFormField(form, "date").value = normalized.date || "";
-    expenseFormField(form, "status").value = normalized.status;
+    setExpenseStatus(normalized.status, true); // reflect only — the values are already coherent
     expenseFormField(form, "amountPaid").value = normalized.amountPaid;
     expenseFormField(form, "paidDate").value = normalized.paidDate || "";
   } else {
-    expenseFormField(form, "status").value = "booked";
+    setExpenseStatus("booked", true);
     expenseFormField(form, "amountPaid").value = 0;
     expenseFormField(form, "paidDate").value = "";
   }
@@ -3803,27 +3861,19 @@ function bindEvents() {
     if (!form || form.id !== "form-expense") return;
     const amountEl = expenseFormField(form, "amount");
     const paidEl = expenseFormField(form, "amountPaid");
-    const statusEl = expenseFormField(form, "status");
-    const paidDateEl = expenseFormField(form, "paidDate");
 
     if (e.target.name === "amount") {
       const amount = Number(amountEl.value) || 0;
       const paid = Number(paidEl.value) || 0;
       if (paid > amount) paidEl.value = amount;
     }
-    if (e.target.name === "status") {
-      const status = statusEl.value;
-      const amount = Number(amountEl.value) || 0;
-      if (status === "paid" && amount > 0) {
-        paidEl.value = amount;
-        if (!paidDateEl.value) paidDateEl.value = todayISO();
-      } else if (status !== "paid" && Number(paidEl.value) >= amount && amount > 0) {
-        paidEl.value = 0;
-        paidDateEl.value = "";
-      }
-    }
+    // Status is a segmented control now; its reconciliation lives in setExpenseStatus.
     syncExpensePaidDateVisibility();
   });
+
+  $("expense-status").querySelectorAll("[data-status]").forEach((b) =>
+    b.addEventListener("click", () => setExpenseStatus(b.getAttribute("data-status")))
+  );
 
   $("form-expense").addEventListener("change", (e) => {
     if (e.target.form?.id === "form-expense") syncExpensePaidDateVisibility();
@@ -4529,16 +4579,31 @@ function restorePendingTabFocus(tripList, subList) {
    the day strip. Publish it so `.day`'s scroll-margin and the drag auto-scroll edge both
    derive from one measured value instead of two hardcoded guesses that drift apart. */
 function measureStickyHeader() {
+  /* The app bar is ALSO position:sticky at top:0, so the itinerary header has to stick below it
+     rather than to the viewport — otherwise the Timeline/Maps toggle sits behind the app bar,
+     which on the map tab read as "the map covers the sticky header". Publish both heights and
+     let the CSS compose them. */
+  const bar = document.querySelector(".appbar");
+  const barH = bar && getComputedStyle(bar).position === "sticky"
+    ? Math.round(bar.getBoundingClientRect().height)
+    : 0;
   const el = document.getElementById("itin-sticky");
   const h = el && getComputedStyle(el).position === "sticky"
     ? Math.round(el.getBoundingClientRect().height)
     : 0;
-  document.documentElement.style.setProperty("--itin-sticky-h", h + "px");
+  const root = document.documentElement.style;
+  root.setProperty("--appbar-h", barH + "px");
+  root.setProperty("--itin-sticky-h", h + "px");
   return h;
 }
 
+/* Everything pinned above the content: the app bar plus the itinerary header. This is the line
+   the scroll spy calls "current" and the depth the drag auto-scroll must start below. */
 function stickyHeaderHeight() {
-  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--itin-sticky-h")) || 0;
+  const cs = getComputedStyle(document.documentElement);
+  const num = (n) => parseFloat(cs.getPropertyValue(n)) || 0;
+  const itin = num("--itin-sticky-h");
+  return itin ? itin + num("--appbar-h") : 0;
 }
 
 /* ---------- ITINERARY screen ---------- */
@@ -4598,6 +4663,11 @@ function renderItinerary() {
     itinerarySubTab = b.getAttribute("data-subtab");
     pendingTabFocus = "views";
     renderItinerary();
+    /* Switching view is a mode change, so start at the top of it. Not scrollIntoView: the header
+       is sticky, so it is always "in view" and the call does nothing. Use its static offset. */
+    const hdr = document.getElementById("itin-sticky");
+    const bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--appbar-h")) || 0;
+    if (hdr) window.scrollTo({ top: Math.max(0, hdr.offsetTop - bar), behavior: "auto" });
   };
   const subList = body.querySelector(".switcher--sub");
   subList.querySelectorAll("[data-subtab]").forEach((b) =>
@@ -5621,11 +5691,11 @@ function renderFamily() {
     <div class="section-head"><h2>Trips by travellers</h2></div>
     ${tripRows}
 
-    <div class="section-head" style="margin-top:1.6rem"><div><h2>Shared checklist</h2><p>Notes everyone on the trip can see.</p></div></div>
+    <div class="section-head" style="margin-top:1.6rem"><div><h2>Shared checklist</h2><p>Tick things off as you pack — everyone on the trip sees the same list.</p></div></div>
     <div class="card" style="padding:1.1rem 1.3rem">
       <ul class="checklist" id="shared-list">${listRows}</ul>
       <div class="checklist__add">
-        <input type="text" dir="auto" id="checklist-input" placeholder="Add a note (e.g. Passports)" maxlength="80" />
+        <input type="text" dir="auto" id="checklist-input" placeholder="Add an item (e.g. Passports)" maxlength="80" />
         <button type="button" class="btn btn--primary" id="checklist-add">Add</button>
       </div>
     </div>`;
@@ -5675,9 +5745,9 @@ const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h
 
 function sharedListRowsHtml() {
   const noteRows = state.checklist.map(
-    (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete note" title="Delete">${TRASH_ICON}</button></li>`
+    (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete ${escapeHtml(c.text)}" title="Delete">${TRASH_ICON}</button></li>`
   );
-  return noteRows.length ? noteRows.join("") : `<li class="empty-state">Nothing yet — add a note below.</li>`;
+  return noteRows.length ? noteRows.join("") : `<li class="empty-state">Nothing on the list yet — add the first item below.</li>`;
 }
 
 function bindSharedListActions(scope, rerender) {

@@ -1462,9 +1462,11 @@
          phone in landscape — or any 88dvh shorter than the form — is the failing case. */
       const prevStyle = d.style.cssText;
       d.style.maxHeight = "380px";
-      const status = d.querySelector('[name="status"]');
-      status.focus();
-      const overlap = status.closest(".field").getBoundingClientRect().bottom
+      /* Payment status became a segmented control in v1.11.0, so it is a hidden input and
+         cannot be focused. Any real field below the fold proves the same property. */
+      const field = d.querySelector('[name="amountPaid"]');
+      field.focus();
+      const overlap = field.closest(".field").getBoundingClientRect().bottom
         - actions.getBoundingClientRect().top;
       d.style.cssText = prevStyle;
       if (!wasOpen) closeDialog(d);
@@ -1531,7 +1533,9 @@
       if (!trip) return true;
       const d = expenseDialog();
       openExpenseDialog(trip.id, trip.expenses[0] || null);
-      const sel = d.querySelector('[name="status"]');
+      // Category, not status: status became a segmented control in v1.11.0. The guard still
+      // has to hold for the selects that remain.
+      const sel = d.querySelector('[name="category"]');
       // While the option list is open the select holds focus — that is the signal.
       // (v1.10.4 armed a timer from pointerdown here; v1.10.5 keys off focus instead,
       // because on a real phone the list stays open longer than any sane window.)
@@ -1548,8 +1552,10 @@
       if (!trip) return true;
       const d = expenseDialog();
       openExpenseDialog(trip.id, trip.expenses[0] || null);
-      const sel = d.querySelector('[name="status"]');
-      sel.value = "paid";
+      // Category, not status: status became a segmented control in v1.11.0. The guard still
+      // has to hold for the selects that remain.
+      const sel = d.querySelector('[name="category"]');
+      sel.value = "Flight";
       sel.dispatchEvent(new Event("input", { bubbles: true }));
       sel.dispatchEvent(new Event("change", { bubbles: true }));
       strayBackdropTap(d);
@@ -1596,7 +1602,9 @@
       if (!trip) return true;
       const d = document.getElementById("dialog-expense");
       openExpenseDialog(trip.id, trip.expenses[0] || null);
-      const sel = d.querySelector('[name="status"]');
+      // Category, not status: status became a segmented control in v1.11.0. The guard still
+      // has to hold for the selects that remain.
+      const sel = d.querySelector('[name="category"]');
       sel.focus();
       // No `change` was dispatched, so the old time window is unarmed — only the
       // focus check can save the sheet here. This is the slow-reader case that
@@ -1614,7 +1622,9 @@
       if (!trip) return true;
       const d = document.getElementById("dialog-expense");
       openExpenseDialog(trip.id, trip.expenses[0] || null);
-      const sel = d.querySelector('[name="status"]');
+      // Category, not status: status became a segmented control in v1.11.0. The guard still
+      // has to hold for the selects that remain.
+      const sel = d.querySelector('[name="category"]');
       sel.focus();
       strayBackdropTap(d);   // settles the popup: blurs, stays open
       strayBackdropTap(d);   // a deliberate tap outside — no select focused now
@@ -2073,6 +2083,115 @@
       if (!item || !label.includes(item.title)) return `⋯ is labelled "${label}"`;
       const addLabel = add?.getAttribute("aria-label") || "";
       return /\d/.test(addLabel) ? true : `Add reservation is labelled "${addLabel}" for every day`;
+    });
+
+    /* ---- reported by Isaac after testing v1.11.0 on the phone ---- */
+
+    check("payment status is tap targets, not a native select", () => {
+      /* Two fixes for "picking Paid closes the sheet" failed on the real device — v1.10.4 timed
+         a window from touching the select, v1.10.5 keyed off focus. Both guessed at how Android
+         delivers the option-list dismissal. There is no option list any more. */
+      const d = document.getElementById("dialog-expense");
+      const trip = state.trips[0];
+      if (!trip) return skip("no trips");
+      openExpenseDialog(trip.id, trip.expenses[0] || null);
+      try {
+        if (d.querySelector("select[name='status']")) return "payment status is still a <select>";
+        const hidden = d.querySelector("input[type=hidden][name='status']");
+        if (!hidden) return "the form no longer carries a status value";
+        const segs = [...document.querySelectorAll("#expense-status [data-status]")];
+        if (segs.length !== 3) return `expected 3 segments, found ${segs.length}`;
+        // Exactly one pressed, and it must agree with the value the form will submit.
+        const pressed = segs.filter((b) => b.getAttribute("aria-pressed") === "true");
+        if (pressed.length !== 1) return `${pressed.length} segments are pressed`;
+        if (pressed[0].getAttribute("data-status") !== hidden.value) {
+          return `the pressed segment says ${pressed[0].getAttribute("data-status")}, the form says ${hidden.value}`;
+        }
+        // Tapping one must set the value, move the pressed state, and NOT close the sheet.
+        segs.find((b) => b.getAttribute("data-status") === "paid").click();
+        if (!d.open) return "tapping a segment closed the sheet";
+        if (hidden.value !== "paid") return `the form value is ${hidden.value} after tapping Paid`;
+        return segs.filter((b) => b.getAttribute("aria-pressed") === "true")[0]
+          ?.getAttribute("data-status") === "paid" ? true : "the pressed state did not move";
+      } finally {
+        if (d.open) closeDialog(d);
+      }
+    });
+
+    check("picking Paid fills the amount paid", () => {
+      const trip = state.trips.find((t) => t.expenses && t.expenses.length);
+      if (!trip) return skip("no trip with an expense");
+      const d = document.getElementById("dialog-expense");
+      openExpenseDialog(trip.id, trip.expenses[0]);
+      try {
+        // This reconciliation used to live in the form's `input` handler, which a hidden input
+        // never fires — so it had to move into setExpenseStatus.
+        document.querySelector('#expense-status [data-status="paid"]').click();
+        const amount = Number(d.querySelector('[name="amount"]').value) || 0;
+        const paid = Number(d.querySelector('[name="amountPaid"]').value) || 0;
+        if (amount > 0 && paid !== amount) return `amount ${amount} but amountPaid ${paid}`;
+        document.querySelector('#expense-status [data-status="booked"]').click();
+        return Number(d.querySelector('[name="amountPaid"]').value) === 0
+          ? true : "switching away from Paid left the paid amount behind";
+      } finally {
+        if (d.open) closeDialog(d);
+      }
+    });
+
+    check("the itinerary header sticks below the app bar, not under it", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      return withItineraryVisible(() => {
+        const bar = document.querySelector(".appbar");
+        const hdr = document.getElementById("itin-sticky");
+        if (!bar || !hdr) return "app bar or itinerary header missing";
+        if (getComputedStyle(hdr).position !== "sticky") return skip("desktop layout — header not sticky");
+        /* Both are sticky at the top. With the header also at top:0 it slid UNDERNEATH the app
+           bar, hiding the Timeline/Maps toggle — which on the map tab read as "the map covers
+           the sticky header". */
+        const barH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--appbar-h")) || 0;
+        if (barH <= 0) return "the app bar height was never measured";
+        const top = parseFloat(getComputedStyle(hdr).top) || 0;
+        return top >= barH
+          ? true : `the header sticks at ${top}px but the app bar is ${barH}px tall`;
+      });
+    });
+
+    check("the map cannot paint over the sticky header", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "maps";
+      const res = withItineraryVisible(() => {
+        const canvas = document.getElementById("map-canvas");
+        if (!canvas) return skip("the map did not render (Leaflet blocked?)");
+        /* position:relative alone is NOT a stacking context, so Leaflet's own panes (z-index
+           200-700) competed directly with the sticky header at 19-20 and won. */
+        const z = getComputedStyle(canvas).zIndex;
+        return z !== "auto" && Number(z) <= 0
+          ? true : `the map canvas has z-index ${z}, so Leaflet's panes escape it`;
+      });
+      itinerarySubTab = "timeline";
+      renderItinerary();
+      return res;
+    });
+
+    check("the shared list reads as a checklist you can tick", () => {
+      renderFamily();
+      const input = document.getElementById("checklist-input");
+      if (!input) return "the checklist input is missing";
+      /* Removing attachments left this described as "notes", which read as free text even though
+         every row has always had a checkbox. Isaac asked for a checklist; it already was one. */
+      if (/note/i.test(input.placeholder)) return `the placeholder still says "${input.placeholder}"`;
+      const head = document.getElementById("screen-family").textContent;
+      if (!/tick/i.test(head)) return "nothing tells you the items can be ticked";
+      // And the tick target must be the row, not a 20px box.
+      const label = document.querySelector("#shared-list label");
+      if (!label) return skip("no checklist items to measure");
+      return label.getBoundingClientRect().height >= 44
+        ? true : `the tick target is ${Math.round(label.getBoundingClientRect().height)}px tall`;
     });
 
     /* ---- attachments removed ---- */

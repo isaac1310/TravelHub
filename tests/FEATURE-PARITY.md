@@ -44,7 +44,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Action | Wiring |
 |---|---|
 | Switch trip | Underline **tabs**, `data-trip` — restyled *v1.11.0*. Both switchers now honour the tab contract they had only declared: `aria-selected`, one focusable tab per list, ←/→/Home/End, `aria-controls` → a real `role="tabpanel"`. Focus follows an activation and is not stolen by the ~11 unrelated callers of `renderItinerary()` |
-| Timeline ↔ Maps | `data-subtab`, in the **sticky header** alongside the day strip — *v1.11.0*. The header's height is measured and published as `--itin-sticky-h`, so `.day`'s scroll-margin and the drag auto-scroll edge derive from it instead of two hardcoded numbers that drift |
+| Timeline ↔ Maps | `data-subtab`, in the **sticky header** alongside the day strip — *v1.11.0*. Both the app bar's and the header's heights are measured and published (`--appbar-h`, `--itin-sticky-h`), so `.day`'s scroll-margin and the drag auto-scroll edge derive from them instead of hardcoded numbers that drift. The header sticks at `top: var(--appbar-h)`: the app bar is **also** `position: sticky; top: 0`, so at `top: 0` this slid underneath it and hid the toggle — which on the map tab read as the map covering the header. Switching view also resets the scroll to the top of the header |
 | Jump to a day | date strip, `data-strip-day` → selects + scrolls. Deliberately does NOT unfold (v1.10.1) |
 | **The strip follows the scroll** | *v1.11.0*. The active chip tracks the day under the sticky header and scrolls itself into view; `timelineDayIso` follows, so the FAB pre-fills the day you are looking at. Suppressed during a tap-to-jump and during a v1.10.2 drag, and it **never** calls `renderItinerary`. A rAF-throttled scroll listener, not an `IntersectionObserver` — the observer never fires in this project's browser harness, and shipping the one thing that could not be verified is how two earlier bugs happened |
 | **Fold / unfold a day** | `data-day-toggle` on the date rail — *added v1.9.1*. Per-device, never synced |
@@ -62,6 +62,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Collapse/expand the stops sheet | tap `.map-list__title` (≤900px, and only while the filter is "All" — a selected day lists in full) |
 | Open a stop in Google Maps | "Maps ↗" per stop, **the hotel row**, and **both marker popups** — *coords since v1.9.0* |
 | Retry the map | `btn-map-retry` when Leaflet fails to load |
+| **Map layering** | `.map-canvas` carries `z-index: 0` — *v1.11.0*. `position: relative` alone is not a stacking context, so Leaflet's own panes (200–700) competed directly with the sticky header and painted over it |
 
 ## Budget
 
@@ -72,6 +73,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Roll budget over | `dialog-roll` |
 | Add / edit / delete an expense | `dialog-expense`. **Every expense keeps a real id** — *fixed v1.10.3*. Until then `buildExpenseFromForm` returned a payload carrying `id: ""`, which overwrote the id both when adding and when editing, leaving that row's actions permanently dead. Expenses already saved broken are repaired on load with a deterministic `exp-r<hash>` |
 | Mark an expense paid | per-expense action, `.btn-mark-paid` / `.btn-mark-unpaid`. Works after an edit — see the row above |
+| **Payment status in the expense sheet** | Three tap targets (`#expense-status`, `.segmented`), **not a `<select>`** — *v1.11.0*. A hidden `input[name=status]` keeps the form contract identical. Android draws a select's option list over the sheet's backdrop and dismissing it closed the whole sheet; v1.10.4 guarded it with a timer and v1.10.5 with a focus check, and **both failed on the real phone**. Removing the popup removed the mechanism. Category is still a `<select>` |
 | Expand a trip's expenses | expenses fold |
 | Category breakdown | rendered per trip |
 | **Still-to-pay answer card** | Leads the Overview — *v1.10.0*. Removed from the tile grid, not duplicated |
@@ -89,7 +91,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 |---|---|
 | Who's travelling | member list |
 | Trips by travellers | per-trip roster |
-| Shared checklist | add (`checklist-add`), toggle (`data-chk`), delete (`data-chk-del`). Notes only — **document attachments were removed in v1.11.0**, along with the payload size-cap machinery and the merge special case that existed for them |
+| Shared checklist | add (`checklist-add`), tick (`data-chk`), delete (`data-chk-del`). Items have always had a checkbox and a strikethrough; *v1.11.0* fixed the wording, which called them "notes" and read as free text, and made the whole row the 44px tick target. **Document attachments were removed in v1.11.0**, along with the payload size-cap machinery and the merge special case that existed only for them |
 
 ## Sharing and sync — `dialog-overflow` (the Menu)
 
@@ -182,7 +184,7 @@ Since *v1.11.0*:
 
 ## Diagnostics
 
-`?selftest=1` runs 162 checks and prints a pass/skip/fail panel. **A skip is reported
+`?selftest=1` runs 166 checks and prints a pass/skip/fail panel. **A skip is reported
 separately and never counted as a pass** — *v1.11.0*. Two checks used to `return true` early at
 desktop width, so a desktop run showed them green without exercising anything. Run the suite at
 **412px** for full coverage. It refuses to run while joined to
