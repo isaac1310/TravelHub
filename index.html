@@ -622,8 +622,6 @@ h1, h2, h3, .hero h1, .hero p {
    refuses to shrink below its intrinsic width and pushes the Add button off-screen
    on narrow viewports. flex-wrap then handles the case where it's still too tight. */
 .checklist__add input[type="text"] { flex: 1 1 11rem; min-width: 0; }
-.shared-list__doc { display: inline-flex; width: 20px; color: var(--muted); }
-.shared-list__doc svg { width: 20px; height: 20px; }
 
 /* ============================================================
    8. BUDGET SCREEN  (re-skinned — original class names preserved)
@@ -1403,7 +1401,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           </section>
 
           <!-- ===== BOOKINGS & DOCUMENTS ===== -->
-          <section class="screen" id="screen-bookings" data-screen="bookings" aria-label="Bookings and documents">
+          <section class="screen" id="screen-bookings" data-screen="bookings" aria-label="Bookings">
             <div id="bookings-body"></div>
           </section>
 
@@ -2198,14 +2196,11 @@ function merge3List(baseList, localList, remoteList, opts) {
        expense-only change look like "untouched", so deleting a trip on one device
        silently discarded an expense added on the other. */
     if (inB && !inL) {                                                 // deleted locally
-      if (o.addRemoveOnly || !changed(b, r)) { seen.add(id); continue; }
+      if (!changed(b, r)) { seen.add(id); continue; }
       push(r); continue;                                               // delete-vs-edit → remote wins
     }
     if (inB && !inR) {                                                 // deleted remotely
-      /* addRemoveOnly: documents are never edited, only attached or removed, so a
-         local "change" can't exist — and the base only stores their ids anyway, which
-         made every local document look edited and resurrected deliberate deletions. */
-      if (o.addRemoveOnly || !changed(b, l)) { seen.add(id); continue; }
+      if (!changed(b, l)) { seen.add(id); continue; }
       push(l); continue;
     }
     if (!inB && inL && !inR) { push(l); continue; }                    // local addition
@@ -2263,8 +2258,6 @@ function merge3(baseState, localState, remoteState) {
   for (const key of ["checklist", "fundHistory", "rollHistory"]) {
     merged[key] = merge3List(base[key], local[key], remote[key]);
   }
-  // Attachments are add/remove-only — a deletion must stick, including sensitive ones.
-  merged.documents = merge3List(base.documents, local.documents, remote.documents, { addRemoveOnly: true });
 
   /* Running total: both deltas must land. local + remote − base is the general form
      of the fundHistory special case mergeStates uses. */
@@ -2301,7 +2294,7 @@ function mergeStates(localState, roomState) {
   merged.items = items.list;
   stats.addedItems = items.added;
 
-  for (const key of ["checklist", "documents", "fundHistory", "rollHistory"]) {
+  for (const key of ["checklist", "fundHistory", "rollHistory"]) {
     const r = mergeById(local[key], room[key]);
     merged[key] = r.list;
     stats.addedOther += r.added;
@@ -2362,17 +2355,10 @@ function normalizeState(data) {
   data.checklist = data.checklist
     .filter((c) => c && c.id && c.text)
     .map((c) => ({ id: safeId(c.id), text: String(c.text), done: !!c.done }));
-  if (!Array.isArray(data.documents)) data.documents = [];
-  data.documents = data.documents
-    .filter((d) => d && d.id && d.name && typeof d.dataUrl === "string" && /^data:(application\/pdf|image\/[a-zA-Z0-9.+-]+);/.test(d.dataUrl))
-    .map((d) => ({
-      id: safeId(d.id),
-      name: String(d.name),
-      type: String(d.type || ""),
-      size: Number(d.size) || 0,
-      dataUrl: d.dataUrl,
-      uploadedAt: d.uploadedAt || "",
-    }));
+  /* Attachments were removed in v1.11.0. Delete the key rather than normalise it, so a
+     payload written by an older client is accepted and then stops carrying base64 blobs
+     across the wire. Nothing reads it any more. */
+  delete data.documents;
   data.lastEditedBy = typeof data.lastEditedBy === "string" ? data.lastEditedBy : "";
   data.lastEditedAt = typeof data.lastEditedAt === "string" ? data.lastEditedAt : "";
   if (!data.version || data.version < 2) migrateToV2(data);
@@ -3897,7 +3883,7 @@ const NAV = [
   { id: "trips", label: "Trips", eyebrow: "Overview", icon: ICONS.trips },
   { id: "itinerary", label: "Itinerary", eyebrow: "Day by day", icon: ICONS.itinerary },
   { id: "budget", label: "Budget", eyebrow: "Money", icon: ICONS.budget },
-  { id: "bookings", label: "Bookings", eyebrow: "Reservations & documents", icon: ICONS.bookings },
+  { id: "bookings", label: "Bookings", eyebrow: "Flights, stays & confirmations", icon: ICONS.bookings },
   { id: "family", label: "Family", eyebrow: "Shared", icon: ICONS.family },
 ];
 
@@ -4357,7 +4343,7 @@ function renderTripsScreen() {
     { icon: ICONS.route, title: "Route", desc: "See the trip in route mode, by dates and location.", go: "itinerary", subtab: "maps", cta: "Start now" },
     { icon: ICONS.explore, title: "Explore attractions", desc: "Explore daily activities and add them to your trip.", go: "itinerary", subtab: "timeline", cta: "Start now" },
     { icon: ICONS.checklist, title: "Checklist", desc: "Create a shared family checklist so nothing is missed.", go: "family", cta: "Start now" },
-    { icon: ICONS.reservations, title: "Reservations & attachments", desc: "Keep track of all your bookings and confirmations.", go: "bookings", cta: "Start now" },
+    { icon: ICONS.reservations, title: "Reservations", desc: "Keep track of all your bookings and confirmations.", go: "bookings", cta: "Start now" },
   ];
   /* The itinerary steps carry the featured trip's id. Without it they only set the hash,
      and itineraryTripId is module-level and sticky for the session — so once the switcher
@@ -5535,10 +5521,7 @@ function renderBookings() {
   body.innerHTML = `
     <div class="filter-chips">${filterChips}</div>
     ${groups || `<div class="empty-card"><h3>No reservations${bookingsFilter === "all" ? " yet" : " in this filter"}</h3><p>Add reservations in Itinerary and they'll appear here.</p></div>`}
-    <section class="booking-group">
-      <h2 class="booking-group__title">Documents</h2>
-      <p style="color:var(--muted);font-size:0.85rem">Documents now live in one place — the <a href="#family">Family</a> shared checklist${state.documents.length ? ` (${state.documents.length} uploaded)` : ""}.</p>
-    </section>`;
+`;
 
   body.querySelectorAll("[data-bookings-filter]").forEach((chip) =>
     chip.addEventListener("click", () => {
@@ -5620,18 +5603,13 @@ function renderFamily() {
     <div class="section-head"><h2>Trips by travellers</h2></div>
     ${tripRows}
 
-    <div class="section-head" style="margin-top:1.6rem"><div><h2>Shared checklist</h2><p>Notes and documents everyone can see. Attach tickets & confirmations (PDF or images, max ${DOC_MAX_MB} MB) — but avoid passports or IDs, shared trips share these too.</p></div></div>
+    <div class="section-head" style="margin-top:1.6rem"><div><h2>Shared checklist</h2><p>Notes everyone on the trip can see.</p></div></div>
     <div class="card" style="padding:1.1rem 1.3rem">
       <ul class="checklist" id="shared-list">${listRows}</ul>
       <div class="checklist__add">
         <input type="text" dir="auto" id="checklist-input" placeholder="Add a note (e.g. Passports)" maxlength="80" />
-        <label class="btn btn--outline" style="cursor:pointer;white-space:nowrap" title="Attach a document">
-          📎 Attach
-          <input type="file" id="family-doc-upload" accept="application/pdf,image/*" multiple hidden />
-        </label>
         <button type="button" class="btn btn--primary" id="checklist-add">Add</button>
       </div>
-      ${docsUsageLabel() ? `<p class="act__sub" style="margin:0.6rem 0 0">${docsUsageLabel()}</p>` : ""}
     </div>`;
 
   const input = $("checklist-input");
@@ -5646,7 +5624,6 @@ function renderFamily() {
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
   input.focus();
   bindSharedListActions(body, renderFamily);
-  $("family-doc-upload").addEventListener("change", (e) => addDocumentFiles(e.target, renderFamily));
 
   // Members are derived from trip travelers: rename/remove applies across all trips.
   body.querySelectorAll("[data-member-edit]").forEach((btn) =>
@@ -5675,18 +5652,14 @@ function renderFamily() {
   );
 }
 
-/* ---------- Unified shared list: notes + documents in one list ---------- */
+/* ---------- Shared checklist ---------- */
 const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function sharedListRowsHtml() {
   const noteRows = state.checklist.map(
     (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete note" title="Delete">${TRASH_ICON}</button></li>`
   );
-  const docRows = state.documents.map(
-    (d) => `<li><span class="shared-list__doc">${ICONS.doc}</span><label style="flex:1">${escapeHtml(d.name)} <span style="color:var(--muted);font-size:0.78rem">${Math.max(1, Math.round(d.size / 1024))} KB</span></label><a class="btn btn--small btn--ghost" href="${escapeHtml(d.dataUrl)}" download="${escapeHtml(d.name)}">Download</a><button type="button" class="icon-btn icon-btn--small" data-doc-del="${escapeHtml(d.id)}" aria-label="Delete document" title="Delete">${TRASH_ICON}</button></li>`
-  );
-  const rows = [...noteRows, ...docRows];
-  return rows.length ? rows.join("") : `<li class="empty-state">Nothing yet — add a note or attach a document below.</li>`;
+  return noteRows.length ? noteRows.join("") : `<li class="empty-state">Nothing yet — add a note below.</li>`;
 }
 
 function bindSharedListActions(scope, rerender) {
@@ -5701,110 +5674,6 @@ function bindSharedListActions(scope, rerender) {
   scope.querySelectorAll("[data-chk-del]").forEach((btn) =>
     btn.addEventListener("click", () => {
       state.checklist = state.checklist.filter((c) => c.id !== btn.getAttribute("data-chk-del"));
-      saveState();
-      rerender();
-    })
-  );
-  bindDocumentActions(scope, rerender);
-}
-
-/* ---------- Shared documents store (Family + Bookings) ---------- */
-const DOC_MAX_MB = 2.5;
-const DOC_MAX_BYTES = DOC_MAX_MB * 1024 * 1024;
-const DOC_TOTAL_WARN_BYTES = 4 * 1024 * 1024;
-const DOC_TOTAL_MAX_MB = 4;
-const DOC_TOTAL_MAX_BYTES = DOC_TOTAL_MAX_MB * 1024 * 1024;
-
-function docsTotalBytes() {
-  return state.documents.reduce((s, d) => s + (d.size || 0), 0);
-}
-
-function docsUsageLabel() {
-  const used = docsTotalBytes();
-  if (!used) return "";
-  const mb = (used / 1024 / 1024).toFixed(1);
-  return `${mb} MB stored${used > DOC_TOTAL_WARN_BYTES ? " — near the browser storage limit" : ""}`;
-}
-
-function documentListHtml() {
-  if (!state.documents.length) {
-    return `<p class="empty-state">No documents yet — attach a ticket or confirmation below.</p>`;
-  }
-  return `<ul class="checklist">${state.documents
-    .map(
-      (d) => `
-      <li>
-        <span>${ICONS.doc}</span>
-        <label style="flex:1">${escapeHtml(d.name)} <span style="color:var(--muted);font-size:0.78rem">${Math.max(1, Math.round(d.size / 1024))} KB</span></label>
-        <a class="btn btn--small btn--ghost" href="${escapeHtml(d.dataUrl)}" download="${escapeHtml(d.name)}">Download</a>
-        <button type="button" class="icon-btn icon-btn--small" data-doc-del="${escapeHtml(d.id)}" aria-label="Delete document" title="Delete">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-      </li>`
-    )
-    .join("")}</ul>`;
-}
-
-function addDocumentFiles(input, rerender) {
-  const files = [...input.files];
-  input.value = "";
-  const rejected = [];
-  const addedIds = [];
-  let projected = docsTotalBytes(); // running total incl. files queued this batch
-  let pending = 0;
-  const finish = () => {
-    if (pending !== 0) return;
-    try {
-      saveState();
-    } catch {
-      state.documents = state.documents.filter((d) => !addedIds.includes(d.id));
-      alert("Not enough browser storage for these files. Remove some documents first.");
-    }
-    if (rejected.length) alert("Skipped:\n" + rejected.join("\n"));
-    rerender();
-  };
-  for (const f of files) {
-    if (f.size > DOC_MAX_BYTES) {
-      rejected.push(`${f.name} (too big — max ${DOC_MAX_MB} MB)`);
-      continue;
-    }
-    if (!/^(application\/pdf|image\/)/.test(f.type)) {
-      rejected.push(`${f.name} (only PDF or images)`);
-      continue;
-    }
-    if (projected + f.size > DOC_TOTAL_MAX_BYTES) {
-      rejected.push(`${f.name} (would exceed the ${DOC_TOTAL_MAX_MB} MB total — remove some first)`);
-      continue;
-    }
-    projected += f.size;
-    pending += 1;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const id = uid("doc");
-      addedIds.push(id);
-      state.documents.push({
-        id, name: f.name, type: f.type, size: f.size,
-        dataUrl: reader.result, uploadedAt: todayISO(),
-      });
-      pending -= 1;
-      finish();
-    };
-    reader.onerror = () => {
-      rejected.push(`${f.name} (couldn't be read)`);
-      pending -= 1;
-      finish();
-    };
-    reader.readAsDataURL(f);
-  }
-  if (pending === 0) finish(); // all files rejected synchronously → still report
-}
-
-function bindDocumentActions(scope, rerender) {
-  scope.querySelectorAll("[data-doc-del]").forEach((btn) =>
-    btn.addEventListener("click", () => {
-      const doc = state.documents.find((d) => d.id === btn.getAttribute("data-doc-del"));
-      if (!doc || !confirm(`Delete document "${doc.name}"?`)) return;
-      state.documents = state.documents.filter((d) => d.id !== doc.id);
       saveState();
       rerender();
     })
@@ -5993,9 +5862,6 @@ function diffStates(prevRaw, nextRaw) {
     if (!next.checklist.some((c) => c.id === id)) out.push({ screens: ["family"], text: `removed note “${p.text}”` });
   }
 
-  diffCollection(prev.documents, next.documents, ["name"],
-    (d) => `document “${d.name}”`, ["family"], out, { add: "added", del: "removed", edit: "renamed" });
-
   const prevTrips = new Map(prev.trips.map((t) => [t.id, t]));
   for (const t of next.trips) {
     const p = prevTrips.get(t.id);
@@ -6144,13 +6010,10 @@ window.VacationApp = {
   },
   hasLocalChangesSince: (base) => {
     if (!base) return false;
-    const shape = (s) => JSON.stringify({
-      ...s,
-      documents: (s.documents || []).map((d) => d.id).sort(),
-      lastEditedBy: undefined,
-      lastEditedAt: undefined,
-    });
-    return shape(state) !== shape({ ...base, documents: (base.documents || []).map((d) => ({ id: d.id })) });
+    /* Simpler since v1.11.0: the base used to store documents as bare ids, so both sides had
+       to be reduced to ids before comparing or every local document looked edited. */
+    const shape = (s) => JSON.stringify({ ...s, documents: undefined, lastEditedBy: undefined, lastEditedAt: undefined });
+    return shape(state) !== shape(base);
   },
   mergeStates, // exposed for ?selftest=1
   merge3,      // ditto

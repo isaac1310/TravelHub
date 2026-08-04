@@ -139,39 +139,18 @@
     }
   }
 
-  /* The server caps a room at 8 MB via pg_column_size — the TOAST-compressed jsonb.
-     The client can't measure that exactly (Blob measures raw JSON and over-estimates),
-     so this is an early warning with a margin, not the authority. Documents are the
-     only thing big enough to matter, so they're what gets left behind; the server's
-     own error is still handled below in case this estimate was wrong. */
-  const SIZE_WARN_BYTES = 7 * 1024 * 1024;
-
-  function payloadWithinCap() {
-    const payload = stampedPayload();
-    const size = new Blob([JSON.stringify(payload)]).size;
-    if (size <= SIZE_WARN_BYTES || !Array.isArray(payload.documents) || !payload.documents.length) {
-      return { payload, dropped: [] };
-    }
-    // Keep documents on this device; sync everything else rather than nothing.
-    const dropped = payload.documents.map((d) => d.name);
-    return { payload: { ...payload, documents: [] }, dropped };
-  }
-
   function isTooLarge(err) {
     return /too large|payload/i.test(String(err?.message || err?.hint || ""));
   }
 
+  /* The server is still the authority on size — a room is capped at 8 MB via pg_column_size.
+     The client-side estimate and the drop-the-documents-and-retry path are gone with the
+     attachments that made them necessary; a family's whole trip set is now tens of KB. Telling
+     someone to remove documents they no longer have would be worse than a generic message. */
   function reportTooLarge() {
-    setSyncStatus("Too big to sync — remove some documents", "error");
+    setSyncStatus("Too big to sync", "error");
     window.VacationApp.showSyncErrorToast?.(
-      "This trip is too large to sync. Remove some attached documents (Family → Shared checklist) and it'll save again."
-    );
-  }
-
-  function reportDroppedDocs(names) {
-    setSyncStatus("Saved without documents", "ok");
-    window.VacationApp.showSyncErrorToast?.(
-      `Saved, but ${names.length} document${names.length === 1 ? "" : "s"} stayed on this device only (too large to share): ${names.slice(0, 3).join(", ")}${names.length > 3 ? "…" : ""}`
+      "This trip is too large to sync. Try removing a trip or some reservations you no longer need."
     );
   }
 
@@ -221,7 +200,7 @@
     setSyncStatus("Saving…", "busy");
     let failed = false;
     try {
-      const { payload, dropped } = payloadWithinCap();
+      const payload = stampedPayload();
       const { data, error } = await supabase.rpc("save_shared_budget", {
         p_id: roomId,
         p_secret: roomSecret,
@@ -239,7 +218,6 @@
         lastRemoteUpdatedAt = data.updated_at || lastRemoteUpdatedAt;
         // Server now holds exactly this; it becomes the base for the next merge.
         writeMergeBase(payload);
-        if (dropped.length) reportDroppedDocs(dropped);
       }
     } catch (err) {
       if (isTooLarge(err)) { saveInFlight = false; reportTooLarge(); return; }
@@ -354,7 +332,7 @@
      compare against; otherwise falls back to the plain replace, which is correct
      when nothing local is pending. Returns false only when the merge refused. */
   function applyOrMerge(remotePayload) {
-    const base = baseWithDocs(readMergeBase(), remotePayload);
+    const base = readMergeBase();
     const localDiverged = pendingSave || (base && window.VacationApp.hasLocalChangesSince?.(base));
 
     if (!base || !localDiverged) {
@@ -881,22 +859,15 @@
   /* The last payload this device and the server agreed on. Without it a pull can't
      tell "she changed this" from "he changed this", and has to overwrite.
 
-     Documents are stripped to their ids: they're inline base64 and the state already
-     runs ~5.5MB against a ~5MB localStorage quota, so a full second copy cannot fit.
-     Ids alone are enough — document content is never edited, only added or removed,
-     so id-level presence is all the merge needs. */
+     The base used to be stored in a reduced shape, with documents stripped to their ids —
+     inline base64 meant a full second copy could not fit in the localStorage quota. With
+     attachments gone (v1.11.0) the whole payload is tens of KB and is stored verbatim, which
+     removes the reduce/restore pair and the class of bug that came with it. */
   const MERGE_BASE_KEY = "travelhub-sync-base";
-
-  function baseShape(payload) {
-    return {
-      ...payload,
-      documents: (payload.documents || []).map((d) => ({ id: d.id })),
-    };
-  }
 
   function writeMergeBase(payload) {
     try {
-      localStorage.setItem(MERGE_BASE_KEY, JSON.stringify(baseShape(payload)));
+      localStorage.setItem(MERGE_BASE_KEY, JSON.stringify(payload));
     } catch {
       // A stale base is worse than none — it would make the merge confidently wrong.
       try { localStorage.removeItem(MERGE_BASE_KEY); } catch { /* private mode */ }
@@ -912,17 +883,7 @@
     try { localStorage.removeItem(MERGE_BASE_KEY); } catch { /* private mode */ }
   }
 
-  /* Documents were stripped from the base, so restore their ids from whichever side
-     still has the content. Without this every document looks "deleted in base" and
-     the merge would drop them. */
-  function baseWithDocs(base, remotePayload) {
-    if (!base) return null;
-    const known = new Map((remotePayload.documents || []).map((d) => [d.id, d]));
-    return {
-      ...base,
-      documents: (base.documents || []).map((d) => known.get(d.id) || { id: d.id }),
-    };
-  }
+
 
   const ROOM_STORE_KEY = "travelhub-room";
   function storedRoom() {

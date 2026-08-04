@@ -19,22 +19,21 @@ which is a proxy, not the phone in your pocket.
 
 ## Part A — What "storage" means here
 
-There is **no Supabase Storage bucket**. `grep` for `supabase.storage` returns zero
-hits. Documents are base64 data-URLs embedded directly in the state object, which
-lives in `localStorage` and is uploaded whole in the sync payload.
+There is **no Supabase Storage bucket**. `grep` for `supabase.storage` returns zero hits, and
+since **v1.11.0 there are no document attachments at all** — they were removed, along with the
+client-side size estimate and the drop-the-documents-and-retry path that existed for them. A
+family's whole trip set is now tens of KB rather than megabytes.
 
-Three separate limits, and it's worth knowing which one you hit:
+Two limits remain, and neither should ever be reached in normal use:
 
 | Limit | Value | Enforced where |
 |---|---|---|
-| Single document | 2.5 MB | `DOC_MAX_MB`, client |
-| All documents combined | 4 MB | `DOC_TOTAL_MAX_MB`, client |
 | Whole sync payload | 8 MB | `pg_column_size` in `create_shared_budget`, server |
 | Browser localStorage | ~5 MB typical | the browser |
 
-Note the squeeze: browser localStorage is commonly ~5 MB, but the client allows 4 MB
-of documents *plus* all trip data. You can hit the browser's wall before the app's own
-limit. That's what the quota warning is for.
+The squeeze that used to matter — 4 MB of base64 attachments plus all trip data against a ~5 MB
+localStorage quota — is gone. The quota warning stays because private-browsing mode can block
+storage entirely, which has nothing to do with size.
 
 ### A1. Quota warning (no backend needed)
 
@@ -46,20 +45,25 @@ In a **local-only** session (not joined to a room), paste into the console:
   let alerts = 0; const realAlert = window.alert;
   window.alert = (m) => { alerts++; console.log("WARNED:", m); };
   Storage.prototype.setItem = function () { const e = new Error("full"); e.name = "QuotaExceededError"; throw e; };
-  try { saveState(); saveState(); }
+  let returned;
+  try { returned = saveState(); saveState(); }
   finally { Storage.prototype.setItem = real; window.alert = realAlert; }
-  console.log(alerts === 1 ? "PASS — warned once, did not throw" : "FAIL — alerts: " + alerts);
+  console.log(alerts === 1 && returned === false
+    ? "PASS — warned once, returned false, did not throw"
+    : `FAIL — alerts: ${alerts}, returned: ${returned}`);
 })();
 ```
 
-**Expect:** one visible warning naming the fix ("Remove some attached documents"), no
-exception, and the app still usable afterwards. Reload to clear the once-per-session latch.
+**Expect:** one visible warning, `saveState()` returning `false` (it reported nothing before
+v1.11.0, which is what made every caller's rollback dead code), no exception, and the app still
+usable. Reload to clear the once-per-session latch.
 
-### A2. Document caps
+### A2. An older client's payload
 
-Attach a file larger than 2.5 MB on the Family screen. **Expect** a clear rejection, not
-a silent failure. Then attach several smaller ones until you pass 4 MB total.
-**Expect** the combined cap to stop you and the usage label to reflect it.
+A device still on v1.10.x keeps sending `documents` until it reloads. Import an export taken
+before v1.11.0, or paste one into the console, and **expect** it to load cleanly with the
+attachments dropped and everything else — trips, expenses, checklist — intact. No base64 should
+appear in `JSON.stringify(state)`.
 
 ---
 

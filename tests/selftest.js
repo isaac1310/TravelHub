@@ -566,34 +566,28 @@
       return eq(after.trips[0].budget, 200, "budget after second merge");
     });
 
-    /* #3 — deletions of attachments must stick, and not be re-uploaded.
-       The base MUST be built the way share.js really stores and rehydrates it:
-       persisted as `{id}` only (no body), then bodies restored from the remote. A
-       remotely-deleted document has no body to restore, so it stays a bare `{id}` and
-       compares as "changed" against the local full copy — which is precisely how the
-       deletion used to be undone. Testing with full bodies in the base hides the bug. */
-    const storedBase = (payload) => ({ ...payload, documents: (payload.documents || []).map((d) => ({ id: d.id })) });
-    const rehydrate = (base, remote) => {
-      const known = new Map((remote.documents || []).map((d) => [d.id, d]));
-      return { ...base, documents: (base.documents || []).map((d) => known.get(d.id) || { id: d.id }) };
-    };
+    /* #3 — the general property the old attachment checks were really proving: a deletion on
+       one side must stick, and an addition on the other must survive. Attachments are gone as
+       of v1.11.0, so this runs on the checklist, which is the remaining add/remove-only list.
+       (The attachment versions also exercised a reduce-and-rehydrate base shape that no longer
+       exists — the base is stored verbatim now.) */
 
-    check("a document deleted remotely stays deleted", () => {
-      const agreed = wrap([], { documents: [doc("d1"), doc("d2")] });
-      const local = clone(agreed);                         // untouched, still holds both
-      const remote = wrap([], { documents: [doc("d1")] }); // d2 deleted there
-      const base0 = rehydrate(storedBase(agreed), remote); // d2 has no body to restore
-      const ids = m3(base0, local, remote).state.documents.map((d) => d.id).join(",");
-      return eq(ids, "d1", "d2 must not resurrect");
+    check("an item deleted remotely stays deleted", () => {
+      const note = (id) => ({ id, text: id, done: false });
+      const agreed = wrap([], { checklist: [note("n1"), note("n2")] });
+      const local = clone(agreed);                          // untouched, still holds both
+      const remote = wrap([], { checklist: [note("n1")] }); // n2 deleted there
+      const ids = m3(agreed, local, remote).state.checklist.map((c) => c.id).join(",");
+      return eq(ids, "n1", "n2 must not resurrect");
     });
 
-    check("a document added locally still survives a merge", () => {
-      const agreed = wrap([], { documents: [doc("d1")] });
-      const local = wrap([], { documents: [doc("d1"), doc("mine")] });
+    check("an item added locally still survives a merge", () => {
+      const note = (id) => ({ id, text: id, done: false });
+      const agreed = wrap([], { checklist: [note("n1")] });
+      const local = wrap([], { checklist: [note("n1"), note("mine")] });
       const remote = clone(agreed);
-      const base0 = rehydrate(storedBase(agreed), remote);
-      const ids = m3(base0, local, remote).state.documents.map((d) => d.id).sort().join(",");
-      return eq(ids, "d1,mine");
+      const ids = m3(agreed, local, remote).state.checklist.map((c) => c.id).sort().join(",");
+      return eq(ids, "mine,n1");
     });
 
     /* #4 — an expense-only change counts as editing the trip, so a concurrent trip
@@ -616,14 +610,17 @@
       return eq(m3(base0, local, remote).state.trips.map((t) => t.id).join(","), "t2");
     });
 
-    // The base must never carry document bodies — localStorage has no room for them.
-    check("the stored base strips document bodies", () => {
-      const big = "data:application/pdf;base64," + "A".repeat(300000);
-      const payload = wrap([], { documents: [{ id: "d1", name: "big.pdf", size: 1, dataUrl: big }] });
-      const shaped = { ...payload, documents: (payload.documents || []).map((d) => ({ id: d.id })) };
-      const bytes = JSON.stringify(shaped).length;
-      if (JSON.stringify(shaped).includes("AAAA")) return "document body leaked into the base";
-      return bytes < 50000 ? true : `base is ${bytes} bytes, expected well under 50KB`;
+    /* The base used to be stored in a reduced shape because inline base64 attachments could
+       not fit twice in localStorage. With attachments gone it is stored verbatim, and what
+       matters now is that it round-trips faithfully — a lossy base makes the merge confidently
+       wrong, which is worse than having no base at all. */
+    check("the stored merge base round-trips without loss", () => {
+      const payload = wrap([makeTrip({ id: "t1", budget: 1234 })], {
+        checklist: [{ id: "n1", text: "Passports", done: true }],
+        currentFunds: 4321,
+      });
+      const round = JSON.parse(JSON.stringify(payload));
+      return eq(JSON.stringify(round), JSON.stringify(payload), "base round-trip");
     });
   }
 
@@ -2078,6 +2075,52 @@
       return /\d/.test(addLabel) ? true : `Add reservation is labelled "${addLabel}" for every day`;
     });
 
+    /* ---- attachments removed ---- */
+
+    check("the documents key does not survive a load and save", () => {
+      const withDocs = {
+        trips: [makeTrip()], items: [], version: 2,
+        documents: [{ id: "d1", name: "pass.pdf", size: 10, dataUrl: "data:application/pdf;base64,AAA" }],
+      };
+      const loaded = normalizeState(JSON.parse(JSON.stringify(withDocs)));
+      if ("documents" in loaded) return "documents survived normalizeState";
+      // Nothing may re-introduce it on the way back out either.
+      const saved = JSON.parse(JSON.stringify(loaded));
+      return "documents" in saved ? "documents came back on save" : true;
+    });
+
+    check("an old payload with attachments merges cleanly", () => {
+      /* A device still on v1.10.x will keep sending them until it reloads. The merge must
+         accept that payload, drop the attachments, and preserve everything else — rather than
+         throwing on the missing addRemoveOnly path that used to handle them. */
+      const doc = { id: "d1", name: "old.pdf", size: 10, dataUrl: "data:application/pdf;base64,AAA" };
+      const base = normalizeState({ trips: [makeTrip({ id: "t1" })], items: [], version: 2, documents: [doc] });
+      const local = normalizeState({ trips: [makeTrip({ id: "t1", budget: 999 })], items: [], version: 2, documents: [doc] });
+      const remote = normalizeState({ trips: [makeTrip({ id: "t1" })], items: [], version: 2, documents: [doc] });
+      const res = merge3(base, local, remote);
+      if (!res.state) return `the merge refused: ${JSON.stringify(res.stats)}`;
+      if ("documents" in res.state) return "the merged state carries documents";
+      return eq(res.state.trips[0].budget, 999, "the local edit survived");
+    });
+
+    check("Family offers notes only, with nothing to attach", () => {
+      renderFamily();
+      if (document.getElementById("family-doc-upload")) return "the attach control is still rendered";
+      if (document.querySelector("[data-doc-del]")) return "a document row is still rendered";
+      // The checklist itself must still work — the point was to remove attachments, not notes.
+      return document.getElementById("checklist-add") && document.getElementById("shared-list")
+        ? true : "the shared checklist is missing";
+    });
+
+    check("nothing still points at the removed document code", () => {
+      const gone = ["docsTotalBytes", "docsUsageLabel", "documentListHtml", "addDocumentFiles",
+                    "bindDocumentActions", "DOC_MAX_BYTES", "DOC_TOTAL_MAX_BYTES"];
+      /* A dangling reference to deleted code throws at runtime on a path nobody clicked, which
+         is exactly what a test suite will not catch by itself. */
+      const alive = gone.filter((n) => typeof window[n] !== "undefined");
+      return alive.length ? `still defined: ${alive.join(", ")}` : true;
+    });
+
     /* ---- the harness itself ---- */
 
     check("a skipped check is reported as skipped, not passed", () => {
@@ -2178,7 +2221,11 @@
     check("unknown expense category clamps to 'Other'", () =>
       eq(normalizeCategory("<img onerror=x>"), "Other"));
 
-    check("documents with a non-data URL are dropped", () => {
+    /* Attachments were removed in v1.11.0. The old check here proved a javascript: dataUrl
+       could not survive normalisation; the stronger guarantee now is that the whole key is
+       dropped, so no such URL can reach the DOM or cross the wire at all — including from an
+       older client still sending them. */
+    check("a payload from an older client loses its attachments", () => {
       const d = normalizeState({
         trips: [makeTrip()], items: [], version: 2,
         documents: [
@@ -2186,8 +2233,9 @@
           { id: "d2", name: "ok", dataUrl: "data:application/pdf;base64,AAA" },
         ],
       });
-      if (d.documents.length !== 1) return "expected 1 surviving document, got " + d.documents.length;
-      return eq(d.documents[0].id, "d2");
+      if ("documents" in d) return `documents survived as ${JSON.stringify(d.documents)}`;
+      // And it must not throw or lose anything else on the way through.
+      return eq(d.trips.length, 1, "trips survived");
     });
 
     check("malformed payload does not throw", () => {
