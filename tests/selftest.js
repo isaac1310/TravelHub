@@ -107,6 +107,7 @@
       releaseV1101();
       releaseV1102();
       releaseV1103();
+      releaseV1104();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -1491,6 +1492,72 @@
       }
       return monumentFor(t("Nowhere, Atlantis")) === MONUMENTS.generic
         ? true : "an unknown city no longer falls back";
+    });
+  }
+
+  /* ===== 1b11. v1.10.4 — a select's option list must not dismiss the sheet =====
+     Android draws a <select>'s option list over the upper part of the screen, which for a
+     bottom-sheet dialog is the backdrop. Dismissing it delivered the tap through to the
+     page, the dialog saw a backdrop tap, and it closed — losing the edit. The dirty-form
+     guard did not catch it because the stray tap beats `change`. */
+
+  function releaseV1104() {
+    group("v1.10.4");
+
+    // What the browser reports for a backdrop hit: both events target the dialog itself.
+    function strayBackdropTap(dialog) {
+      dialog.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, isPrimary: true }));
+      dialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+
+    const expenseDialog = () => document.getElementById("dialog-expense");
+
+    check("picking from a select does not dismiss the sheet", () => {
+      const trip = state.trips[0];
+      if (!trip) return true;
+      const d = expenseDialog();
+      openExpenseDialog(trip.id, trip.expenses[0] || null);
+      const sel = d.querySelector('[name="status"]');
+      // Tapping the select is what arms the grace window.
+      sel.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, isPrimary: true }));
+      // The option list closing, before `change` has had a chance to dirty the form.
+      strayBackdropTap(d);
+      const survived = d.open;
+      closeDialog(d);
+      return survived ? true : "the sheet closed when the option list was dismissed";
+    });
+
+    check("the same stray tap after a change is also survived", () => {
+      const trip = state.trips[0];
+      if (!trip) return true;
+      const d = expenseDialog();
+      openExpenseDialog(trip.id, trip.expenses[0] || null);
+      const sel = d.querySelector('[name="status"]');
+      sel.value = "paid";
+      sel.dispatchEvent(new Event("input", { bubbles: true }));
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      strayBackdropTap(d);
+      const survived = d.open;
+      closeDialog(d);
+      return survived ? true : "the sheet closed after the status was changed";
+    });
+
+    check("a real backdrop tap still dismisses a clean sheet", () => {
+      // The grace window must not break tap-outside-to-close, which is the whole point of
+      // the v1.6.1 behaviour. No select involved, so nothing is suppressed.
+      const d = document.getElementById("dialog-funds");
+      openFundsDialog();
+      if (!d.open) return "the funds dialog did not open";
+      strayBackdropTap(d);
+      const closed = !d.open;
+      if (d.open) closeDialog(d);
+      return closed ? true : "a clean sheet no longer closes on a backdrop tap";
+    });
+
+    check("the grace window is bounded", () => {
+      // An unbounded suppression would silently disable tap-outside after any select use.
+      return SELECT_POPUP_GRACE_MS > 0 && SELECT_POPUP_GRACE_MS <= 1500
+        ? true : `grace is ${SELECT_POPUP_GRACE_MS}ms`;
     });
   }
 
