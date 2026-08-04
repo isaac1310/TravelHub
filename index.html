@@ -3147,25 +3147,43 @@ function setupDialogCloseHandlers() {
        tap and closed itself. The dirty-form guard below did not help, because the stray
        tap arrives before `change` has made the form dirty.
 
-       v1.10.4's fix was a time window from touching the select, and it failed on the real
-       phone: the option list stays open while you read it, so picking "Paid" seconds later
-       dismissed outside the window. The focus check has no such clock — Android keeps the
-       select focused while its list is open, so a backdrop tap arriving with a focused
-       select IS the list closing. It blurs the select instead of closing the sheet: the
-       first outside tap settles the popup, a second one dismisses as usual. The window is
-       kept only to bridge the moment right after `change`, when some Androids have already
-       moved focus. */
+       Two earlier fixes failed:
+
+       - v1.10.4 timed a window from touching the select. The option list stays open while you
+         read it, so picking an option seconds later landed outside the window.
+       - v1.10.5 checked whether a select held focus when the backdrop click arrived. That guard
+         was **structurally unreachable**: pointerdown on the backdrop blurs the select before
+         the click handler runs, so document.activeElement is never still a select by then. It
+         could not fire with pointer input at all — which is exactly what QA reproduced.
+
+       So the focus is read at POINTERDOWN, before the blur, and remembered for the click. The
+       first outside tap settles the popup and keeps the sheet; a second dismisses as usual.
+       The change window stays as a bridge for platforms that have already moved focus by then.
+
+       Payment status became three buttons in v1.11.0, so the reported path no longer involves a
+       select at all — but Category and the reservation type still do, and this is what protects
+       them. */
     dialog.addEventListener("change", (e) => {
       if (e.target.tagName === "SELECT") dialog._selectPopupAt = nowMs();
     }, true);
 
+    let selectHadFocusAtDown = false;
     // Track where the press began, so selecting text and releasing outside
     // doesn't count as a backdrop tap.
-    dialog.addEventListener("pointerdown", (e) => { startedOnBackdrop = e.target === dialog; });
+    dialog.addEventListener("pointerdown", (e) => {
+      startedOnBackdrop = e.target === dialog;
+      const ae = document.activeElement;
+      selectHadFocusAtDown = Boolean(ae && ae.tagName === "SELECT" && dialog.contains(ae));
+    });
     dialog.addEventListener("click", (e) => {
       if (!startedOnBackdrop || e.target !== dialog) return;
-      const ae = document.activeElement;
-      if (ae && ae.tagName === "SELECT" && dialog.contains(ae)) { ae.blur(); return; }
+      if (selectHadFocusAtDown) {
+        selectHadFocusAtDown = false;
+        // Settle the popup rather than the sheet; the next outside tap dismisses.
+        const sel = dialog.querySelector("select:focus") || document.activeElement;
+        if (sel && typeof sel.blur === "function") sel.blur();
+        return;
+      }
       if (nowMs() - (dialog._selectPopupAt || 0) < SELECT_POPUP_GRACE_MS) return;
       const sig = formSignature(dialog);
       // Never throw away typed input on a mis-tap — Cancel and Esc still work.
@@ -5377,12 +5395,17 @@ function renderMapsTab(trip) {
 
   for (const iso of isoFilter) {
     const stops = itemsForDay(trip, iso).filter(isMappable);
-    if (!stops.length) continue;
-    const numbers = stopNumbers(trip, iso); // same source the timeline reads
-
     const d = parseISO(iso);
     const hotel = tripHotelForDay(trip, iso);
+    /* Register the hotel BEFORE the empty-day bail. isMappable excludes hotels and flights, so
+       `stops` is empty on a day whose only located reservation IS the hotel — and the old
+       `continue` here skipped past this line, so a geocoded hotel produced no pin and no list
+       row at all. Changing that same reservation's type to Attraction made it appear, which is
+       how QA proved it. It is also why the map-pin/list-row check skipped forever: the seed
+       data's only geocodable stop is a hotel. */
     if (hotel && hotel.location.lat !== null) hotelPins.set(hotel.id, hotel);
+    if (!stops.length && !(hotel && hotel.location.lat !== null)) continue;
+    const numbers = stopNumbers(trip, iso); // same source the timeline reads
 
     sidebar += `<div class="map-day-head">${escapeHtml(fmtDow(d))}, ${escapeHtml(fmtDay(d))}</div>`;
 
@@ -5666,7 +5689,8 @@ function renderFamily() {
     })
     .join("");
 
-  const tripRows = state.trips
+  // The sixth ordering site — QA caught this one still listing in raw array order.
+  const tripRows = sortTripsByUpcoming(state.trips)
     .filter((t) => (getMeta(t).travelers || []).length)
     .map((t) => {
       const meta = getMeta(t);

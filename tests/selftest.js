@@ -2187,11 +2187,98 @@
       if (/note/i.test(input.placeholder)) return `the placeholder still says "${input.placeholder}"`;
       const head = document.getElementById("screen-family").textContent;
       if (!/tick/i.test(head)) return "nothing tells you the items can be ticked";
-      // And the tick target must be the row, not a 20px box.
-      const label = document.querySelector("#shared-list label");
-      if (!label) return skip("no checklist items to measure");
-      return label.getBoundingClientRect().height >= 44
-        ? true : `the tick target is ${Math.round(label.getBoundingClientRect().height)}px tall`;
+      /* And the tick target must be the row, not a 20px box. Measured on a throwaway row when
+         the list is empty — inserting a node to read a CSS rule is not seeding app state, and
+         skipping here would have hidden the two assertions above that DID run. */
+      const list = document.getElementById("shared-list");
+      if (!list) return "the shared list is missing";
+      let label = list.querySelector("label");
+      let probe = null;
+      if (!label) {
+        probe = document.createElement("li");
+        probe.innerHTML = '<input type="checkbox" /><label>probe</label>';
+        list.appendChild(probe);
+        label = probe.querySelector("label");
+      }
+      /* Computed min-height, not a rect: Family is display:none unless it is the active screen,
+         and every rect is then 0 — the third time this release that a hidden screen made one of
+         my own checks lie. getComputedStyle still reports the specified value. */
+      const min = parseFloat(getComputedStyle(label).minHeight) || 0;
+      probe?.remove();
+      return min >= 44 ? true : `the tick target's min-height is ${min}px`;
+    });
+
+    check("the select guard survives pointerdown blurring the select", () => {
+      /* QA found the v1.10.5 guard was structurally unreachable: pointerdown on the backdrop
+         blurs the select before the click handler runs, so document.activeElement was never
+         still a select by the time it looked. Read at pointerdown instead. This check drives
+         the real sequence — focus, pointerdown, blur, click — so a guard that reads focus too
+         late fails it. */
+      const d = document.getElementById("dialog-expense");
+      const trip = state.trips[0];
+      if (!trip) return skip("no trips");
+      openExpenseDialog(trip.id, trip.expenses[0] || null);
+      try {
+        const sel = d.querySelector("select[name='category']");
+        if (!sel) return skip("no select left in this dialog");
+        sel.focus();
+        if (document.activeElement !== sel) return skip("this element cannot hold focus here");
+        // The browser's real order: pointerdown lands, focus leaves the select, then click.
+        d.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, isPrimary: true }));
+        sel.blur();
+        d.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        if (!d.open) return "the sheet closed on the first outside tap after using a select";
+        // A second outside tap, with no select involved, must still dismiss a clean sheet.
+        d.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, isPrimary: true }));
+        d.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        return d.open ? "a clean sheet no longer dismisses on a deliberate outside tap" : true;
+      } finally {
+        if (d.open) closeDialog(d);
+      }
+    });
+
+    check("a located hotel pins even when it is the day's only stop", () => {
+      /* isMappable excludes hotels and flights, so a day whose only located reservation IS the
+         hotel had `stops.length === 0` and the loop bailed before registering the pin. QA proved
+         it by switching that reservation's type to Attraction and watching the pin appear. */
+      const trip = state.trips.find((t) => getMeta(t).startDate && getMeta(t).endDate);
+      if (!trip) return skip("no dated trip");
+      const hotel = state.items.find((i) => i.tripId === trip.id && i.type === "hotel");
+      if (!hotel) return skip("no hotel on this trip");
+      const before = { lat: hotel.location.lat, lng: hotel.location.lng };
+      const prevTab = itinerarySubTab, prevFilter = mapDayFilter;
+      try {
+        hotel.location.lat = 48.8566;
+        hotel.location.lng = 2.3522;
+        mapDayFilter = "all";
+        itinerarySubTab = "maps";
+        renderItinerary();
+        // The list row is the observable part; the Leaflet marker needs the CDN.
+        const rows = document.querySelectorAll("#itinerary-view .mapstop").length;
+        return rows > 0 ? true : "a geocoded hotel produced no stop row at all";
+      } finally {
+        hotel.location.lat = before.lat;
+        hotel.location.lng = before.lng;
+        itinerarySubTab = prevTab;
+        mapDayFilter = prevFilter;
+        renderItinerary();
+      }
+    });
+
+    check("Family lists trips in the one shared order", () => {
+      renderFamily();
+      /* .member-trip__name, not a guessed selector: my first attempt looked for `.trip-row` and
+         `article`, neither of which Family renders, so `shown` was empty and the comparison
+         passed against a reversed order. */
+      const shown = [...document.querySelectorAll("#screen-family .member-trip__name")]
+        .map((el) => el.textContent.trim());
+      const expected = sortTripsByUpcoming(state.trips)
+        .filter((t) => (getMeta(t).travelers || []).length)
+        .map((t) => t.name);
+      if (expected.length < 2) return skip("needs two trips with travellers");
+      if (!shown.length) return "Family rendered no trip rows to compare";
+      return shown.join(",") === expected.join(",")
+        ? true : `Family lists ${shown.join(",")}, the shared order is ${expected.join(",")}`;
     });
 
     /* ---- attachments removed ---- */
