@@ -1622,8 +1622,18 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <input type="hidden" name="tripId" />
         <label class="field">
           <span class="field__label">Trip name</span>
-          <input type="text" dir="auto" name="name" required maxlength="80" />
+          <input type="text" dir="auto" name="name" required maxlength="80"
+                 placeholder="e.g. Summer in Europe" />
         </label>
+        <div class="field">
+          <span class="field__label">Destinations — these build your route</span>
+          <!-- Directly under the name, not below Year and Budget. Isaac added a second city by
+               typing it into "Trip name", because that is the field a dialog opens on and this
+               section was three fields down behind a ghost button. The route strip then
+               correctly showed one city, which read as the app losing the edit. -->
+          <div id="dest-rows" class="dest-rows"></div>
+          <button type="button" class="btn btn--small btn--outline" id="dest-add">+ Add another destination</button>
+        </div>
         <label class="field">
           <span class="field__label">Year</span>
           <input type="number" name="year" min="2000" max="2100" required />
@@ -1632,13 +1642,6 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label">Budget (₪)</span>
           <input type="number" name="budget" min="0" step="0.01" required />
         </label>
-        <div class="field">
-          <span class="field__label">Destinations (city, country)</span>
-          <!-- One row per city. Rows rather than a delimiter because the comma
-               already separates city from country. -->
-          <div id="dest-rows" class="dest-rows"></div>
-          <button type="button" class="btn btn--small btn--ghost" id="dest-add">+ Add another destination</button>
-        </div>
         <div class="roll-years">
           <label class="field">
             <span class="field__label">Start date</span>

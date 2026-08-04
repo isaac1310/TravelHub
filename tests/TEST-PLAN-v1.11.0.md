@@ -61,8 +61,10 @@ Itinerary → switch to **Christmas** (7 days; Paris is too short to scroll far)
 2. As you scroll, the highlighted day chip should follow the day under the header, and scroll
    itself into view along the strip. **Judge this by feel** — it is more likely to feel wrong
    than to be wrong, and that is your call, not mine.
-3. Scrolled down, tap **Maps**. **Expect:** the map appears *below* the toggle, not over it. This
-   was the bug you found; it had two independent causes.
+3. Scrolled down, tap **Maps**. **Expect:** the map appears *below* the toggle, not over it, and
+   the header's cream band reaches **both screen edges** — no map showing through at the sides.
+   You reported this twice; it had three independent causes, and the third was that the header's
+   background stopped at the 1rem gutter while the map runs full-bleed.
 4. Tap **Timeline** again, then tap a day chip. **Expect:** it jumps to that day with the heading
    visible below the header, and the highlight does not flicker through the days on the way.
 5. Press and hold a reservation card, drag it toward the **top** edge. **Expect:** the page
@@ -80,6 +82,20 @@ Family → Shared checklist.
    you confirmed. Bookings should have no Documents section either.
 
 ---
+
+## 4b. Adding a second destination
+
+Itinerary → **Edit trip**.
+
+1. **Destinations** should now be the *second* field, directly under Trip name, labelled
+   "Destinations — these build your route", with a visible **+ Add another destination** button.
+2. Tap it, type `Vienna, Austria` in the new row, **Save**.
+3. **Expect:** the route strip immediately reads **Home → Paris → Vienna → Home**.
+
+This is the "Vienna is missing" report. The route strip was right — Vienna had gone into **Trip
+name** (your data read `"Paris, viena"`), because that is the field the dialog opens on and
+Destinations was three fields below behind a ghost button. Nothing was broken; the form pointed
+you at the wrong box. Remove Vienna again afterwards if you like.
 
 ## 5. Trip cards and ordering
 
@@ -136,7 +152,7 @@ Do not report these; they are on the follow-up list:
 
 ## What the automation already covers
 
-173 checks, 172 pass, 1 skip, 0 fail at phone width; every new check proven to fail against its
+176 checks, 175 pass, 1 skip, 0 fail at phone width; every new check proven to fail against its
 own bug. A code review caught a data-loss blocker; a QA pass caught three more.
 
 **What it cannot cover, which is why this plan exists:** the harness cannot open a native Android

@@ -2159,6 +2159,55 @@
       });
     });
 
+    check("destinations sit directly under the trip name", () => {
+      /* Isaac added a second city by typing it into "Trip name" — the field a dialog opens on —
+         while Destinations sat three fields below behind a ghost button. The route strip then
+         correctly showed one city, which read as the edit being lost. Order is the fix. */
+      const form = document.getElementById("form-trip");
+      const fields = [...form.querySelectorAll(".field")];
+      const nameIdx = fields.findIndex((f) => f.querySelector("[name='name']"));
+      const destIdx = fields.findIndex((f) => f.querySelector("#dest-rows"));
+      if (nameIdx < 0 || destIdx < 0) return "trip name or destinations field missing";
+      if (destIdx !== nameIdx + 1) {
+        return `destinations is ${destIdx - nameIdx} fields below the name, not 1`;
+      }
+      const label = fields[destIdx].querySelector(".field__label")?.textContent || "";
+      if (!/route/i.test(label)) return `the label "${label}" does not say what destinations do`;
+      // A ghost button is what made it missable in the first place.
+      const add = document.getElementById("dest-add");
+      return add && !add.classList.contains("btn--ghost")
+        ? true : "the add-destination button is still a ghost";
+    });
+
+    check("adding a destination reaches the route strip", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      const before = { destinations: [...(getMeta(trip).destinations || [])], destination: trip.destination };
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      try {
+        return withItineraryVisible(() => {
+          openTripDialog(trip);
+          document.getElementById("dest-add").click();
+          const rows = [...document.querySelectorAll("#dest-rows .dest-input")];
+          if (rows.length < 2) return "the + button did not add a row";
+          rows[rows.length - 1].value = "Vienna, Austria";
+          document.getElementById("form-trip")
+            .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+          if (!(getMeta(trip).destinations || []).includes("Vienna, Austria")) {
+            return "the new destination never reached state";
+          }
+          renderItinerary();
+          const route = document.querySelector("#itinerary-view .route")?.textContent || "";
+          return /Vienna/.test(route) ? true : `the route strip reads "${route.replace(/\s+/g, " ").trim()}"`;
+        });
+      } finally {
+        Object.assign(trip, { destinations: before.destinations, destination: before.destination });
+        saveState();
+        renderItinerary();
+      }
+    });
+
     check("the sticky header's background reaches both screen edges", () => {
       const trip = datedTrip();
       if (!trip) return skip("no dated trip");
