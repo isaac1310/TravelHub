@@ -1215,7 +1215,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .itin-sticky {
           /* Below the app bar, which is itself sticky at top:0 — see measureStickyHeader. */
           position: sticky; top: var(--appbar-h, 71px); z-index: 19; background: var(--bg);
-          padding-top: 0.4rem; margin: -0.4rem 0 0.6rem;
+          /* Full-bleed background, content still aligned to the 1rem gutter. .map-layout uses
+             `margin: 0 -1rem` to reach the screen edges, so a header inset by the gutter left
+             the map visible in the strips either side of it — which reads exactly like the map
+             overlapping the header, and is what Isaac saw. The negative margin must match
+             .content's horizontal padding. */
+          margin: -0.4rem -1rem 0.6rem;
+          padding: 0.4rem 1rem 0;
           box-shadow: 0 6px 10px -8px rgba(70, 45, 30, 0.25);
         }
         .itin-sticky .switcher--sub { margin-bottom: 0.5rem; }

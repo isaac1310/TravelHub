@@ -2159,6 +2159,31 @@
       });
     });
 
+    check("the sticky header's background reaches both screen edges", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "maps";
+      const res = withItineraryVisible(() => {
+        const hdr = document.getElementById("itin-sticky");
+        if (getComputedStyle(hdr).position !== "sticky") return skip("desktop layout — not sticky");
+        /* .map-layout uses `margin: 0 -1rem` to reach the screen edges. A header inset by the
+           same gutter left the map visible in the strips either side of it, which reads exactly
+           like the map overlapping the header — the bug Isaac reported twice. Its opaque
+           background has to be full-bleed even though its content stays aligned. */
+        const r = hdr.getBoundingClientRect();
+        if (r.left > 0.5 || r.right < window.innerWidth - 0.5) {
+          return `the header spans ${Math.round(r.left)}..${Math.round(r.right)} of ${window.innerWidth}px`;
+        }
+        // And it must still be opaque, or the map shows through regardless of width.
+        const bg = getComputedStyle(hdr).backgroundColor;
+        return /rgba\(.*,\s*0(\.\d+)?\)$/.test(bg) ? `the header background is ${bg}` : true;
+      });
+      itinerarySubTab = "timeline";
+      renderItinerary();
+      return res;
+    });
+
     check("the map cannot paint over the sticky header", () => {
       const trip = datedTrip();
       if (!trip) return skip("no dated trip");
