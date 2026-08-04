@@ -27,7 +27,7 @@ Add these as CSS custom properties on `:root` and use them everywhere. Values ma
   /* ink */
   --ink:           #33302e;   /* body text */
   --ink-strong:    #2c2a28;   /* headings, primary buttons (new role) */
-  --ink-muted:     #9a9089;   /* secondary text, inactive icons */
+  --ink-muted:     #6f6660;   /* secondary text, inactive icons — CORRECTED, see note */
   --ink-faint:     #b9aca4;   /* placeholders */
   --ink-on-dark:   #ffffff;
 
@@ -223,3 +223,25 @@ Don't change the data model beyond the trip `photo*` fields and per-item checkli
 Don't touch the Supabase sync or share-link logic. Keep the desktop (>900px) layout working
 — the sidebar stays; these changes are additive at ≤900px except where a component is shared
 (buttons, cards, sheets), which should improve both.
+
+
+---
+
+## Corrections applied after review (v1.11.0)
+
+- **`--ink-muted` was `#9a9089`**, which measures 2.79–3.12:1 against the surfaces in this same
+  spec — below the 4.5:1 the spec's own accessibility section (item 15) requires for normal text.
+  Corrected to `#6f6660`, the lightest value that clears it on all four. Shipping the spec as
+  written would have carried the failure into v2.
+- **Coral for small text is not viable.** `--accent` on white is 2.37:1 and `--accent-strong` is
+  3.27:1, so no nudge reaches 4.5. Either the brand darkens, or coral is reserved for large text,
+  fills, icons and non-text accents. Open v2 decision.
+- **Item 7, "Documents where you need them", is struck.** Document attachments were removed
+  entirely in v1.11.0 — there is no longer a feature to extend onto reservations. This also
+  removed the payload size-cap machinery and a merge special case that existed only for them.
+- **Item 14's offline service worker is cut**, three times recommended. Caching a stale build
+  onto three family phones is the failure that already cost this project a session, and there is
+  no update-prompt infrastructure. The useful half — caching trip *data* for a trip in progress —
+  needs no service worker and is parked separately.
+- **Item 1's destination photography is cut.** Blueprints stay; the treatments in
+  `City Blueprints.dc.html` take the surfaces this spec gave to photos.

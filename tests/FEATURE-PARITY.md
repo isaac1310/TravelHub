@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.10.5**.
+Every user-reachable action in the app, as of **v1.11.0**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -30,20 +30,23 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 |---|---|
 | Open the featured trip's itinerary | hero CTA |
 | Edit the featured trip | `data-edit-trip` on the hero |
-| Edit any trip | `.btn-edit-trip` on trip cards |
+| Edit any trip | `.btn-edit-trip` on the Budget cards, **and `data-edit-trip` on the Trips cards** — *added v1.11.0* |
 | **Multiple destinations** | Repeatable rows in the trip dialog — *v1.10.0*. `destination` stays mirrored from the first |
 | Add a trip | `btn-add-trip`, and the app-bar `+` |
 | Delete a trip | inside the trip dialog (cascades to its reservations) |
-| Step cards | Day by Day · Route · Explore attractions · Checklist · Reservations. The three itinerary ones carry `data-trip-id` for the **featured** trip — *fixed v1.10.3*; they previously only set the hash, so once the switcher tabs had been used they opened whichever trip was last viewed. Enter and Space activate them (they are `role="button"`) |
+| Step cards | Day by Day · Route · Explore attractions · Checklist · Reservations. **Route opens the Maps sub-tab** — *fixed v1.11.0*; all three itinerary cards previously landed on the timeline, so "see the trip in route mode" was describing a view it did not open. "Explore attractions" is deliberately unchanged, pending real discovery in v2. The three itinerary ones carry `data-trip-id` for the **featured** trip — *fixed v1.10.3*; they previously only set the hash, so once the switcher tabs had been used they opened whichever trip was last viewed. Enter and Space activate them (they are `role="button"`) |
+| **Trip timing badge** | Every card shows `in 43 days` / `Travelling now · day 2 of 4` / `Ended Dec 2026` — *added v1.11.0*, from one shared `tripTiming()` the hero also uses. Compared against a **local** date; `todayISO()` is UTC and names yesterday between midnight and 03:00 in Israel |
+| **Trip order** | One order on every screen — travelling, then soonest, then finished (most recent first), then undated — *v1.11.0*, replacing five sorts that disagreed. `featuredTrip()` follows it, so it is no longer the first dated trip in array order |
 | Year filter | all years / a specific year |
 
 ## Itinerary
 
 | Action | Wiring |
 |---|---|
-| Switch trip | switcher tabs, `data-trip` |
-| Timeline ↔ Maps | `data-subtab` |
+| Switch trip | Underline **tabs**, `data-trip` — restyled *v1.11.0*. Both switchers now honour the tab contract they had only declared: `aria-selected`, one focusable tab per list, ←/→/Home/End, `aria-controls` → a real `role="tabpanel"`. Focus follows an activation and is not stolen by the ~11 unrelated callers of `renderItinerary()` |
+| Timeline ↔ Maps | `data-subtab`, in the **sticky header** alongside the day strip — *v1.11.0*. Both the app bar's and the header's heights are measured and published (`--appbar-h`, `--itin-sticky-h`), so `.day`'s scroll-margin and the drag auto-scroll edge derive from them instead of hardcoded numbers that drift. The header sticks at `top: var(--appbar-h)`: the app bar is **also** `position: sticky; top: 0`, so at `top: 0` this slid underneath it and hid the toggle — which on the map tab read as the map covering the header. Switching view also resets the scroll to the top of the header |
 | Jump to a day | date strip, `data-strip-day` → selects + scrolls. Deliberately does NOT unfold (v1.10.1) |
+| **The strip follows the scroll** | *v1.11.0*. The active chip tracks the day under the sticky header and scrolls itself into view; `timelineDayIso` follows, so the FAB pre-fills the day you are looking at. Suppressed during a tap-to-jump and during a v1.10.2 drag, and it **never** calls `renderItinerary`. A rAF-throttled scroll listener, not an `IntersectionObserver` — the observer never fires in this project's browser harness, and shipping the one thing that could not be verified is how two earlier bugs happened |
 | **Fold / unfold a day** | `data-day-toggle` on the date rail — *added v1.9.1*. Per-device, never synced |
 | **Stop numbers** | Timeline cards show the map pin number (`.act__stopno`) for reservations that appear on the map — *added v1.9.1* |
 | **Edit the trip** | `data-edit-trip` in the section head — *added v1.9.0* |
@@ -59,6 +62,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Collapse/expand the stops sheet | tap `.map-list__title` (≤900px, and only while the filter is "All" — a selected day lists in full) |
 | Open a stop in Google Maps | "Maps ↗" per stop, **the hotel row**, and **both marker popups** — *coords since v1.9.0* |
 | Retry the map | `btn-map-retry` when Leaflet fails to load |
+| **Map layering** | `.map-canvas` carries `z-index: 0` — *v1.11.0*. `position: relative` alone is not a stacking context, so Leaflet's own panes (200–700) competed directly with the sticky header and painted over it |
 
 ## Budget
 
@@ -69,6 +73,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Roll budget over | `dialog-roll` |
 | Add / edit / delete an expense | `dialog-expense`. **Every expense keeps a real id** — *fixed v1.10.3*. Until then `buildExpenseFromForm` returned a payload carrying `id: ""`, which overwrote the id both when adding and when editing, leaving that row's actions permanently dead. Expenses already saved broken are repaired on load with a deterministic `exp-r<hash>` |
 | Mark an expense paid | per-expense action, `.btn-mark-paid` / `.btn-mark-unpaid`. Works after an edit — see the row above |
+| **Payment status in the expense sheet** | Three tap targets (`#expense-status`, `.segmented`), **not a `<select>`** — *v1.11.0*. A hidden `input[name=status]` keeps the form contract identical. Android draws a select's option list over the sheet's backdrop and dismissing it closed the whole sheet; v1.10.4 guarded it with a timer and v1.10.5 with a focus check, and **both failed on the real phone**. Removing the popup removed the mechanism. Category is still a `<select>` |
 | Expand a trip's expenses | expenses fold |
 | Category breakdown | rendered per trip |
 | **Still-to-pay answer card** | Leads the Overview — *v1.10.0*. Removed from the tile grid, not duplicated |
@@ -78,7 +83,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Action | Wiring |
 |---|---|
 | Filter by type | All / Flights / Hotels / Other |
-| Open a reservation | routes into the itinerary item |
+| Open a reservation | **Tap the card** — *fixed v1.11.0*. `data-item` + `openItemDialog`, the same gesture the timeline learned in v1.10.2. This row previously claimed the cards routed into the itinerary; in fact nothing was bound at all |
 
 ## Family
 
@@ -86,9 +91,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 |---|---|
 | Who's travelling | member list |
 | Trips by travellers | per-trip roster |
-| Shared checklist | add (`checklist-add`), toggle (`data-chk`), delete (`data-chk-del`) |
-| Attach a document | `family-doc-upload` (2.5 MB each, 4 MB total) |
-| Download / delete a document | per-row, `data-doc-del` |
+| Shared checklist | add (`checklist-add`), tick (`data-chk`), delete (`data-chk-del`). Items have always had a checkbox and a strikethrough; *v1.11.0* fixed the wording, which called them "notes" and read as free text, and made the whole row the 44px tick target. **Document attachments were removed in v1.11.0**, along with the payload size-cap machinery and the merge special case that existed only for them |
 
 ## Sharing and sync — `dialog-overflow` (the Menu)
 
@@ -103,7 +106,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.10.5 · <sha>` — selectable |
+| Build version | `TravelHub v1.11.0 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
@@ -161,7 +164,28 @@ limit: matching on the string means "Paris, Texas" gets the Eiffel Tower.
 Exported for design work by `design/export-blueprints.js`, which parses the paths out of
 `index.html` so `design/blueprints/` can never drift from what the app draws.
 
+## Accessibility
+
+Since *v1.11.0*:
+
+- `--muted` is `#6f6660` — the **lightest** value clearing 4.5:1 on all four surfaces
+  (5.61 / 5.26 / 5.03 / 4.67). The old `#9a9089` measured 2.79–3.12. Input hover borders use
+  their own `--border-hover`, because reusing the darkened text colour read as a heavy outline.
+  Coral is still below 4.5 on white (2.37) and is a v2 brand decision, so it must not be used
+  for small text.
+- All ten dialogs carry `aria-labelledby`. None did before.
+- **One** always-present visually-hidden `aria-live` region (`#a11y-live`), written by both
+  `showToast` and share.js's `setSyncStatus`. Neither of those elements can host a live region:
+  `#sync-status` is `display:none` below 900px, and `#toast` is toggled with `hidden`.
+- Touch targets: `.pill`, `.act__more`, `.switcher button` and `.day__date` reach 44px. v1.9.1's
+  pass covered `.btn` and the icon buttons but missed these.
+- Row controls name their object — "Edit Paris Hotel", "Actions for Transavia", "Add a
+  reservation on Wed 16" — instead of a list of identical "Edit, Delete, Edit, Delete".
+
 ## Diagnostics
 
-`?selftest=1` runs 136 checks and prints a pass/fail panel. It refuses to run while joined to
+`?selftest=1` runs 166 checks and prints a pass/skip/fail panel. **A skip is reported
+separately and never counted as a pass** — *v1.11.0*. Two checks used to `return true` early at
+desktop width, so a desktop run showed them green without exercising anything. Run the suite at
+**412px** for full coverage. It refuses to run while joined to
 a shared room, because it stubs `localStorage.setItem` to throw.

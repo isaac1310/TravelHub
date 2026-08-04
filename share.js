@@ -64,6 +64,11 @@
   let statusClearTimer = null;
   function setSyncStatus(text, type) {
     setChip(text, type);
+    /* Announce through the app's shared live region rather than making #sync-status one:
+       that element is display:none below 900px (the chip replaces it), and the className
+       assignment below would strip any class added in the HTML anyway. "Saving…" is skipped —
+       it is transient noise, and the result that follows is what matters. */
+    if (text && type !== "busy") window.VacationApp?.announce?.(text);
     const el = document.getElementById("sync-status");
     if (!el) return;
     clearTimeout(statusClearTimer);
@@ -134,43 +139,58 @@
     }
   }
 
-  /* The server caps a room at 8 MB via pg_column_size — the TOAST-compressed jsonb.
-     The client can't measure that exactly (Blob measures raw JSON and over-estimates),
-     so this is an early warning with a margin, not the authority. Documents are the
-     only thing big enough to matter, so they're what gets left behind; the server's
-     own error is still handled below in case this estimate was wrong. */
-  const SIZE_WARN_BYTES = 7 * 1024 * 1024;
-
-  function payloadWithinCap() {
-    const payload = stampedPayload();
-    const size = new Blob([JSON.stringify(payload)]).size;
-    if (size <= SIZE_WARN_BYTES || !Array.isArray(payload.documents) || !payload.documents.length) {
-      return { payload, dropped: [] };
-    }
-    // Keep documents on this device; sync everything else rather than nothing.
-    const dropped = payload.documents.map((d) => d.name);
-    return { payload: { ...payload, documents: [] }, dropped };
-  }
-
   function isTooLarge(err) {
     return /too large|payload/i.test(String(err?.message || err?.hint || ""));
   }
 
+  /* The server is still the authority on size — a room is capped at 8 MB via pg_column_size.
+     The client-side estimate and the drop-the-documents-and-retry path are gone with the
+     attachments that made them necessary; a family's whole trip set is now tens of KB. Telling
+     someone to remove documents they no longer have would be worse than a generic message. */
   function reportTooLarge() {
-    setSyncStatus("Too big to sync — remove some documents", "error");
+    setSyncStatus("Too big to sync", "error");
     window.VacationApp.showSyncErrorToast?.(
-      "This trip is too large to sync. Remove some attached documents (Family → Shared checklist) and it'll save again."
+      "This trip is too large to sync. Try removing a trip or some reservations you no longer need."
     );
   }
 
-  function reportDroppedDocs(names) {
-    setSyncStatus("Saved without documents", "ok");
-    window.VacationApp.showSyncErrorToast?.(
-      `Saved, but ${names.length} document${names.length === 1 ? "" : "s"} stayed on this device only (too large to share): ${names.slice(0, 3).join(", ")}${names.length > 3 ? "…" : ""}`
-    );
+  /* Serialized entry point. `saveInFlight` used to be set only AFTER the awaited
+     remoteIsAhead(), leaving a window in which a second call — the 600ms debounce, the retry
+     timer, a manual "Save now", syncNow, reconnect or a post-merge push — ran a whole second
+     save body concurrently, its freshness check predating the first one's write. Two saves
+     from ONE slow device were enough; it never needed two people.
+
+     One in flight, at most one queued behind it. Plain coalescing — handing a later caller the
+     promise already running — would be wrong: syncNow() merges and then awaits a push, so it
+     would be handed a save whose payload was captured BEFORE the merge, see it succeed, and
+     mark the merged state saved without ever sending it. A queued follow-up runs a fresh save
+     body, which re-reads current state, so a waiter that resolves has had its state sent.
+     On a throw the chain rejects rather than resolving, so a waiter is never told a failed save
+     succeeded — but a queued follow-up is dropped, which is why pendingSave stays true and the
+     poll and reconnect paths remain the backstop. The chain clears in `finally` so one network
+     failure cannot wedge saving forever. */
+  let savePromise = null;
+  let saveQueued = false;
+
+  function saveRemote() {
+    if (savePromise) { saveQueued = true; return savePromise; }
+    savePromise = runSaveChain();
+    return savePromise;
   }
 
-  async function saveRemote() {
+  async function runSaveChain() {
+    try {
+      do {
+        saveQueued = false;
+        await saveRemoteInner();
+      } while (saveQueued);
+    } finally {
+      savePromise = null;
+      saveQueued = false;
+    }
+  }
+
+  async function saveRemoteInner() {
     if (!sharedMode || !supabase) return;
     clearTimeout(retryTimer);
     if (await remoteIsAhead()) {
@@ -183,7 +203,7 @@
     setSyncStatus("Saving…", "busy");
     let failed = false;
     try {
-      const { payload, dropped } = payloadWithinCap();
+      const payload = stampedPayload();
       const { data, error } = await supabase.rpc("save_shared_budget", {
         p_id: roomId,
         p_secret: roomSecret,
@@ -201,7 +221,6 @@
         lastRemoteUpdatedAt = data.updated_at || lastRemoteUpdatedAt;
         // Server now holds exactly this; it becomes the base for the next merge.
         writeMergeBase(payload);
-        if (dropped.length) reportDroppedDocs(dropped);
       }
     } catch (err) {
       if (isTooLarge(err)) { saveInFlight = false; reportTooLarge(); return; }
@@ -316,7 +335,7 @@
      compare against; otherwise falls back to the plain replace, which is correct
      when nothing local is pending. Returns false only when the merge refused. */
   function applyOrMerge(remotePayload) {
-    const base = baseWithDocs(readMergeBase(), remotePayload);
+    const base = readMergeBase();
     const localDiverged = pendingSave || (base && window.VacationApp.hasLocalChangesSince?.(base));
 
     if (!base || !localDiverged) {
@@ -843,22 +862,23 @@
   /* The last payload this device and the server agreed on. Without it a pull can't
      tell "she changed this" from "he changed this", and has to overwrite.
 
-     Documents are stripped to their ids: they're inline base64 and the state already
-     runs ~5.5MB against a ~5MB localStorage quota, so a full second copy cannot fit.
-     Ids alone are enough — document content is never edited, only added or removed,
-     so id-level presence is all the merge needs. */
+     The base used to be stored in a reduced shape, with documents stripped to their ids —
+     inline base64 meant a full second copy could not fit in the localStorage quota. With
+     attachments gone (v1.11.0) the whole payload is tens of KB and is stored verbatim, which
+     removes the reduce/restore pair and the class of bug that came with it. */
   const MERGE_BASE_KEY = "travelhub-sync-base";
-
-  function baseShape(payload) {
-    return {
-      ...payload,
-      documents: (payload.documents || []).map((d) => ({ id: d.id })),
-    };
-  }
 
   function writeMergeBase(payload) {
     try {
-      localStorage.setItem(MERGE_BASE_KEY, JSON.stringify(baseShape(payload)));
+      /* Strip `documents` on the way in. Four of the six call sites pass a payload straight
+         from the server, and until every family device has upgraded past v1.10.5 that payload
+         still carries inline base64 attachments. Storing it verbatim could exceed the
+         localStorage quota, and the catch below then deletes the base — after which the next
+         pull has no base to compare against and does a wholesale replace, silently discarding
+         local edits that were never pushed. That is the exact failure the base exists to
+         prevent, so the reduce has to survive even though the app no longer produces the key. */
+      const { documents: _legacyDocs, ...clean } = payload || {};
+      localStorage.setItem(MERGE_BASE_KEY, JSON.stringify(clean));
     } catch {
       // A stale base is worse than none — it would make the merge confidently wrong.
       try { localStorage.removeItem(MERGE_BASE_KEY); } catch { /* private mode */ }
@@ -874,17 +894,7 @@
     try { localStorage.removeItem(MERGE_BASE_KEY); } catch { /* private mode */ }
   }
 
-  /* Documents were stripped from the base, so restore their ids from whichever side
-     still has the content. Without this every document looks "deleted in base" and
-     the merge would drop them. */
-  function baseWithDocs(base, remotePayload) {
-    if (!base) return null;
-    const known = new Map((remotePayload.documents || []).map((d) => [d.id, d]));
-    return {
-      ...base,
-      documents: (base.documents || []).map((d) => known.get(d.id) || { id: d.id }),
-    };
-  }
+
 
   const ROOM_STORE_KEY = "travelhub-room";
   function storedRoom() {
@@ -932,6 +942,9 @@
     checkForUpdates,
     _ts: ts, // exposed for the smoke test — timestamp comparison is easy to break silently
     _parseShareLink: parseShareLink, // ditto
+    /* Four call sites pass writeMergeBase a payload straight from the server, so what it
+       strips is load-bearing on the upgrade path — worth a check rather than a comment. */
+    __writeMergeBaseForTest: writeMergeBase,
     getSyncInfo: () => ({ lastSyncAt, lastEditor: lastEditorInfo, updatesAvailable: !!pendingRemoteInfo }),
     getRoomId: () => (sharedMode ? roomId : null),
     getShareUrl,
