@@ -108,6 +108,7 @@
       releaseV1102();
       releaseV1103();
       releaseV1104();
+      releaseV1105();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -1518,8 +1519,10 @@
       const d = expenseDialog();
       openExpenseDialog(trip.id, trip.expenses[0] || null);
       const sel = d.querySelector('[name="status"]');
-      // Tapping the select is what arms the grace window.
-      sel.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, isPrimary: true }));
+      // While the option list is open the select holds focus — that is the signal.
+      // (v1.10.4 armed a timer from pointerdown here; v1.10.5 keys off focus instead,
+      // because on a real phone the list stays open longer than any sane window.)
+      sel.focus();
       // The option list closing, before `change` has had a chance to dirty the form.
       strayBackdropTap(d);
       const survived = d.open;
@@ -1558,6 +1561,69 @@
       // An unbounded suppression would silently disable tap-outside after any select use.
       return SELECT_POPUP_GRACE_MS > 0 && SELECT_POPUP_GRACE_MS <= 1500
         ? true : `grace is ${SELECT_POPUP_GRACE_MS}ms`;
+    });
+  }
+
+  /* ===== 1b12. v1.10.5 — the select guard must not depend on a clock =====
+     v1.10.4's 700ms window failed on the real S24: the option list stays open while you
+     read it, so picking "Paid" seconds after touching the select dismissed outside the
+     window. The guard now keys off focus — Android keeps the select focused while its
+     list is open — and the first backdrop tap blurs instead of closing. */
+
+  function releaseV1105() {
+    group("v1.10.5");
+
+    function strayBackdropTap(dialog) {
+      dialog.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, isPrimary: true }));
+      dialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+
+    check("a backdrop tap with a focused select blurs it, not the sheet", () => {
+      const trip = state.trips[0];
+      if (!trip) return true;
+      const d = document.getElementById("dialog-expense");
+      openExpenseDialog(trip.id, trip.expenses[0] || null);
+      const sel = d.querySelector('[name="status"]');
+      sel.focus();
+      // No `change` was dispatched, so the old time window is unarmed — only the
+      // focus check can save the sheet here. This is the slow-reader case that
+      // escaped v1.10.4 on the phone.
+      strayBackdropTap(d);
+      const stayedOpen = d.open;
+      const blurred = document.activeElement !== sel;
+      closeDialog(d);
+      if (!stayedOpen) return "the sheet closed while the select was focused";
+      return blurred ? true : "the select kept focus, so tap-outside is dead until it moves";
+    });
+
+    check("the second backdrop tap, after the blur, dismisses a clean sheet", () => {
+      const trip = state.trips[0];
+      if (!trip) return true;
+      const d = document.getElementById("dialog-expense");
+      openExpenseDialog(trip.id, trip.expenses[0] || null);
+      const sel = d.querySelector('[name="status"]');
+      sel.focus();
+      strayBackdropTap(d);   // settles the popup: blurs, stays open
+      strayBackdropTap(d);   // a deliberate tap outside — no select focused now
+      const closed = !d.open;
+      if (d.open) closeDialog(d);
+      return closed ? true : "tap-outside stayed disabled after the select was blurred";
+    });
+
+    check("focus in another dialog's select does not shield this one", () => {
+      // dialog.contains(activeElement) scopes the guard; without it, any focused
+      // select anywhere would make every sheet undismissable.
+      const funds = document.getElementById("dialog-funds");
+      openFundsDialog();
+      const outside = document.querySelector("#form-expense [name='status']");
+      // A select outside the funds dialog holding focus must not protect it.
+      if (outside) outside.focus();
+      funds.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, isPrimary: true }));
+      funds.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      const closed = !funds.open;
+      if (funds.open) closeDialog(funds);
+      if (outside) outside.blur();
+      return closed ? true : "an unrelated focused select disabled tap-outside";
     });
   }
 
