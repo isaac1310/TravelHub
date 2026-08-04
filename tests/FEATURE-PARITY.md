@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.10.2**.
+Every user-reachable action in the app, as of **v1.10.3**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -34,7 +34,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | **Multiple destinations** | Repeatable rows in the trip dialog — *v1.10.0*. `destination` stays mirrored from the first |
 | Add a trip | `btn-add-trip`, and the app-bar `+` |
 | Delete a trip | inside the trip dialog (cascades to its reservations) |
-| Step cards | Day by Day · Route · Explore attractions · Check |
+| Step cards | Day by Day · Route · Explore attractions · Checklist · Reservations. The three itinerary ones carry `data-trip-id` for the **featured** trip — *fixed v1.10.3*; they previously only set the hash, so once the switcher tabs had been used they opened whichever trip was last viewed. Enter and Space activate them (they are `role="button"`) |
 | Year filter | all years / a specific year |
 
 ## Itinerary
@@ -67,8 +67,8 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Year filter | `data-trip-id` scoped views |
 | Add funds | `dialog-funds` |
 | Roll budget over | `dialog-roll` |
-| Add / edit / delete an expense | `dialog-expense` |
-| Mark an expense paid | per-expense action |
+| Add / edit / delete an expense | `dialog-expense`. **Every expense keeps a real id** — *fixed v1.10.3*. Until then `buildExpenseFromForm` returned a payload carrying `id: ""`, which overwrote the id both when adding and when editing, leaving that row's actions permanently dead. Expenses already saved broken are repaired on load with a deterministic `exp-r<hash>` |
+| Mark an expense paid | per-expense action, `.btn-mark-paid` / `.btn-mark-unpaid`. Works after an edit — see the row above |
 | Expand a trip's expenses | expenses fold |
 | Category breakdown | rendered per trip |
 | **Still-to-pay answer card** | Leads the Overview — *v1.10.0*. Removed from the tile grid, not duplicated |
@@ -103,7 +103,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.10.2 · <sha>` — selectable |
+| Build version | `TravelHub v1.10.3 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
@@ -127,7 +127,34 @@ missing-room recovery · storage-quota warning.
 All ten close on Escape, the close button, **and a tap outside** — with a confirm if a form
 has unsaved edits.
 
+Layout, since *v1.10.3*: two-up rows (`.roll-years`) can shrink below their inputs' natural
+width, so no dialog scrolls sideways at 412px — `#dialog-item` with the flight fields showing
+used to be 446px in a 397px box. The sticky Cancel/Save bar no longer occludes a field: the
+form reserves the bar's height and focusing a field scrolls it clear.
+
+## Trip covers
+
+| Surface | Detail |
+|---|---|
+| Trips hero | `coverArt()`, confined to the upper right (34% × 44%) so it never sits under the trip name |
+| Trip cards | `coverArt()` filling the 96px `.tripcard__cover` strip |
+
+**Blueprints v2** — *v1.10.3*. Two layers per city: the landmark (`fg`, stroke 2.2) over its
+city context (`bg`, stroke 1.2, lighter) — the bridge, river, rooftops, tram or tree that places
+it. Drawn on a 210 × 100 grid, baseline y = 88, right-aligned and baseline-anchored via
+`preserveAspectRatio="xMaxYMax meet"`. Derived from the destination string, so nothing is stored
+and nothing is fetched.
+
+19 cities: Paris · Bratislava · London · Rome · Barcelona · Amsterdam · Prague · Vienna · Athens
+· New York · **Tel Aviv** · **Jerusalem** · **Budapest** · **Berlin** · **Lisbon** · **Madrid** ·
+**Tokyo** · **Bangkok** (the eight bold are new in v1.10.3), plus a neutral `generic` skyline for
+anything unmatched. Aliases cover local spellings (Praha, Wien, Lisboa, TLV, ירושלים). Known
+limit: matching on the string means "Paris, Texas" gets the Eiffel Tower.
+
+Exported for design work by `design/export-blueprints.js`, which parses the paths out of
+`index.html` so `design/blueprints/` can never drift from what the app draws.
+
 ## Diagnostics
 
-`?selftest=1` runs 116 checks and prints a pass/fail panel. It refuses to run while joined to
+`?selftest=1` runs 129 checks and prints a pass/fail panel. It refuses to run while joined to
 a shared room, because it stubs `localStorage.setItem` to throw.

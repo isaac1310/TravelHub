@@ -699,7 +699,10 @@ h1, h2, h3, .hero h1, .hero p {
 .history-item--roll strong { color: var(--brand-hover); }
 
 /* forms */
-.field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.85rem; }
+/* min-width: 0 stops the input's intrinsic width propagating out and forcing a grid
+   column wider than its share — the other half of the .roll-years overflow fix. */
+.field { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.85rem; min-width: 0; }
+.field input, .field select { width: 100%; min-width: 0; }
 .field--inline { flex-direction: row; align-items: center; gap: 0.5rem; margin-bottom: 0; }
 .field__label { font-size: 0.82rem; font-weight: 600; color: var(--muted); }
 .field--inline .field__label { white-space: nowrap; }
@@ -723,7 +726,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .dialog__title { margin: 0 0 1rem; font-size: 1.15rem; }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
 
-.roll-years { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+/* minmax(0, 1fr), not 1fr: a bare `1fr` is minmax(auto, 1fr), so the column could never
+   shrink below the input's min-content width and the two-up rows overflowed the dialog on
+   phones — worse at ≤900px, where inputs go to 16px and get intrinsically wider. Same fix
+   .dest-row and .checklist__add already carry. */
+.roll-years { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
 .roll-preview { background: var(--cream-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.8rem; margin-bottom: 0.85rem; font-size: 0.85rem; }
 .roll-preview__title { margin: 0 0 0.5rem; font-weight: 700; font-size: 0.8rem; }
 .roll-preview__list { list-style: none; margin: 0; padding: 0; }
@@ -1063,6 +1070,16 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           padding: 0.7rem 0 calc(0.4rem + env(safe-area-inset-bottom));
           margin-top: 0.7rem;
         }
+        /* The bar is sticky and opaque, so it paints over whatever field is at the
+           bottom of the scroll box. Unscrolled, that was "Payment status" — hit-testing
+           its centre returned the Save button, so tapping the select submitted the form
+           and closed the dialog. Reserve its height so every field can scroll clear;
+           scrollFieldClearOfActions() handles the field you're actually reaching for. */
+        .dialog form { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
+        /* The dialog is the scroll container here, so scroll-padding keeps the browser's
+           own scroll-into-view (focus, tabbing, find-in-page) clear of the bar too. */
+        .dialog { scroll-padding-bottom: calc(5.2rem + env(safe-area-inset-bottom)); }
+        .dialog .field { scroll-margin-bottom: calc(5.2rem + env(safe-area-inset-bottom)); }
         .dialog__actions .btn--primary { flex: 1; justify-content: center; min-height: 50px; }
         .field input, .field select { min-height: 48px; font-size: 16px; }
 
@@ -1078,8 +1095,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 
         /* The FAB is fixed, so it sits on top of whatever is at that spot — it was
            covering the ⋯ button of the last reservation. Padding lets the list
-           scroll clear of it. */
-        #itinerary-view { padding-bottom: 104px; }
+           scroll clear of it. The reserve has to clear the FAB's *top* edge:
+           bottom offset 76 + height 56 = 132, plus the safe area, plus slack.
+           104px was 28-62px short, so the last card's ⋯ stayed unreachable. */
+        #itinerary-view { padding-bottom: calc(148px + env(safe-area-inset-bottom)); }
 
         /* FAB (itinerary) */
         .fab {
@@ -1735,7 +1754,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.10.2";
+const APP_VERSION = "v1.10.3";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -2226,6 +2245,34 @@ function mergeStates(localState, roomState) {
   return { state: normalizeState(merged), stats };
 }
 
+/* FNV-1a, so a repaired id is derived from the row rather than random. Two devices
+   holding the same broken expense must land on the *same* id: merge3List keys strictly
+   by id, so two random ids would merge into two rows instead of one. */
+function stableHash(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
+/* Repair expenses saved with an empty id — see buildExpenseFromForm. Until v1.10.3 every
+   added expense, and every expense that was edited, lost its id; the row's Mark paid /
+   Edit / Delete all silently no-op, and merge3List drops it on the next sync because it
+   filters on `e.id`. Idempotent: only touches falsy ids, so it is safe on every load.
+   The index is part of the key so two genuinely identical rows stay two rows. */
+function repairExpenseIds(trip) {
+  let repaired = 0;
+  trip.expenses.forEach((exp, i) => {
+    if (exp.id) return;
+    const seed = [trip.id, i, exp.label, exp.category, exp.amount, exp.date].join("|");
+    exp.id = `exp-r${stableHash(seed)}`;
+    repaired++;
+  });
+  return repaired;
+}
+
 function normalizeState(data) {
   if (!Array.isArray(data.fundHistory)) data.fundHistory = [];
   if (!Array.isArray(data.rollHistory)) data.rollHistory = [];
@@ -2233,6 +2280,7 @@ function normalizeState(data) {
   for (const trip of data.trips) {
     if (!Array.isArray(trip.expenses)) trip.expenses = [];
     trip.expenses = trip.expenses.map(normalizeExpense);
+    repairExpenseIds(trip);
     normalizeTripMeta(trip);
   }
   if (!Array.isArray(data.items)) data.items = [];
@@ -2401,7 +2449,15 @@ function buildExpenseFromForm(form) {
     }
   }
 
-  return normalizeExpense({ label, category, amount, date, status, amountPaid, paidDate });
+  /* normalizeExpense always stamps an id, and safeId(undefined) is "" — so returning it
+     whole means the caller's `{ id: uid("exp"), ...payload }` spread put an empty id back
+     over the fresh one, and `{ ...exp, ...payload }` wiped the id off an existing expense.
+     An expense with an empty id is unreachable: every row action carries data-expense-id=""
+     and bails. Drop the id here; both call sites own it. */
+  const { id: _noId, ...fields } = normalizeExpense({
+    label, category, amount, date, status, amountPaid, paidDate,
+  });
+  return fields;
 }
 
 function syncExpensePaidDateVisibility() {
@@ -2914,7 +2970,28 @@ function openDialog(dialog) {
 }
 function closeDialog(dialog) { dialog.close(); }
 
+/* Keep the focused control clear of the sticky Cancel/Save bar. Padding alone reserves
+   room at the end of the form but does not stop a field mid-scroll from sitting under the
+   bar — and a control you can see but whose taps land on Save is worse than one that is
+   simply off screen. Runs on focusin so it covers keyboard tabbing too. */
+function scrollFieldClearOfActions(dialog, target) {
+  const field = target.closest(".field, .dest-row");
+  const actions = dialog.querySelector(".dialog__actions");
+  if (!field || !actions) return;
+  const bar = actions.getBoundingClientRect();
+  // Only when the bar is actually pinned over the content, i.e. the bottom-sheet layout.
+  if (getComputedStyle(actions).position !== "sticky") return;
+  const overlap = field.getBoundingClientRect().bottom - bar.top;
+  // Instant, not smooth: an animated scroll leaves the control under the bar for the
+  // couple of hundred milliseconds in which the user is already tapping it.
+  if (overlap > 0) dialog.scrollBy({ top: overlap + 12, behavior: "auto" });
+}
+
 function setupDialogCloseHandlers() {
+  document.querySelectorAll("dialog").forEach((dialog) => {
+    dialog.addEventListener("focusin", (e) => scrollFieldClearOfActions(dialog, e.target));
+  });
+
   document.querySelectorAll("[data-dialog-close]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const dialog = btn.closest("dialog");
@@ -3763,54 +3840,160 @@ function getMeta(trip) { return trip || {}; }
    be anywhere; the known limit is that matching on the string means "Paris,
    Texas" gets the Eiffel Tower. */
 
-/* Drawn on a 200x100 canvas, anchored to the baseline at y=88. */
+/* Drawn on a 210x100 canvas, anchored to the baseline at y=88. Two layers per city
+   (v1.10.3): `fg` is the landmark, `bg` is the city context that places it — the bridge,
+   river, rooftops, tram or tree. bg is drawn thinner and lighter so the pair reads as one
+   drawing at 96px rather than as clutter. */
 const MONUMENTS = {
-  paris: `M100 16 L100 24 M96 24 h8 M97 24 L88 62 M103 24 L112 62
-          M90 44 h20 M86 62 h28 M84 62 L76 88 M116 62 L124 88
-          M79 76 h42 M76 88 h48`,
-  bratislava: `M62 88 v-34 h76 v34 M62 54 h76
-               M70 54 v-12 h6 v12 M124 54 v-12 h6 v12
-               M76 42 h48 M78 42 v-6 M122 42 v-6
-               M84 88 v-16 h12 v16 M104 88 v-16 h12 v16`,
-  london: `M92 88 v-52 h16 v52 M92 36 h16 M94 36 l6 -12 l6 12
-           M96 46 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0 M100 44 v2 h2
-           M60 88 h80 M66 88 v-14 M74 88 v-20 M82 88 v-14
-           M118 88 v-14 M126 88 v-20 M134 88 v-14`,
-  rome: `M64 88 v-40 a36 22 0 0 1 72 0 v40 M64 62 h72 M64 74 h72
-         M76 48 v14 M88 44 v18 M100 42 v20 M112 44 v18 M124 48 v14
-         M76 62 v12 M88 62 v12 M100 62 v12 M112 62 v12 M124 62 v12
-         M60 88 h80`,
-  barcelona: `M78 88 v-30 M92 88 v-44 M108 88 v-44 M122 88 v-30
-              M78 58 l0 -8 l4 -10 l4 10 v8 M92 44 l0 -10 l4 -12 l4 12 v10
-              M108 44 l0 -10 l4 -12 l4 12 v10 M122 58 l0 -8 l4 -10 l4 10 v8
-              M70 88 h60 M84 70 h32`,
-  amsterdam: `M60 88 v-30 l10 -12 l10 12 v30 M84 88 v-36 l10 -12 l10 12 v36
-              M108 88 v-30 l10 -12 l10 12 v30
-              M56 88 h84 M66 70 h8 M90 62 h8 M114 70 h8
-              M66 80 h8 M90 76 h8 M114 80 h8`,
-  prague: `M74 88 v-40 h52 v40 M74 48 h52
-           M82 48 v-14 l6 -14 l6 14 v14 M112 48 v-14 l6 -14 l6 14 v14
-           M94 88 v-20 a6 6 0 0 1 12 0 v20 M68 88 h64`,
-  vienna: `M100 10 v14 M94 24 h12 M96 24 L88 52 M104 24 L112 52
-           M84 52 h32 M84 52 v36 M116 52 v36
-           M92 88 v-18 a8 8 0 0 1 16 0 v18 M76 88 h48 M84 66 h8 M108 66 h8`,
-  athens: `M62 88 v-34 M76 88 v-34 M90 88 v-34 M104 88 v-34 M118 88 v-34
-           M132 88 v-34 M56 54 h84 M60 54 l40 -18 l40 18 M56 88 h88
-           M62 48 h76`,
-  newyork: `M56 88 v-28 h14 v28 M74 88 v-44 h14 v44
-            M92 88 v-62 h16 v62 M100 26 v-12
-            M112 88 v-38 h14 v38 M130 88 v-24 h14 v24 M50 88 h100
-            M78 56 h6 M96 40 h8 M96 54 h8 M116 62 h6`,
-  generic: `M50 88 v-22 h16 v22 M70 88 v-34 h14 v34 M88 88 v-46 h18 v46
-            M110 88 v-30 h14 v30 M128 88 v-20 h16 v20 M46 88 h108
-            M76 62 h4 M94 52 h6 M116 66 h4`,
+  /* Paris — Eiffel Tower · Haussmann rooftops */
+  paris: {
+    fg: `M100 8v10 M97 18h6 M97 18Q95 34 91 48Q86 70 76 88 M103 18Q105 34 109 48Q114 70 124 88 M93
+        36h14 M93 41h14 M93 36v5 M107 36v5 M92 44l16 13 M108 44l-16 13 M87 57h26 M86 62h28 M87 57v5
+        M113 57v5 M88 88Q100 64 112 88`,
+    bg: `M34 88v-16h16v16 M34 72l8-6 8 6 M40 78h4 M152 88v-18h18v18 M152 70l9-7 9 7 M158 76h6 M26
+        88h160`,
+  },
+  /* Bratislava — Castle · UFO bridge over the Danube */
+  bratislava: {
+    fg: `M72 88V56h56v32 M72 56h56 M70 56V44h10v12 M70 44l5-8 5 8 M120 56V44h10v12 M120 44l5-8 5 8
+        M88 88V72h9v16 M103 88V72h9v16 M82 64h8 M110 64h8`,
+    bg: `M146 88v-32 M138 56h16 M146 56L170 74 M132 74h48 M40 88v-12h12v12 M40 76l6-5 6 5 M28 88h158`,
+  },
+  /* London — Elizabeth Tower · Parliament · Tower Bridge */
+  london: {
+    fg: `M92 88V42h14v46 M91 42h16 M91 36h16 M91 42v-6 M107 42v-6 M92 36Q98 31 100 20 102 31 108 36
+        M100 20v-6 M95 50a5 5 0 1 0 10 0 5 5 0 1 0-10 0 M100 47v3h3 M92 62h14 M92 76h14`,
+    bg: `M58 88v-22h32v22 M62 66v-9 M70 66v-13 M78 66v-9 M86 66v-9 M118 88v-24h9v24 M148 88v-24h9v24
+        M122 64l1-5 M152 64l1-5 M127 76q11 7 21 0 M127 82h21 M48 88h118`,
+  },
+  /* Rome — Colosseum · triumphal arch · cypress */
+  rome: {
+    fg: `M68 88V54Q68 42 82 40l18-3Q132 34 132 54v34 M68 56h64 M68 76h64 M74 72v-7a4 4 0 0 1 8 0v7
+        M88 72v-7a4 4 0 0 1 8 0v7 M102 72v-7a4 4 0 0 1 8 0v7 M116 72v-7a4 4 0 0 1 8 0v7 M74 52v-5a4
+        4 0 0 1 8 0v5 M88 50v-5a4 4 0 0 1 8 0v5`,
+    bg: `M38 88v-22h24v22 M38 66h24 M44 88v-13a6 6 0 0 1 12 0v13 M160 88v-9 M160 79q-6-6 0-21 6 15 0
+        21 M30 88h156`,
+  },
+  /* Barcelona — Sagrada Família · Gaudí roofline */
+  barcelona: {
+    fg: `M76 88V66q0-12 6-17 6 5 6 17v22 M82 49v-6 M79 43h6 M92 88V56q0-14 6-20 6 6 6 20v32 M98 36v-7
+        M95 29h6 M106 88V56q0-14 6-20 6 6 6 20v32 M112 36v-7 M109 29h6 M122 88V66q0-12 6-17 6 5 6
+        17v22 M128 49v-6 M125 43h6 M96 62h4 M110 62h4 M84 72h42`,
+    bg: `M34 88v-13q8-8 16 0v13 M34 75h16 M40 81h5 M150 88v-11q9-7 18 0v11 M154 82h10 M28 88h158`,
+  },
+  /* Amsterdam — Canal houses · bridge · water */
+  amsterdam: {
+    fg: `M62 88V60Q62 54 66 52 70 50 70 46h4Q74 50 78 52 82 54 82 60v28 M86
+        88V62h3v-5h3v-5h3v-5h6v5h3v5h3v5h3v26 M110 88V62l4-3v-5l6-6 6 6v5l4 3v26 M68 70h8 M92 66h8
+        M116 70h8 M68 80h8 M92 76h8 M116 80h8`,
+    bg: `M34 84h26 M38 84q9-8 18 0 M144 84h20 M148 84q8-7 16 0 M150 88h16 M28 88h156`,
+  },
+  /* Prague — Charles Bridge tower · castle spires */
+  prague: {
+    fg: `M76 88V46h32v42 M76 46h32 M80 46l12-18 12 18 M92 28v-6 M72 46v-9l3-6 3 6v9 M106 46v-9l3-6 3
+        6v9 M85 88V70a7 7 0 0 1 14 0v18 M82 56h6 M96 56h6`,
+    bg: `M120 88v-26h34v26 M120 62h34 M126 62v-14 M126 48l3-9 3 9 M144 62v-14 M144 48l3-9 3 9 M132
+        62v-8h8v8 M36 84h32 M40 84q7-7 14 0 M54 84q7-7 14 0 M28 88h158`,
+  },
+  /* Vienna — St. Stephen's · Riesenrad */
+  vienna: {
+    fg: `M100 8v6 M97 14h6 M97 14Q95 32 91 46L88 56 M103 14Q105 32 109 46l3 10 M86 56h28 M88 56v32
+        M112 56v32 M94 88V73a6 6 0 0 1 12 0v15 M88 62l24 13 M112 62 88 75`,
+    bg: `M156 88v-14 M146 72a10 10 0 1 0 20 0 10 10 0 1 0-20 0 M156 62v20 M146 72h20 M149 65l14 14
+        M163 65l-14 14 M40 88v-12h14v12 M40 76h14 M30 88h150`,
+  },
+  /* Athens — Parthenon · Acropolis rock · olive tree */
+  athens: {
+    fg: `M72 88V62 M82 88V62 M92 88V62 M102 88V62 M112 88V62 M122 88V62 M69 62h6 M79 62h6 M89 62h6
+        M99 62h6 M109 62h6 M119 62h6 M66 62h64 M66 56h64 M68 56l30-14 30 14 M76 53l22-10 20 9`,
+    bg: `M156 88v-11 M146 77a10 8 0 0 1 20 0 10 8 0 0 1-20 0 M34 88q14-11 28-3 M46 82q8-4 14-2 M28
+        88h158`,
+  },
+  /* New York — Empire State · midtown block */
+  newyork: {
+    fg: `M84 88v-8h32v8 M88 80V44h24v36 M92 44V32h16v12 M96 32v-8h8v8 M100 24V12 M94 76V48 M100 76V48
+        M106 76V48 M88 52h24`,
+    bg: `M58 88v-26h14v26 M76 88v-40h14v40 M114 88v-34h14v34 M132 88v-22h16v22 M80 60h6 M118 66h6 M62
+        70h6 M136 74h8 M48 88h118`,
+  },
+  /* Tel Aviv — Azrieli towers · palm · shoreline */
+  telaviv: {
+    fg: `M76 88v-38h16v38 M84 50v-6 M98 88v-42h16v42 M98 46a8 6 0 0 1 16 0 M106 40v-4 M120 88l9-42 9
+        42`,
+    bg: `M164 88v-19 M164 69q-11-4-13-12 M164 69q11-4 13-12 M164 69q-4-11 0-17 M34 83h16 M42 88h18
+        M28 88h154`,
+  },
+  /* Jerusalem — Dome of the Rock · Old City wall */
+  jerusalem: {
+    fg: `M78 88V64h48v24 M78 64h48 M84 64v-8h36v8 M86 56h32 M88 56Q88 40 102 39 116 40 116 56 M102
+        39v-7 M99 32h6 M102 32v-5 M88 82v-6a3 3 0 0 1 6 0v6 M110 82v-6a3 3 0 0 1 6 0v6`,
+    bg: `M40 88v-18h32v18 M40 70h32 M44 70v-5 M52 70v-5 M60 70v-5 M68 70v-5 M140 88v-22h24v22 M140
+        66h24 M144 66v-5 M152 66v-5 M160 66v-5 M178 88v-9 M178 79q-5-5 0-18 5 13 0 18 M32 88h154`,
+  },
+  /* Budapest — Parliament dome · Chain Bridge */
+  budapest: {
+    fg: `M74 88V66h52v22 M74 66h52 M94 66V54q0-10 6-12 6 2 6 12v12 M100 42v-8 M98 34h4 M96 60h8 M80
+        66V56l2-6 2 6v10 M116 66V56l2-6 2 6v10 M80 88V76h8v12 M112 88V76h8v12 M88 78h24`,
+    bg: `M142 88v-25h8v25 M172 88v-25h8v25 M146 63l1-4 M176 63l1-4 M150 70q13 8 22 0 M150 78h22 M36
+        88v-12h14v12 M36 76h14 M28 88h156`,
+  },
+  /* Berlin — Fernsehturm · Brandenburg Gate */
+  berlin: {
+    fg: `M98 88l1-45h2l1 45 M93 36a7 7 0 1 0 14 0 7 7 0 1 0-14 0 M93 36h14 M100 29V12 M95 80h10`,
+    bg: `M126 88v-22h44v22 M126 66h44 M132 88v-22 M142 88v-22 M154 88v-22 M164 88v-22 M140 62h16 M144
+        62v-5 M152 62v-5 M40 88v-14h16v14 M40 74h16 M32 88h150`,
+  },
+  /* Lisbon — Tram 28 · hillside houses · 25 de Abril */
+  lisbon: {
+    fg: `M76 88V70Q76 62 84 62h32Q124 62 124 70v18 M76 74h48 M82 74v-8h8v6 M96 74v-8h8v6 M110
+        74v-8h8v6 M95 62l5-7 5 7 M96 55h8 M76 80h48 M82 84a4 4 0 1 0 8 0 4 4 0 1 0-8 0 M102 84a4 4 0
+        1 0 8 0 4 4 0 1 0-8 0`,
+    bg: `M36 88v-16h14v16 M36 72l7-6 7 6 M52 88v-12h12v12 M52 76l6-5 6 5 M140 88v-27h6v27 M172
+        88v-27h6v27 M146 68q14 10 26 0 M146 76h26 M30 88h154`,
+  },
+  /* Madrid — Puerta de Alcalá · Metrópolis dome */
+  madrid: {
+    fg: `M70 88v-24h56v24 M70 64h56 M90 88v-15a8 8 0 0 1 16 0v15 M76 88v-9a4 4 0 0 1 8 0v9 M112
+        88v-9a4 4 0 0 1 8 0v9 M92 58h12 M96 58v-6`,
+    bg: `M144 88v-26h22v26 M144 62a11 9 0 0 1 22 0 M155 53v-8 M152 45h6 M34 88v-14h14v14 M34 74h14
+        M28 88h154`,
+  },
+  /* Tokyo — Tokyo Tower · pagoda · Fuji */
+  tokyo: {
+    fg: `M100 8v10 M97 18h6 M97 18L91 34 M103 18l6 16 M93 34h14 M93 38h14 M93 34v4 M107 34v4 M91
+        38l-3 12 M109 38l3 12 M88 50h24 M88 55h24 M88 50v5 M112 50v5 M88 55 74 88 M112 55l14 33 M80
+        74h40 M84 88Q100 66 116 88`,
+    bg: `M148 88v-24 M138 64h20 M141 64v-8h14v8 M138 56h20 M142 48h12 M148 42v-6 M136 72h24 M136
+        80h24 M28 84l16-18 6 6 8-10 14 22 M38 72h10 M24 88h160`,
+  },
+  /* Bangkok — Wat Arun prang · temple roofs · river boat */
+  bangkok: {
+    fg: `M100 10v8 M97 12l3-4 3 4 M92 88Q94 48 100 18 106 48 108 88 M96 42h8 M94 54h12 M93 66h14 M92
+        78h16 M76 88q2-22 7-28 5 6 7 28 M120 88q2-22 7-28 5 6 7 28`,
+    bg: `M36 88v-12h28v12 M34 76l16-10 16 10 M40 66l10-6 10 6 M144 84h34l-4 4h-26z M158 84v-8 M158
+        78h10 M28 88h152`,
+  },
+  /* Generic skyline — fallback for unmapped destinations */
+  generic: {
+    fg: `M88 88v-46h18v46 M94 52h6 M94 64h6`,
+    bg: `M52 88v-22h16v22 M72 88v-34h14v34 M110 88v-30h14v30 M128 88v-20h16v20 M76 62h6 M114 66h6 M56
+        74h8 M132 76h8 M44 88h118`,
+  },
 };
 
+/* Local and common alternate spellings, so "Praha" and "Tel Aviv-Yafo" both land. Matched
+   as substrings against the lowercased destination, so order matters only where one name
+   contains another — none of these do. */
 const MONUMENT_ALIASES = {
   paris: ["paris"], bratislava: ["bratislava", "pressburg"], london: ["london"],
   rome: ["rome", "roma"], barcelona: ["barcelona"], amsterdam: ["amsterdam"],
   prague: ["prague", "praha"], vienna: ["vienna", "wien"], athens: ["athens", "athina"],
   newyork: ["new york", "nyc", "manhattan"],
+  telaviv: ["tel aviv", "tel-aviv", "tlv", "יפו", "תל אביב"],
+  jerusalem: ["jerusalem", "yerushalayim", "ירושלים"],
+  budapest: ["budapest"], berlin: ["berlin"],
+  lisbon: ["lisbon", "lisboa"], madrid: ["madrid"],
+  tokyo: ["tokyo", "tōkyō"], bangkok: ["bangkok", "krung thep"],
 };
 
 function monumentFor(trip) {
@@ -3824,13 +4007,23 @@ function monumentFor(trip) {
 
 /* One SVG for both crops. `xMaxYMax meet` keeps the monument right-aligned and
    on its baseline: centred art sat underneath the trip name, and the previous
-   `none` would stretch a building between the tall hero and the 96px card. */
-function coverArt(trip) {
+   `none` would stretch a building between the tall hero and the 96px card.
+
+   Two paths since v1.10.3 — context first so the landmark draws over it. The weights
+   are the depth treatment: the landmark reads at full strength, the context recedes.
+   Colours are parameterised (defaulting to today's values) because the parked v2
+   placements need the same artwork on a dark ground. */
+const COVER_INK = "rgba(38,24,18,.62)";
+const COVER_INK_SOFT = "rgba(38,24,18,.30)";
+
+function coverArt(trip, opts) {
+  const o = opts || {};
+  const mon = monumentFor(trip);
   return `
     <svg class="cover__art" viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"
-         fill="none" stroke="rgba(38,24,18,.62)" stroke-width="2"
-         stroke-linecap="round" stroke-linejoin="round">
-      <path d="${monumentFor(trip)}"/>
+         fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="${mon.bg}" stroke="${o.bg || COVER_INK_SOFT}" stroke-width="1.2"/>
+      <path d="${mon.fg}" stroke="${o.fg || COVER_INK}" stroke-width="2.2"/>
     </svg>`;
 }
 
@@ -3990,14 +4183,20 @@ function renderTripsScreen() {
     { icon: ICONS.checklist, title: "Checklist", desc: "Create a shared family checklist so nothing is missed.", go: "family", cta: "Start now" },
     { icon: ICONS.reservations, title: "Reservations & attachments", desc: "Keep track of all your bookings and documents.", go: "bookings", cta: "Start now" },
   ];
+  /* The itinerary steps carry the featured trip's id. Without it they only set the hash,
+     and itineraryTripId is module-level and sticky for the session — so once the switcher
+     tabs had been used, "Day by Day" under a hero reading "Next trip · Paris" opened
+     whichever trip was last viewed. */
+  const featuredId = trip ? trip.id : "";
+  const tripAttr = (s) => (s.go === "itinerary" && featuredId ? ` data-trip-id="${escapeHtml(featuredId)}"` : "");
   $("steps").innerHTML = steps
     .map(
       (s) => `
-      <div class="step-card" data-go="${s.go}" role="button" tabindex="0">
+      <div class="step-card" data-go="${s.go}"${tripAttr(s)} role="button" tabindex="0">
         <span class="step-card__icon">${s.icon}</span>
         <h3>${s.title}</h3>
         <p>${s.desc}</p>
-        <button type="button" class="btn btn--secondary" data-go="${s.go}">${s.cta}</button>
+        <button type="button" class="btn btn--secondary" data-go="${s.go}"${tripAttr(s)}>${s.cta}</button>
       </div>`
     )
     .join("");
@@ -4049,9 +4248,24 @@ function renderTripOverviewCard(trip) {
 }
 
 function bindGoButtons(scope) {
-  scope.querySelectorAll("[data-go]").forEach((b) =>
-    b.addEventListener("click", () => { location.hash = "#" + b.getAttribute("data-go"); })
-  );
+  scope.querySelectorAll("[data-go]").forEach((b) => {
+    const go = () => {
+      // Select the trip before navigating, so the destination screen renders the right one.
+      const tripId = b.getAttribute("data-trip-id");
+      if (tripId && state.trips.some((t) => t.id === tripId)) setItineraryTrip(tripId);
+      location.hash = "#" + b.getAttribute("data-go");
+    };
+    b.addEventListener("click", go);
+    /* .step-card is role="button" tabindex="0" but only had a click listener, so Enter
+       and Space did nothing — a broken ARIA promise. Buttons get this from the UA. */
+    if (b.getAttribute("role") === "button" && b.tagName !== "BUTTON") {
+      b.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        go();
+      });
+    }
+  });
 }
 
 /* ---------- ITINERARY screen ---------- */

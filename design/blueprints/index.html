@@ -1,0 +1,155 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>TravelHub — city blueprints</title>
+<style>
+  body { margin: 0; padding: 40px; background: #fff; color: #000;
+         font: 400 14px/1.4 ui-sans-serif, system-ui, sans-serif; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px; }
+  p.sub { margin: 0 0 32px; color: #666; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 32px; }
+  figure { margin: 0; }
+  svg { width: 100%; height: auto; display: block; }
+  figcaption { margin-top: 8px; letter-spacing: .04em; text-transform: uppercase;
+               font-size: 11px; color: #444; }
+  figcaption span { display: block; margin-top: 3px; text-transform: none;
+                    letter-spacing: 0; color: #8a8a8a; }
+</style>
+<h1>TravelHub city blueprints</h1>
+<p class="sub">Black line art, drawn on a 210 × 100 grid with the baseline at y = 88.
+Right-aligned and baseline-anchored in the app (<code>preserveAspectRatio="xMaxYMax meet"</code>).
+Two layers per city: the landmark at stroke 2.2, its city context at 1.2 in grey.</p>
+<div class="grid">
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M34 88v-16h16v16 M34 72l8-6 8 6 M40 78h4 M152 88v-18h18v18 M152 70l9-7 9 7 M158 76h6 M26 88h160" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M100 8v10 M97 18h6 M97 18Q95 34 91 48Q86 70 76 88 M103 18Q105 34 109 48Q114 70 124 88 M93 36h14 M93 41h14 M93 36v5 M107 36v5 M92 44l16 13 M108 44l-16 13 M87 57h26 M86 62h28 M87 57v5 M113 57v5 M88 88Q100 64 112 88" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Paris<span>Eiffel Tower · Haussmann rooftops</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M146 88v-32 M138 56h16 M146 56L170 74 M132 74h48 M40 88v-12h12v12 M40 76l6-5 6 5 M28 88h158" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M72 88V56h56v32 M72 56h56 M70 56V44h10v12 M70 44l5-8 5 8 M120 56V44h10v12 M120 44l5-8 5 8 M88 88V72h9v16 M103 88V72h9v16 M82 64h8 M110 64h8" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Bratislava<span>Castle · UFO bridge over the Danube</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M58 88v-22h32v22 M62 66v-9 M70 66v-13 M78 66v-9 M86 66v-9 M118 88v-24h9v24 M148 88v-24h9v24 M122 64l1-5 M152 64l1-5 M127 76q11 7 21 0 M127 82h21 M48 88h118" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M92 88V42h14v46 M91 42h16 M91 36h16 M91 42v-6 M107 42v-6 M92 36Q98 31 100 20 102 31 108 36 M100 20v-6 M95 50a5 5 0 1 0 10 0 5 5 0 1 0-10 0 M100 47v3h3 M92 62h14 M92 76h14" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>London<span>Elizabeth Tower · Parliament · Tower Bridge</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M38 88v-22h24v22 M38 66h24 M44 88v-13a6 6 0 0 1 12 0v13 M160 88v-9 M160 79q-6-6 0-21 6 15 0 21 M30 88h156" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M68 88V54Q68 42 82 40l18-3Q132 34 132 54v34 M68 56h64 M68 76h64 M74 72v-7a4 4 0 0 1 8 0v7 M88 72v-7a4 4 0 0 1 8 0v7 M102 72v-7a4 4 0 0 1 8 0v7 M116 72v-7a4 4 0 0 1 8 0v7 M74 52v-5a4 4 0 0 1 8 0v5 M88 50v-5a4 4 0 0 1 8 0v5" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Rome<span>Colosseum · triumphal arch · cypress</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M34 88v-13q8-8 16 0v13 M34 75h16 M40 81h5 M150 88v-11q9-7 18 0v11 M154 82h10 M28 88h158" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M76 88V66q0-12 6-17 6 5 6 17v22 M82 49v-6 M79 43h6 M92 88V56q0-14 6-20 6 6 6 20v32 M98 36v-7 M95 29h6 M106 88V56q0-14 6-20 6 6 6 20v32 M112 36v-7 M109 29h6 M122 88V66q0-12 6-17 6 5 6 17v22 M128 49v-6 M125 43h6 M96 62h4 M110 62h4 M84 72h42" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Barcelona<span>Sagrada Família · Gaudí roofline</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M34 84h26 M38 84q9-8 18 0 M144 84h20 M148 84q8-7 16 0 M150 88h16 M28 88h156" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M62 88V60Q62 54 66 52 70 50 70 46h4Q74 50 78 52 82 54 82 60v28 M86 88V62h3v-5h3v-5h3v-5h6v5h3v5h3v5h3v26 M110 88V62l4-3v-5l6-6 6 6v5l4 3v26 M68 70h8 M92 66h8 M116 70h8 M68 80h8 M92 76h8 M116 80h8" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Amsterdam<span>Canal houses · bridge · water</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M120 88v-26h34v26 M120 62h34 M126 62v-14 M126 48l3-9 3 9 M144 62v-14 M144 48l3-9 3 9 M132 62v-8h8v8 M36 84h32 M40 84q7-7 14 0 M54 84q7-7 14 0 M28 88h158" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M76 88V46h32v42 M76 46h32 M80 46l12-18 12 18 M92 28v-6 M72 46v-9l3-6 3 6v9 M106 46v-9l3-6 3 6v9 M85 88V70a7 7 0 0 1 14 0v18 M82 56h6 M96 56h6" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Prague<span>Charles Bridge tower · castle spires</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M156 88v-14 M146 72a10 10 0 1 0 20 0 10 10 0 1 0-20 0 M156 62v20 M146 72h20 M149 65l14 14 M163 65l-14 14 M40 88v-12h14v12 M40 76h14 M30 88h150" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M100 8v6 M97 14h6 M97 14Q95 32 91 46L88 56 M103 14Q105 32 109 46l3 10 M86 56h28 M88 56v32 M112 56v32 M94 88V73a6 6 0 0 1 12 0v15 M88 62l24 13 M112 62 88 75" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Vienna<span>St. Stephen's · Riesenrad</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M156 88v-11 M146 77a10 8 0 0 1 20 0 10 8 0 0 1-20 0 M34 88q14-11 28-3 M46 82q8-4 14-2 M28 88h158" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M72 88V62 M82 88V62 M92 88V62 M102 88V62 M112 88V62 M122 88V62 M69 62h6 M79 62h6 M89 62h6 M99 62h6 M109 62h6 M119 62h6 M66 62h64 M66 56h64 M68 56l30-14 30 14 M76 53l22-10 20 9" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Athens<span>Parthenon · Acropolis rock · olive tree</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M58 88v-26h14v26 M76 88v-40h14v40 M114 88v-34h14v34 M132 88v-22h16v22 M80 60h6 M118 66h6 M62 70h6 M136 74h8 M48 88h118" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M84 88v-8h32v8 M88 80V44h24v36 M92 44V32h16v12 M96 32v-8h8v8 M100 24V12 M94 76V48 M100 76V48 M106 76V48 M88 52h24" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>New York<span>Empire State · midtown block</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M164 88v-19 M164 69q-11-4-13-12 M164 69q11-4 13-12 M164 69q-4-11 0-17 M34 83h16 M42 88h18 M28 88h154" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M76 88v-38h16v38 M84 50v-6 M98 88v-42h16v42 M98 46a8 6 0 0 1 16 0 M106 40v-4 M120 88l9-42 9 42" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Tel Aviv<span>Azrieli towers · palm · shoreline</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M40 88v-18h32v18 M40 70h32 M44 70v-5 M52 70v-5 M60 70v-5 M68 70v-5 M140 88v-22h24v22 M140 66h24 M144 66v-5 M152 66v-5 M160 66v-5 M178 88v-9 M178 79q-5-5 0-18 5 13 0 18 M32 88h154" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M78 88V64h48v24 M78 64h48 M84 64v-8h36v8 M86 56h32 M88 56Q88 40 102 39 116 40 116 56 M102 39v-7 M99 32h6 M102 32v-5 M88 82v-6a3 3 0 0 1 6 0v6 M110 82v-6a3 3 0 0 1 6 0v6" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Jerusalem<span>Dome of the Rock · Old City wall</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M142 88v-25h8v25 M172 88v-25h8v25 M146 63l1-4 M176 63l1-4 M150 70q13 8 22 0 M150 78h22 M36 88v-12h14v12 M36 76h14 M28 88h156" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M74 88V66h52v22 M74 66h52 M94 66V54q0-10 6-12 6 2 6 12v12 M100 42v-8 M98 34h4 M96 60h8 M80 66V56l2-6 2 6v10 M116 66V56l2-6 2 6v10 M80 88V76h8v12 M112 88V76h8v12 M88 78h24" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Budapest<span>Parliament dome · Chain Bridge</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M126 88v-22h44v22 M126 66h44 M132 88v-22 M142 88v-22 M154 88v-22 M164 88v-22 M140 62h16 M144 62v-5 M152 62v-5 M40 88v-14h16v14 M40 74h16 M32 88h150" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M98 88l1-45h2l1 45 M93 36a7 7 0 1 0 14 0 7 7 0 1 0-14 0 M93 36h14 M100 29V12 M95 80h10" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Berlin<span>Fernsehturm · Brandenburg Gate</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M36 88v-16h14v16 M36 72l7-6 7 6 M52 88v-12h12v12 M52 76l6-5 6 5 M140 88v-27h6v27 M172 88v-27h6v27 M146 68q14 10 26 0 M146 76h26 M30 88h154" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M76 88V70Q76 62 84 62h32Q124 62 124 70v18 M76 74h48 M82 74v-8h8v6 M96 74v-8h8v6 M110 74v-8h8v6 M95 62l5-7 5 7 M96 55h8 M76 80h48 M82 84a4 4 0 1 0 8 0 4 4 0 1 0-8 0 M102 84a4 4 0 1 0 8 0 4 4 0 1 0-8 0" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Lisbon<span>Tram 28 · hillside houses · 25 de Abril</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M144 88v-26h22v26 M144 62a11 9 0 0 1 22 0 M155 53v-8 M152 45h6 M34 88v-14h14v14 M34 74h14 M28 88h154" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M70 88v-24h56v24 M70 64h56 M90 88v-15a8 8 0 0 1 16 0v15 M76 88v-9a4 4 0 0 1 8 0v9 M112 88v-9a4 4 0 0 1 8 0v9 M92 58h12 M96 58v-6" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Madrid<span>Puerta de Alcalá · Metrópolis dome</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M148 88v-24 M138 64h20 M141 64v-8h14v8 M138 56h20 M142 48h12 M148 42v-6 M136 72h24 M136 80h24 M28 84l16-18 6 6 8-10 14 22 M38 72h10 M24 88h160" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M100 8v10 M97 18h6 M97 18L91 34 M103 18l6 16 M93 34h14 M93 38h14 M93 34v4 M107 34v4 M91 38l-3 12 M109 38l3 12 M88 50h24 M88 55h24 M88 50v5 M112 50v5 M88 55 74 88 M112 55l14 33 M80 74h40 M84 88Q100 66 116 88" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Tokyo<span>Tokyo Tower · pagoda · Fuji</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M36 88v-12h28v12 M34 76l16-10 16 10 M40 66l10-6 10 6 M144 84h34l-4 4h-26z M158 84v-8 M158 78h10 M28 88h152" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M100 10v8 M97 12l3-4 3 4 M92 88Q94 48 100 18 106 48 108 88 M96 42h8 M94 54h12 M93 66h14 M92 78h16 M76 88q2-22 7-28 5 6 7 28 M120 88q2-22 7-28 5 6 7 28" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Bangkok<span>Wat Arun prang · temple roofs · river boat</span></figcaption>
+    </figure>
+    <figure>
+      <svg viewBox="0 0 210 100" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M52 88v-22h16v22 M72 88v-34h14v34 M110 88v-30h14v30 M128 88v-20h16v20 M76 62h6 M114 66h6 M56 74h8 M132 76h8 M44 88h118" stroke="#9a9a9a" stroke-width="1.2"/>
+        <path d="M88 88v-46h18v46 M94 52h6 M94 64h6" stroke="#000" stroke-width="2.2"/>
+      </svg>
+      <figcaption>Generic skyline<span>fallback for unmapped destinations</span></figcaption>
+    </figure>
+</div>
