@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.10.4**.
+Every user-reachable action in the app, as of **v1.10.5**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -103,7 +103,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.10.4 · <sha>` — selectable |
+| Build version | `TravelHub v1.10.5 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
@@ -127,10 +127,12 @@ missing-room recovery · storage-quota warning.
 All ten close on Escape, the close button, **and a tap outside** — with a confirm if a form
 has unsaved edits.
 
-A backdrop tap arriving within 700ms of touching a `<select>` is ignored — *v1.10.4*. Android
-draws a select's option list over the upper part of the screen, which for a bottom sheet is the
-backdrop; dismissing it delivered the tap through and closed the sheet, losing the edit. The
-dirty-form guard could not catch it because the stray tap beats the `change` event.
+A backdrop tap while a `<select>` inside the dialog holds focus blurs the select instead of
+closing the sheet — *v1.10.5*. Android draws a select's option list over the upper part of the
+screen, which for a bottom sheet is the backdrop; dismissing it delivered the tap through and
+closed the sheet, losing the edit. v1.10.4 tried a 700ms window from touching the select and
+failed on the real phone, because the list stays open while you read it; focus has no clock.
+A short window after `change` remains as a bridge, reset on every dialog open.
 
 Layout, since *v1.10.3*: two-up rows (`.roll-years`) can shrink below their inputs' natural
 width, so no dialog scrolls sideways at 412px — `#dialog-item` with the flight fields showing
@@ -161,5 +163,5 @@ Exported for design work by `design/export-blueprints.js`, which parses the path
 
 ## Diagnostics
 
-`?selftest=1` runs 133 checks and prints a pass/fail panel. It refuses to run while joined to
+`?selftest=1` runs 136 checks and prints a pass/fail panel. It refuses to run while joined to
 a shared room, because it stubs `localStorage.setItem` to throw.
