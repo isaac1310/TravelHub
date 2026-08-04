@@ -64,6 +64,11 @@
   let statusClearTimer = null;
   function setSyncStatus(text, type) {
     setChip(text, type);
+    /* Announce through the app's shared live region rather than making #sync-status one:
+       that element is display:none below 900px (the chip replaces it), and the className
+       assignment below would strip any class added in the HTML anyway. "Saving…" is skipped —
+       it is transient noise, and the result that follows is what matters. */
+    if (text && type !== "busy") window.VacationApp?.announce?.(text);
     const el = document.getElementById("sync-status");
     if (!el) return;
     clearTimeout(statusClearTimer);
@@ -170,7 +175,40 @@
     );
   }
 
-  async function saveRemote() {
+  /* Serialized entry point. `saveInFlight` used to be set only AFTER the awaited
+     remoteIsAhead(), leaving a window in which a second call — the 600ms debounce, the retry
+     timer, a manual "Save now", syncNow, reconnect or a post-merge push — ran a whole second
+     save body concurrently, its freshness check predating the first one's write. Two saves
+     from ONE slow device were enough; it never needed two people.
+
+     One in flight, at most one queued behind it. Plain coalescing — handing a later caller the
+     promise already running — would be wrong: syncNow() merges and then awaits a push, so it
+     would be handed a save whose payload was captured BEFORE the merge, see it succeed, and
+     mark the merged state saved without ever sending it. A queued follow-up runs a fresh save
+     body, which re-reads current state, so whoever waits is guaranteed their state reached the
+     server. The chain clears in `finally` so one network failure cannot wedge saving forever. */
+  let savePromise = null;
+  let saveQueued = false;
+
+  function saveRemote() {
+    if (savePromise) { saveQueued = true; return savePromise; }
+    savePromise = runSaveChain();
+    return savePromise;
+  }
+
+  async function runSaveChain() {
+    try {
+      do {
+        saveQueued = false;
+        await saveRemoteInner();
+      } while (saveQueued);
+    } finally {
+      savePromise = null;
+      saveQueued = false;
+    }
+  }
+
+  async function saveRemoteInner() {
     if (!sharedMode || !supabase) return;
     clearTimeout(retryTimer);
     if (await remoteIsAhead()) {

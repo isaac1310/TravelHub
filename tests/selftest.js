@@ -17,17 +17,29 @@
 
   function group(name) { currentGroup = name; }
 
+  /* A check that cannot run must say so rather than returning true. Two checks used to
+     `return true` early at desktop width — the FAB clearance one and the sticky-bar occlusion
+     one — so a desktop run reported them green without exercising anything. That is the same
+     passes-for-the-wrong-reason shape as the v1.10.2 CSS bug, and it hid the fact that the
+     suite has to be run at phone width to mean anything. Return skip("why") instead. */
+  const SKIP = Symbol("skip");
+  function skip(reason) { return { [SKIP]: true, reason: reason || "not applicable here" }; }
+  const isSkip = (r) => Boolean(r && typeof r === "object" && r[SKIP]);
+
   function check(name, fn) {
-    let ok = false, detail = "";
+    let ok = false, skipped = false, detail = "";
     try {
       const r = fn();
-      ok = r === true || r === undefined;
-      if (!ok) detail = String(r);
+      if (isSkip(r)) { skipped = true; ok = true; detail = r.reason; }
+      else {
+        ok = r === true || r === undefined;
+        if (!ok) detail = String(r);
+      }
     } catch (err) {
       ok = false;
       detail = (err && err.message) || String(err);
     }
-    results.push({ group: currentGroup, name, ok, detail });
+    results.push({ group: currentGroup, name, ok, skipped, detail });
     return ok;
   }
 
@@ -108,6 +120,7 @@
       releaseV1102();
       releaseV1103();
       releaseV1104();
+      releaseV1110();
       releaseV1105();
       dialogBehaviour();
       trustBoundary();
@@ -207,7 +220,7 @@
     });
 
     check("Retry rebuilds the map once Leaflet is back", () => {
-      if (typeof L === "undefined") return true; // CDN blocked; nothing to prove
+      if (typeof L === "undefined") return skip("Leaflet CDN blocked");
       const btn = document.getElementById("btn-map-retry");
       if (btn) btn.click(); else renderItinerary();
       return truthy(document.querySelector(".leaflet-container"), "leaflet container");
@@ -659,7 +672,7 @@
     });
 
     check("map pins carry the same labels as the list rows", () => {
-      if (typeof L === "undefined") return true; // CDN blocked
+      if (typeof L === "undefined") return skip("Leaflet CDN blocked");
       const rows = [...document.querySelectorAll("#itinerary-view .mapstop__pin")]
         .filter((el) => !el.classList.contains("mapstop__pin--hotel"))
         .filter((el) => !el.classList.contains("mapstop__pin--nogeo"))
@@ -667,7 +680,7 @@
       const pins = [...document.querySelectorAll(".map-pin")]
         .filter((el) => !el.classList.contains("map-pin--hotel"))
         .map((el) => el.textContent.trim());
-      if (!pins.length) return true; // nothing geocoded in the seed data
+      if (!pins.length) return skip("nothing geocoded in the seed data");
       return eq(pins.join(","), rows.join(","), "pin labels vs row labels");
     });
 
@@ -898,7 +911,7 @@
        coverFor() no longer exists. Monuments are covered in the v1.10.1 group. */
     check("the budget lead number equals still-to-pay", () => {
       const lead = document.querySelector(".answer-card__value");
-      if (!lead) return true; // budget screen not rendered in this pass
+      if (!lead) return skip("budget screen not rendered in this pass");
       const { totalDue } = totalsForTrips(tripsForFilter());
       return eq(lead.textContent.trim(), formatMoney(totalDue));
     });
@@ -1386,7 +1399,7 @@
     const PHONE_W = 412;
 
     check("no dialog form scrolls sideways at phone width", () => {
-      if (!laidOut()) return true;
+      if (!laidOut()) return skip("viewport too small to measure");
       const bad = [];
       document.querySelectorAll("dialog form").forEach((f) => {
         const d = f.closest("dialog");
@@ -1411,7 +1424,7 @@
     });
 
     check("the itinerary reserves enough room to clear the FAB", () => {
-      if (!laidOut()) return true;
+      if (!laidOut()) return skip("viewport too small to measure");
       /* The FAB is appended by renderItinerary, so it does not exist while the suite sits
          on the Trips screen — without this the check returned true and passed its mutant. */
       const trip = state.trips.find((t) => t.startDate && t.endDate);
@@ -1424,7 +1437,7 @@
         const fab = document.querySelector(".fab");
         if (!view) return "the itinerary did not render";
         const fabStyle = fab && getComputedStyle(fab);
-        if (!fabStyle || fabStyle.position !== "fixed") return true;  // desktop: no FAB
+        if (!fabStyle || fabStyle.position !== "fixed") return skip("desktop layout — no FAB");
         /* Computed values, not getBoundingClientRect: the itinerary screen may be
            display:none while another tab is active, and every rect is then 0 — which
            made this check pass against its own mutant. */
@@ -1438,12 +1451,15 @@
     });
 
     check("a focused field is not left under the sticky action bar", () => {
-      if (!laidOut()) return true;
+      if (!laidOut()) return skip("viewport too small to measure");
       const d = document.getElementById("dialog-expense");
       const wasOpen = d.open;
       openExpenseDialog(state.trips[0] ? state.trips[0].id : "x");
       const actions = d.querySelector(".dialog__actions");
-      if (getComputedStyle(actions).position !== "sticky") { if (!wasOpen) closeDialog(d); return true; }
+      if (getComputedStyle(actions).position !== "sticky") {
+        if (!wasOpen) closeDialog(d);
+        return skip("desktop layout — the action bar is not sticky");
+      }
       /* Force a short scroll box. On a tall harness viewport the whole form fits, the bar
          never pins over anything, and this passed with the fix entirely removed. A real
          phone in landscape — or any 88dvh shorter than the form — is the failing case. */
@@ -1624,6 +1640,453 @@
       if (funds.open) closeDialog(funds);
       if (outside) outside.blur();
       return closed ? true : "an unrelated focused select disabled tap-outside";
+    });
+  }
+
+  /* ===== 1b12. v1.11.0 — the Codex review, five enhancements ===== */
+
+  function releaseV1110() {
+    group("v1.11.0");
+
+    const datedTrip = () => state.trips.find((t) => t.startDate && t.endDate);
+    const shift = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return isoOf(d); };
+    /* A fixed reference date, not today's: "the last day of the trip" and "the day after it
+       ends" cannot be exercised against a moving clock. */
+    const REF = "2026-06-15";
+    const tt = (start, end, today) =>
+      tripTiming({ name: "x", startDate: start, endDate: end, destinations: [] }, today || REF);
+
+    /* The suite runs with whatever screen the app booted on — usually Trips — so
+       #screen-itinerary is display:none and everything inside it measures 0 and cannot be
+       focused. Several checks were skipping or failing purely for that reason. Make it
+       visible for the duration, then put the previous screen back. This changes visibility
+       only; it does not seed any state. */
+    function withItineraryVisible(fn) {
+      const screens = [...document.querySelectorAll(".screen")];
+      const wasActive = screens.filter((s) => s.classList.contains("is-active"));
+      screens.forEach((s) => s.classList.toggle("is-active", s.id === "screen-itinerary"));
+      try {
+        renderItinerary(); // re-measure now that the header has a real box
+        return fn();
+      } finally {
+        screens.forEach((s) => s.classList.remove("is-active"));
+        wasActive.forEach((s) => s.classList.add("is-active"));
+        renderItinerary();
+      }
+    }
+
+    /* ---- saveState reports failure ---- */
+
+    check("saveState reports whether the write landed", () => {
+      if (saveState() !== true) return "a normal save did not return true";
+      const real = Storage.prototype.setItem;
+      Storage.prototype.setItem = function () { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; };
+      const realAlert = window.alert; window.alert = () => {};
+      let got;
+      try { got = quietly(() => saveState()); }
+      finally { Storage.prototype.setItem = real; window.alert = realAlert; }
+      // Dead rollback code in every caller is what a silent `undefined` bought.
+      return got === false ? true : `a failed save returned ${JSON.stringify(got)}`;
+    });
+
+    /* ---- trip timing and order ---- */
+
+    check("the timing label is right at every boundary", () => {
+      const today = REF;
+      const cases = [
+        [shift(today, 2), shift(today, 5), "upcoming", "in 2 days"],
+        [shift(today, 1), shift(today, 4), "upcoming", "Tomorrow"],
+        [today, shift(today, 3), "travelling", "Travelling now · day 1 of 4"],
+        [shift(today, -1), shift(today, 2), "travelling", "Travelling now · day 2 of 4"],
+        [shift(today, -3), today, "travelling", "Travelling now · day 4 of 4"],
+        [today, today, "travelling", "Travelling now · day 1 of 1"],
+        ["", "", "undated", ""],
+      ];
+      for (const [s, e, state_, text] of cases) {
+        const r = tt(s, e);
+        if (r.state !== state_ || r.text !== text) {
+          return `${s || "(undated)"}..${e || "-"} gave [${r.state}] "${r.text}", wanted [${state_}] "${text}"`;
+        }
+      }
+      // The day after it ends must flip to past — off-by-one here is the likely bug.
+      const ended = tt(shift(today, -4), shift(today, -1));
+      return ended.state === "past" ? true : `a finished trip reads [${ended.state}]`;
+    });
+
+    check("the countdown uses a local date, not a UTC one", () => {
+      /* todayISO() goes through toISOString(), which is UTC — in Israel it names YESTERDAY
+         between midnight and 03:00, so the countdown would be a day out at night. Comparing
+         the two helpers at midday proves nothing, because they agree then. Probe an instant
+         near midnight instead, where a UTC conversion lands on a different calendar day. */
+      const probes = [new Date(2026, 0, 15, 0, 30), new Date(2026, 0, 15, 23, 30)];
+      const differs = probes.filter((d) => d.toISOString().slice(0, 10) !== "2026-01-15");
+      if (!differs.length) return skip("this machine runs at UTC — no local/UTC divergence to detect");
+      for (const d of differs) {
+        const got = todayLocalISO(d);
+        if (got !== "2026-01-15") return `${d.getHours()}:30 local resolved to ${got}, not the local date`;
+      }
+      return true;
+    });
+
+    check("one trip order: travelling, then soonest, then finished, then undated", () => {
+      const today = todayLocalISO();
+      const mk = (name, s, e) => makeTrip({ id: "t-" + name, name, startDate: s, endDate: e });
+      const trips = [
+        mk("past-old", shift(today, -60), shift(today, -55)),
+        mk("undated", "", ""),
+        mk("later", shift(today, 40), shift(today, 44)),
+        mk("now", shift(today, -1), shift(today, 1)),
+        mk("past-recent", shift(today, -10), shift(today, -8)),
+        mk("soon", shift(today, 5), shift(today, 9)),
+      ];
+      const order = sortTripsByUpcoming(trips).map((t) => t.name);
+      return eq(order.join(","), "now,soon,later,past-recent,past-old,undated", "order");
+    });
+
+    check("the featured trip is the one you are on or the next one", () => {
+      const featured = featuredTrip();
+      if (!featured) return skip("no trips in state");
+      const dated = sortTripsByUpcoming(state.trips.filter((t) => getMeta(t).startDate));
+      if (!dated.length) return skip("no dated trips");
+      return featured.id === dated[0].id
+        ? true : `featured is ${featured.name}, first in order is ${dated[0].name}`;
+    });
+
+    /* ---- Trips-screen cards ---- */
+
+    check("every trip card can be edited and opens its own itinerary", () => {
+      renderTripsScreen();
+      const cards = [...document.querySelectorAll("#trip-cards .tripcard")];
+      if (!cards.length) return skip("no trip cards rendered");
+      const sorted = sortTripsByUpcoming(state.trips);
+      for (let i = 0; i < cards.length; i++) {
+        const want = sorted[i].id;
+        const edit = cards[i].querySelector("[data-edit-trip]");
+        const itin = cards[i].querySelector('[data-go="itinerary"]');
+        if (!edit) return `card ${i} has no Edit control`;
+        if (edit.getAttribute("data-edit-trip") !== want) return `card ${i} edits the wrong trip`;
+        // Carried no trip id at all before v1.11.0, so it opened whatever was last viewed.
+        if (!itin || itin.getAttribute("data-trip-id") !== want) {
+          return `card ${i} Itinerary button targets ${itin?.getAttribute("data-trip-id")}, wanted ${want}`;
+        }
+      }
+      return true;
+    });
+
+    check("the step cards send Route to the map and Day by Day to the timeline", () => {
+      renderTripsScreen();
+      const byTitle = (t) => [...document.querySelectorAll("#steps .step-card")]
+        .find((c) => c.querySelector("h3").textContent === t);
+      const day = byTitle("Day by Day"), route = byTitle("Route");
+      if (!day || !route) return "step cards missing";
+      return eq(day.getAttribute("data-subtab-target"), "timeline", "Day by Day") === true
+        && eq(route.getAttribute("data-subtab-target"), "maps", "Route") === true
+        ? true : "wrong sub-tab targets";
+    });
+
+    /* ---- Bookings ---- */
+
+    check("a booking card opens its own reservation", () => {
+      renderBookings();
+      const cards = [...document.querySelectorAll(".booking[data-item]")];
+      /* Not a skip: if reservations exist but no card is bindable, the feature is broken —
+         and letting absence skip is exactly how a mutation that stripped data-item slipped
+         past this check once already. */
+      const rendered = document.querySelectorAll(".booking").length;
+      if (!rendered) return skip("no reservations in state to render");
+      if (!cards.length) return `${rendered} booking card(s) rendered, none carrying data-item`;
+      // The parity doc claimed this worked for releases while nothing was bound at all.
+      const bad = cards.filter((c) => !state.items.some((i) => i.id === c.getAttribute("data-item")));
+      if (bad.length) return `${bad.length} card(s) point at a missing item`;
+      const first = cards[0];
+      const item = state.items.find((i) => i.id === first.getAttribute("data-item"));
+      const d = document.getElementById("dialog-item");
+      first.click();
+      const opened = d.open && $("form-item").querySelector('[name="itemId"]')?.value === item.id;
+      if (d.open) closeDialog(d);
+      return opened ? true : "tapping a booking did not open that reservation";
+    });
+
+    /* ---- Itinerary navigation ---- */
+
+    check("both tablists honour the tab contract", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      renderItinerary();
+      const lists = [...document.querySelectorAll('[role="tablist"]')];
+      if (lists.length < 2) return `expected 2 tablists, found ${lists.length}`;
+      for (const list of lists) {
+        const tabs = [...list.querySelectorAll('[role="tab"]')];
+        if (!tabs.length) return `${list.getAttribute("aria-label")} has no tabs`;
+        const selected = tabs.filter((t) => t.getAttribute("aria-selected") === "true");
+        if (selected.length !== 1) return `${list.getAttribute("aria-label")} has ${selected.length} selected tabs`;
+        // aria-selected must agree with the visual state, or they tell different stories.
+        if (!selected[0].classList.contains("is-active")) return "aria-selected disagrees with is-active";
+        const focusable = tabs.filter((t) => t.tabIndex === 0);
+        if (focusable.length !== 1) return `roving tabindex broken: ${focusable.length} tabs are focusable`;
+        if (focusable[0] !== selected[0]) return "the focusable tab is not the selected one";
+        if (tabs.some((t) => t.getAttribute("aria-controls") !== "itinerary-view")) return "aria-controls missing";
+      }
+      return document.getElementById("itinerary-view")?.getAttribute("role") === "tabpanel"
+        ? true : "the panel is not a tabpanel";
+    });
+
+    check("arrow keys move between trip tabs", () => {
+      if (state.trips.filter((t) => getMeta(t).startDate).length < 2) return skip("needs two dated trips");
+      return withItineraryVisible(() => {
+      const before = itineraryTripId;
+      const sw = document.getElementById("itinerary-switcher");
+      sw.querySelector('[role="tab"][aria-selected="true"]').focus();
+      sw.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      const moved = itineraryTripId !== before;
+      // Focus must land on the newly active tab, which a re-render had destroyed.
+      const active = document.getElementById("itinerary-switcher")
+        .querySelector('[role="tab"][aria-selected="true"]');
+      const focused = document.activeElement === active;
+      itineraryTripId = before;
+      if (!moved) return "ArrowRight did not change the trip";
+      return focused ? true : "focus did not follow the activated tab";
+      });
+    });
+
+    check("an unrelated re-render does not steal focus into a tab", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      return withItineraryVisible(() => {
+        const other = document.getElementById("btn-overflow");
+        if (!other) return skip("app bar not rendered");
+        other.focus();
+        if (document.activeElement !== other) return skip("this element cannot hold focus here");
+        renderItinerary(); // not a tab activation
+        return document.activeElement === other
+          ? true : `focus moved to ${document.activeElement?.tagName}.${document.activeElement?.className}`;
+      });
+    });
+
+    check("the view toggle and the day strip share one sticky header", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      renderItinerary();
+      const sticky = document.getElementById("itin-sticky");
+      if (!sticky) return "no sticky header";
+      if (!sticky.querySelector(".switcher--sub")) return "the view toggle is not in the header";
+      if (!sticky.querySelector(".daystrip")) return "the day strip is not in the header";
+      if (document.querySelector("#itinerary-view .daystrip")) return "the strip is still inside the scrolling view";
+      if (getComputedStyle(sticky).position !== "sticky") return skip("desktop layout — header is not sticky");
+      // Derived, not hardcoded: a day-jump would otherwise land with its heading hidden.
+      const margin = parseFloat(getComputedStyle(document.querySelector(".day")).scrollMarginTop) || 0;
+      const h = stickyHeaderHeight();
+      return margin >= h ? true : `scroll-margin-top ${margin}px is under the ${h}px header`;
+    });
+
+    check("the drag edge zone starts below the sticky header", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      return withItineraryVisible(() => {
+      const h = stickyHeaderHeight();
+      if (!h) return skip("desktop layout — no sticky header");
+      /* Measured from the viewport top, the whole zone sat under the header, so dragging
+         upward scrolled while the card was hidden behind the chrome. */
+      const calls = [];
+      const realScrollBy = window.scrollBy;
+      window.scrollBy = (x, y) => calls.push(y);
+      try {
+        autoScrollForDrag(h + DRAG_EDGE_PX - 5); // just inside the zone
+        autoScrollForDrag(h + DRAG_EDGE_PX + 40); // clear of it
+      } finally { window.scrollBy = realScrollBy; }
+      if (calls.length !== 1) return `expected exactly one scroll, got ${calls.length}`;
+      return calls[0] < 0 ? true : `scrolled ${calls[0]}, expected upward`;
+      });
+    });
+
+    check("scrolling picks the day under the header", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      return withItineraryVisible(() => {
+      if (!stickyHeaderHeight()) return skip("desktop layout — no sticky header");
+      const isos = eachDay(trip).map(isoOf);
+      if (isos.length < 2) return skip("needs a multi-day trip");
+      const prevY = window.scrollY;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      try {
+        window.scrollTo(0, 0);
+        const first = dayUnderHeader(isos);
+        window.scrollTo(0, Math.max(0, maxScroll));
+        const last = dayUnderHeader(isos);
+        if (first !== isos[0]) return `at the top it picked ${first}, wanted ${isos[0]}`;
+        if (maxScroll <= 0) return skip("page too short to scroll at this viewport");
+        // Monotonic: further down the page must never pick an earlier day.
+        return isos.indexOf(last) >= isos.indexOf(first)
+          ? true : `scrolling down went backwards: ${first} -> ${last}`;
+      } finally { window.scrollTo(0, prevY); }
+      });
+    });
+
+    check("the scroll spy never re-renders the itinerary", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      return withItineraryVisible(() => {
+      if (!dayScrollHandler) return skip("desktop layout — spy not armed");
+      /* This is the check that matters most: renderItinerary rebuilds the whole timeline, so
+         calling it per scroll event would be catastrophic. */
+      let calls = 0;
+      const real = window.renderItinerary;
+      window.renderItinerary = function (...a) { calls++; return real.apply(this, a); };
+      try {
+        const prevY = window.scrollY;
+        const prevIso = timelineDayIso;
+        window.scrollTo(0, 300);
+        /* Run the spy's actual work, not just the handler that queues a frame — cancelling the
+           frame would leave the mutated body untested, which is how this check passed against
+           its own mutant the first time. Clearing timelineDayIso first forces it past the
+           "nothing changed" guard, which a short trip would otherwise never get past. */
+        timelineDayIso = null;
+        syncDayFromScroll();
+        window.scrollTo(0, prevY);
+        timelineDayIso = null;
+        syncDayFromScroll();
+        timelineDayIso = prevIso;
+      } finally { window.renderItinerary = real; }
+      return calls === 0 ? true : `the spy triggered ${calls} re-render(s)`;
+      });
+    });
+
+    check("a jump and a drag both suppress the scroll spy", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      return withItineraryVisible(() => {
+      const isos = eachDay(trip).map(isoOf);
+      if (isos.length < 2 || !stickyHeaderHeight()) return skip("needs a multi-day trip on mobile");
+
+      // A tap-to-jump animates through every day between; the highlight must not strobe.
+      scrollToDay(isos[0]);
+      const suppressedByJump = nowMs() < programmaticScrollUntil;
+      programmaticScrollUntil = 0;
+
+      // v1.10.2's drag auto-scrolls the window; that is the drag moving, not the user reading.
+      const prevCtx = dragCtx;
+      dragCtx = { active: true };
+      timelineDayIso = isos[0];
+      const prevY = window.scrollY;
+      window.scrollTo(0, Math.max(0, document.documentElement.scrollHeight - window.innerHeight));
+      dayScrollHandler?.();
+      if (dayScrollRaf) { cancelAnimationFrame(dayScrollRaf); dayScrollRaf = 0; }
+      const unchangedDuringDrag = timelineDayIso === isos[0];
+      dragCtx = prevCtx;
+      window.scrollTo(0, prevY);
+
+      if (!suppressedByJump) return "a programmatic jump did not suppress the spy";
+      return unchangedDuringDrag ? true : "the spy moved the day while a card was being dragged";
+      });
+    });
+
+    check("the scroll spy is torn down on the map tab", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      return withItineraryVisible(() => {
+        itinerarySubTab = "timeline";
+        renderItinerary();
+        if (!dayScrollHandler) return skip("desktop layout — spy never armed");
+        itinerarySubTab = "maps";
+        renderItinerary();
+        const stripGone = !document.querySelector(".daystrip");
+        const handlerGone = !dayScrollHandler;
+        itinerarySubTab = "timeline";
+        if (!stripGone) return "the day strip is still rendered on the map tab";
+        // A live handler would keep reading nodes the re-render destroyed.
+        return handlerGone ? true : "the scroll handler outlived the timeline";
+      });
+    });
+
+    /* ---- Accessibility ---- */
+
+    check("secondary text clears 4.5:1 on every surface", () => {
+      const cs = getComputedStyle(document.documentElement);
+      const tok = (n) => cs.getPropertyValue(n).trim();
+      const lin = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+      const lum = (hex) => {
+        const h = hex.replace("#", "");
+        if (h.length !== 6) return null;
+        const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      };
+      const ratio = (a, b) => {
+        const x = lum(a), y = lum(b);
+        if (x === null || y === null) return null;
+        return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+      };
+      // Computed from the token so this survives a future colour change rather than pinning one.
+      const muted = tok("--muted");
+      const bad = [];
+      for (const sfc of ["--surface", "--bg", "--cream-2", "--cream"]) {
+        const r = ratio(muted, tok(sfc));
+        if (r === null) return `could not read ${sfc}`;
+        if (r < 4.5) bad.push(`${sfc} ${r.toFixed(2)}`);
+      }
+      return bad.length ? `${muted} fails: ${bad.join(", ")}` : true;
+    });
+
+    check("every dialog is named", () => {
+      const bad = [];
+      document.querySelectorAll("dialog").forEach((d) => {
+        const id = d.getAttribute("aria-labelledby");
+        const target = id && document.getElementById(id);
+        if (!target || !target.textContent.trim()) bad.push(d.id || "(unnamed dialog)");
+      });
+      return bad.length ? `unnamed: ${bad.join(", ")}` : true;
+    });
+
+    check("there is one live region and it can announce", () => {
+      const el = document.getElementById("a11y-live");
+      if (!el) return "no live region";
+      if (el.getAttribute("aria-live") !== "polite") return "not a polite live region";
+      // A hidden region never announces — that is why neither #toast nor #sync-status can be one.
+      if (el.hidden || getComputedStyle(el).display === "none") return "the live region is hidden";
+      announce("selftest announcement");
+      const got = el.textContent;
+      announce("");
+      return got === "selftest announcement" ? true : `announce() wrote ${JSON.stringify(got)}`;
+    });
+
+    check("row controls say which item they act on", () => {
+      const trip = datedTrip();
+      if (!trip) return skip("no dated trip");
+      itineraryTripId = trip.id;
+      itinerarySubTab = "timeline";
+      renderItinerary();
+      const more = document.querySelector(".act__more");
+      const add = document.querySelector(".act--add");
+      if (!more) return skip("no reservation with a ⋯ button at this width");
+      const item = state.items.find((i) => i.id === more.getAttribute("data-item-more"));
+      const label = more.getAttribute("aria-label") || "";
+      // "Edit, Delete, Edit, Delete…" with no object is what a screen reader used to hear.
+      if (!item || !label.includes(item.title)) return `⋯ is labelled "${label}"`;
+      const addLabel = add?.getAttribute("aria-label") || "";
+      return /\d/.test(addLabel) ? true : `Add reservation is labelled "${addLabel}" for every day`;
+    });
+
+    /* ---- the harness itself ---- */
+
+    check("a skipped check is reported as skipped, not passed", () => {
+      const before = results.length;
+      check("(probe) deliberately skipped", () => skip("probe"));
+      const rec = results[results.length - 1];
+      results.length = before; // don't leave the probe in the report
+      if (!rec.skipped) return "a skip was not marked skipped";
+      return rec.ok === true ? true : "a skip should not count as a failure either";
     });
   }
 
@@ -1883,14 +2346,28 @@
 
   /* ---------- reporting ---------- */
 
-  function report() {
-    const pass = results.filter((r) => r.ok).length;
-    const fail = results.length - pass;
-    window.__selftest = { pass, fail, results };
+  const verdict = (r) => (r.skipped ? "SKIP" : r.ok ? "PASS" : "FAIL");
 
-    console.table(results.map((r) => ({ group: r.group, check: r.name, result: r.ok ? "PASS" : "FAIL", detail: r.detail })));
-    console.log(`%cselftest: ${pass} passed, ${fail} failed`,
-      `font-weight:bold;color:${fail ? "#c0392b" : "#1e8449"}`);
+  function tally() {
+    const skipped = results.filter((r) => r.skipped).length;
+    const fail = results.filter((r) => !r.ok).length;
+    return { pass: results.length - fail - skipped, skipped, fail };
+  }
+
+  function report() {
+    const { pass, skipped, fail } = tally();
+    /* `skipped` is reported separately and NOT counted as a pass — a check that could not run
+       is not evidence of anything, and counting it green is how two of them hid at desktop
+       width for a whole release. */
+    window.__selftest = { pass, fail, skipped, results };
+
+    console.table(results.map((r) => ({ group: r.group, check: r.name, result: verdict(r), detail: r.detail })));
+    console.log(`%cselftest: ${pass} passed, ${skipped} skipped, ${fail} failed`,
+      `font-weight:bold;color:${fail ? "#c0392b" : skipped ? "#b7791f" : "#1e8449"}`);
+    if (skipped) {
+      console.log("%cskipped checks did NOT run — re-run at phone width (412px) for full coverage",
+        "color:#b7791f");
+    }
 
     renderPanel();
   }
@@ -1912,17 +2389,17 @@
       return;
     }
 
-    const pass = results.filter((r) => r.ok).length;
-    const fail = results.length - pass;
+    const { pass, skipped, fail } = tally();
+    const colour = (r) => (r.skipped ? "#b7791f" : r.ok ? "#1e8449" : "#c0392b");
     const rows = results.map((r) =>
-      `<tr><td style="padding:2px 8px 2px 0;color:${r.ok ? "#1e8449" : "#c0392b"}">${r.ok ? "PASS" : "FAIL"}</td>` +
+      `<tr><td style="padding:2px 8px 2px 0;color:${colour(r)}">${verdict(r)}</td>` +
       `<td style="padding:2px 8px 2px 0;color:#888">${r.group}</td>` +
-      `<td style="padding:2px 0">${r.name}${r.detail ? `<div style="color:#c0392b">${r.detail}</div>` : ""}</td></tr>`
+      `<td style="padding:2px 0">${r.name}${r.detail ? `<div style="color:${colour(r)}">${r.detail}</div>` : ""}</td></tr>`
     ).join("");
 
     panel.innerHTML =
       `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-         <strong style="color:${fail ? "#c0392b" : "#1e8449"}">selftest — ${pass} passed, ${fail} failed</strong>
+         <strong style="color:${fail ? "#c0392b" : skipped ? "#b7791f" : "#1e8449"}">selftest — ${pass} passed${skipped ? `, ${skipped} skipped` : ""}, ${fail} failed</strong>
          <button type="button" onclick="this.closest('#selftest-panel').remove()"
            style="border:0;background:#eee;border-radius:6px;padding:4px 10px;cursor:pointer">close</button>
        </div><table style="border-collapse:collapse">${rows}</table>`;
