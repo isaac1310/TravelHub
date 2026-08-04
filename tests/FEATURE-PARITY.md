@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.11.0**.
+Every user-reachable action in the app, as of **v1.11.1**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -34,7 +34,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | **Multiple destinations** | Repeatable rows in the trip dialog — *v1.10.0*. `destination` stays mirrored from the first |
 | Add a trip | `btn-add-trip`, and the app-bar `+` |
 | Delete a trip | inside the trip dialog (cascades to its reservations) |
-| Step cards | Day by Day · Route · Explore attractions · Checklist · Reservations. **Route opens the Maps sub-tab** — *fixed v1.11.0*; all three itinerary cards previously landed on the timeline, so "see the trip in route mode" was describing a view it did not open. "Explore attractions" is deliberately unchanged, pending real discovery in v2. The three itinerary ones carry `data-trip-id` for the **featured** trip — *fixed v1.10.3*; they previously only set the hash, so once the switcher tabs had been used they opened whichever trip was last viewed. Enter and Space activate them (they are `role="button"`) |
+| Step cards | Day by Day · Route · Checklist · Reservations. **"Explore attractions" was removed in v1.11.1** — it only reopened the timeline, a third door to a room you were already in; real discovery moves to v2 as a Google Maps import. **Route opens the Maps sub-tab** — *fixed v1.11.0*; the itinerary cards previously all landed on the timeline, so "see the trip in route mode" described a view it did not open. The itinerary ones carry `data-trip-id` for the **featured** trip — *fixed v1.10.3*; they previously only set the hash, so once the switcher tabs had been used they opened whichever trip was last viewed. Enter and Space activate them (they are `role="button"`) |
 | **Trip timing badge** | Every card shows `in 43 days` / `Travelling now · day 2 of 4` / `Ended Dec 2026` — *added v1.11.0*, from one shared `tripTiming()` the hero also uses. Compared against a **local** date; `todayISO()` is UTC and names yesterday between midnight and 03:00 in Israel |
 | **Trip order** | One order on every screen — travelling, then soonest, then finished (most recent first), then undated — *v1.11.0*, replacing five sorts that disagreed. `featuredTrip()` follows it, so it is no longer the first dated trip in array order |
 | Year filter | all years / a specific year |
@@ -70,6 +70,9 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 |---|---|
 | Year filter | `data-trip-id` scoped views |
 | Add funds | `dialog-funds` |
+| **Edit a fund addition** | Tap its row in "Fund additions & budget rolls" — *added v1.11.1*. Reuses `dialog-funds` with a hidden `fundId`, and applies the **difference** to `currentFunds`, never the new amount, because the pot is a running total that rollovers also draw from |
+| **Remove a fund addition** | Trash button on the row, `data-fund-del` — *added v1.11.1*. Refuses rather than clamping if the pot would go below zero, which means the money has already been rolled into trip budgets |
+| **Rollover rows** | Neither editable nor removable. `reduceSourceBudgets` already changed the source trip budgets and clamps on `tripSpent()`, so reversing it would leave the budgets and the ledger disagreeing |
 | Roll budget over | `dialog-roll` |
 | Add / edit / delete an expense | `dialog-expense`. **Every expense keeps a real id** — *fixed v1.10.3*. Until then `buildExpenseFromForm` returned a payload carrying `id: ""`, which overwrote the id both when adding and when editing, leaving that row's actions permanently dead. Expenses already saved broken are repaired on load with a deterministic `exp-r<hash>` |
 | Mark an expense paid | per-expense action, `.btn-mark-paid` / `.btn-mark-unpaid`. Works after an edit — see the row above |
@@ -106,7 +109,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.11.0 · <sha>` — selectable |
+| Build version | `TravelHub v1.11.1 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
@@ -184,7 +187,7 @@ Since *v1.11.0*:
 
 ## Diagnostics
 
-`?selftest=1` runs 166 checks and prints a pass/skip/fail panel. **A skip is reported
+`?selftest=1` runs 181 checks and prints a pass/skip/fail panel. **A skip is reported
 separately and never counted as a pass** — *v1.11.0*. Two checks used to `return true` early at
 desktop width, so a desktop run showed them green without exercising anything. Run the suite at
 **412px** for full coverage. It refuses to run while joined to

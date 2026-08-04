@@ -758,7 +758,14 @@ h1, h2, h3, .hero h1, .hero p {
 .expense-item__actions { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; position: relative; z-index: 2; max-width: 100%; }
 
 .history-list { list-style: none; margin: 0; padding: 0; }
-.history-item { display: flex; justify-content: space-between; gap: 1rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.history-item { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.history-item > span { flex: 1; min-width: 0; }
+/* Rollover rows have no remove button, so their amount would sit where the others' buttons are.
+   The spacer keeps every amount in one column. */
+.history-item--roll strong { margin-inline-end: 44px; }
+.history-item--editable { cursor: pointer; }
+.history-item--editable:hover { background: var(--cream-2); }
+.history-item--editable:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--radius-sm); }
 .history-item:last-child { border-bottom: none; }
 .history-item--roll strong { color: var(--brand-hover); }
 
@@ -1597,6 +1604,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
     <dialog id="dialog-funds" class="dialog" aria-labelledby="funds-title">
       <form id="form-funds" method="dialog">
         <h3 class="dialog__title" id="funds-title">Add to vacation funds</h3>
+        <!-- Set when editing an existing addition; empty when adding a new one. -->
+        <input type="hidden" name="fundId" />
         <label class="field">
           <span class="field__label">Amount (₪)</span>
           <input type="number" name="amount" min="0.01" step="0.01" required />
@@ -1611,7 +1620,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </label>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
-          <button type="submit" class="btn btn--primary">Add</button>
+          <button type="submit" class="btn btn--primary" id="funds-submit">Add</button>
         </div>
       </form>
     </dialog>
@@ -1867,7 +1876,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.11.0";
+const APP_VERSION = "v1.11.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -3038,15 +3047,54 @@ function bindExpenseRowActions() {
     });
 }
 
+/* Take back a fund addition. Only plain additions reach here — see `removable` below.
+
+   Refuses rather than clamping if the pot would go negative: that means the money has already
+   been rolled onward into trip budgets, and silently flooring at zero would leave currentFunds
+   and the ledger telling different stories. Better to say so than to quietly disagree.
+
+   Sync-safe without extra work: fundHistory merges by id, so the deletion sticks on the other
+   device, and currentFunds merges as local + remote − base, so the −amount delta carries. */
+function removeFundAddition(id) {
+  const entry = (state.fundHistory || []).find((h) => h.id === id);
+  if (!entry || entry.type === "rollover") return false;
+
+  const amount = Number(entry.amount) || 0;
+  const after = Number(state.currentFunds || 0) - amount;
+  if (after < 0) {
+    alert(
+      `Removing ${formatMoney(amount)} would take the vacation funds below zero — ` +
+      `some of it has already been rolled into trip budgets. Roll it back first, then remove this.`
+    );
+    return false;
+  }
+
+  if (!confirm(`Remove ${formatMoney(amount)} from the vacation funds?\n\n${entry.note || "Fund addition"} · ${entry.date}`)) {
+    return false;
+  }
+
+  state.fundHistory = state.fundHistory.filter((h) => h.id !== id);
+  state.currentFunds = after;
+  saveState();
+  render();
+  showToast(`Removed ${formatMoney(amount)} from the funds`, "error"); // "error" = dismiss-only
+  return true;
+}
+
 function renderFundHistory() {
   const list = $("fund-history");
   const empty = $("fund-history-empty");
 
   const fundItems = (state.fundHistory || []).map((h) => ({
+    id: h.id,
     date: h.date,
     label: h.note || (h.type === "rollover" ? "Rollover" : "Fund addition"),
     amount: h.amount,
     kind: h.type === "rollover" ? "roll" : "fund",
+    /* Only a plain addition can be taken back. A rollover already ran
+       reduceSourceBudgets, which clamps on tripSpent() and is neither commutative nor
+       idempotent — reversing it would leave the budgets and the ledger disagreeing. */
+    removable: h.type !== "rollover",
   }));
 
   const rollItems = (state.rollHistory || [])
@@ -3072,13 +3120,45 @@ function renderFundHistory() {
   list.innerHTML = items
     .map((h) => {
       const prefix = h.kind === "roll" ? "↪" : "+";
+      const remove = h.removable && h.id
+        ? `<button type="button" class="icon-btn icon-btn--small" data-fund-del="${escapeHtml(h.id)}"
+             aria-label="Remove ${escapeHtml(h.label)} of ${escapeHtml(formatMoney(h.amount))}"
+             title="Remove this fund addition">${TRASH_ICON}</button>`
+        : "";
+      // The row body edits; the trash button removes. Same split as a timeline card.
+      const tappable = h.removable && h.id;
       return `
-    <li class="history-item history-item--${h.kind}">
+    <li class="history-item history-item--${h.kind}${tappable ? " history-item--editable" : ""}"
+        ${tappable ? `data-fund-edit="${escapeHtml(h.id)}" role="button" tabindex="0"` : ""}>
       <span>${escapeHtml(h.date)} — ${escapeHtml(h.label)}</span>
       <strong>${prefix}${formatMoney(h.amount)}</strong>
+      ${remove}
     </li>`;
     })
     .join("");
+
+  list.querySelectorAll("[data-fund-del]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation(); // the row itself opens the editor
+      removeFundAddition(btn.getAttribute("data-fund-del"));
+    })
+  );
+
+  const openEdit = (row) => {
+    const entry = (state.fundHistory || []).find((h) => h.id === row.getAttribute("data-fund-edit"));
+    if (entry) openFundsDialog(entry);
+  };
+  list.querySelectorAll("[data-fund-edit]").forEach((row) => {
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return; // the trash button, handled above
+      openEdit(row);
+    });
+    row.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      openEdit(row);
+    });
+  });
 }
 
 function render() {
@@ -3202,10 +3282,18 @@ function setupDialogCloseHandlers() {
   });
 }
 
-function openFundsDialog() {
+function openFundsDialog(entry = null) {
   const form = $("form-funds");
   form.reset();
-  form.date.value = todayISO();
+  /* Rollovers are not editable here: the amount is bound to trip budgets that
+     reduceSourceBudgets already changed, so changing it would leave the two disagreeing. */
+  const editable = entry && entry.type !== "rollover" ? entry : null;
+  form.fundId.value = editable ? editable.id : "";
+  form.amount.value = editable ? editable.amount : "";
+  form.date.value = editable ? editable.date || todayISO() : todayISO();
+  form.note.value = editable ? editable.note || "" : "";
+  $("funds-title").textContent = editable ? "Edit fund addition" : "Add to vacation funds";
+  $("funds-submit").textContent = editable ? "Save" : "Add";
   openDialog($("dialog-funds"));
 }
 
@@ -3700,11 +3788,33 @@ function handleFundsSubmit(e) {
   const amount = Number(form.amount.value);
   const date = form.date.value;
   const note = form.note.value.trim();
+  const id = form.fundId.value;
 
   if (amount <= 0) return;
 
-  state.currentFunds += amount;
-  state.fundHistory.push({ id: uid("fund"), amount, date, note });
+  if (id) {
+    const entry = (state.fundHistory || []).find((h) => h.id === id);
+    if (!entry || entry.type === "rollover") return;
+    /* Apply the DELTA, not the new amount: currentFunds is a running pot, and other
+       additions and rollovers have moved it since. Re-adding the full amount would
+       double-count, and recomputing the pot from fundHistory would discard every
+       rollover that has legitimately taken money out of it. */
+    const delta = amount - (Number(entry.amount) || 0);
+    const after = Number(state.currentFunds || 0) + delta;
+    if (after < 0) {
+      alert(
+        `That would take the vacation funds below zero — ${formatMoney(-delta)} of this ` +
+        `addition has already been rolled into trip budgets. Roll it back first.`
+      );
+      return;
+    }
+    Object.assign(entry, { amount, date, note });
+    state.currentFunds = after;
+  } else {
+    state.currentFunds += amount;
+    state.fundHistory.push({ id: uid("fund"), amount, date, note });
+  }
+
   saveState();
   render();
   closeDialog($("dialog-funds"));
@@ -4429,13 +4539,17 @@ function renderTripsScreen() {
     hero.innerHTML = "";
   }
 
-  /* `subtab` makes each card land where its own label promises. All three itinerary steps
-     used to open the same timeline view, so "Route" — "see the trip in route mode, by dates
-     and location" — was describing the Maps tab and delivering the Timeline. */
+  /* `subtab` makes each card land where its own label promises. The itinerary steps used to
+     open the same timeline view, so "Route" — "see the trip in route mode, by dates and
+     location" — was describing the Maps tab and delivering the Timeline.
+
+     "Explore attractions" was removed in v1.11.1. It only reopened the timeline, so it was a
+     third door to a room you were already in; real discovery — importing a place or a whole
+     saved list from Google Maps and filling the fields from it — is parked for v2, where it
+     needs a POI source Photon cannot provide. */
   const steps = [
     { icon: ICONS.daybyday, title: "Day by Day", desc: "Edit your day-by-day schedule in a timeline view.", go: "itinerary", subtab: "timeline", cta: "Start now" },
     { icon: ICONS.route, title: "Route", desc: "See the trip in route mode, by dates and location.", go: "itinerary", subtab: "maps", cta: "Start now" },
-    { icon: ICONS.explore, title: "Explore attractions", desc: "Explore daily activities and add them to your trip.", go: "itinerary", subtab: "timeline", cta: "Start now" },
     { icon: ICONS.checklist, title: "Checklist", desc: "Create a shared family checklist so nothing is missed.", go: "family", cta: "Start now" },
     { icon: ICONS.reservations, title: "Reservations", desc: "Keep track of all your bookings and confirmations.", go: "bookings", cta: "Start now" },
   ];

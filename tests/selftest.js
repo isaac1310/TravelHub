@@ -121,6 +121,7 @@
       releaseV1103();
       releaseV1104();
       releaseV1110();
+      releaseV1111();
       releaseV1105();
       dialogBehaviour();
       trustBoundary();
@@ -1786,6 +1787,8 @@
         .find((c) => c.querySelector("h3").textContent === t);
       const day = byTitle("Day by Day"), route = byTitle("Route");
       if (!day || !route) return "step cards missing";
+      // "Explore attractions" was removed in v1.11.1 — it only reopened the timeline.
+      if (byTitle("Explore attractions")) return "the Explore attractions card is back";
       return eq(day.getAttribute("data-subtab-target"), "timeline", "Day by Day") === true
         && eq(route.getAttribute("data-subtab-target"), "maps", "Route") === true
         ? true : "wrong sub-tab targets";
@@ -2482,6 +2485,109 @@
       if (!rec.skipped) return "a skip was not marked skipped";
       return rec.ok === true ? true : "a skip should not count as a failure either";
     });
+  }
+
+  /* ===== 1b13. v1.11.1 — fund additions can be edited and undone ===== */
+
+  function releaseV1111() {
+    group("v1.11.1");
+
+    /* Every check here restores the ledger in a finally: currentFunds and fundHistory are the
+       one pair in this app that must agree, and a half-restored state would poison the checks
+       that follow. */
+    function withLedger(fn) {
+      const funds = state.currentFunds;
+      const hist = structuredClone(state.fundHistory || []);
+      const realAlert = window.alert, realConfirm = window.confirm;
+      window.alert = () => {};
+      window.confirm = () => true;
+      try { return fn(); }
+      finally {
+        state.currentFunds = funds;
+        state.fundHistory = hist;
+        window.alert = realAlert;
+        window.confirm = realConfirm;
+        saveState();
+        render();
+      }
+    }
+
+    check("a fund addition can be removed, and the pot follows", () => withLedger(() => {
+      const before = state.currentFunds;
+      state.fundHistory.push({ id: "f-test", amount: 250, date: "2026-08-04", note: "probe" });
+      state.currentFunds = before + 250;
+      renderFundHistory();
+      const btn = document.querySelector('[data-fund-del="f-test"]');
+      if (!btn) return "no remove control on a fund addition";
+      if (!/probe/.test(btn.getAttribute("aria-label") || "")) return "the control does not name the entry";
+      if (!removeFundAddition("f-test")) return "removeFundAddition refused a plain addition";
+      if (state.fundHistory.some((h) => h.id === "f-test")) return "the entry survived";
+      return eq(state.currentFunds, before, "pot after removal");
+    }));
+
+    check("editing an addition applies the difference, not the whole amount", () => withLedger(() => {
+      const before = state.currentFunds;
+      state.fundHistory.push({ id: "f-edit", amount: 250, date: "2026-08-04", note: "probe" });
+      state.currentFunds = before + 250;
+      renderFundHistory();
+      /* The pot is a running total that rollovers also draw from, so re-adding the new amount
+         would double-count and recomputing it from fundHistory would erase those rollovers. */
+      openFundsDialog(state.fundHistory.find((h) => h.id === "f-edit"));
+      const f = document.getElementById("form-funds");
+      if (f.fundId.value !== "f-edit") return "the dialog did not enter edit mode";
+      if (Number(f.amount.value) !== 250) return "the dialog did not prefill the amount";
+      f.amount.value = "400";
+      f.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      const entry = state.fundHistory.find((h) => h.id === "f-edit");
+      if (!entry || entry.amount !== 400) return `the entry reads ${entry && entry.amount}`;
+      return eq(state.currentFunds, before + 400, "pot after editing 250 to 400");
+    }));
+
+    check("the row body edits and the trash button does not", () => withLedger(() => {
+      state.fundHistory.push({ id: "f-row", amount: 10, date: "2026-08-04", note: "probe" });
+      state.currentFunds += 10;
+      renderFundHistory();
+      const row = document.querySelector('[data-fund-edit="f-row"]');
+      if (!row) return "the row is not tappable";
+      row.click();
+      const d = document.getElementById("dialog-funds");
+      const opened = d.open && document.getElementById("form-funds").fundId.value === "f-row";
+      if (d.open) closeDialog(d);
+      return opened ? true : "tapping the row did not open it for editing";
+    }));
+
+    check("a rollover offers neither edit nor remove", () => withLedger(() => {
+      state.fundHistory.push({ id: "f-roll", amount: 99, date: "2026-08-04", note: "Rollover", type: "rollover" });
+      state.currentFunds += 99;
+      renderFundHistory();
+      /* A rollover already ran reduceSourceBudgets, which clamps on tripSpent() and is not
+         idempotent — reversing it would leave the budgets and the ledger disagreeing. */
+      if (document.querySelector('[data-fund-edit="f-roll"]')) return "a rollover row is editable";
+      if (document.querySelector('[data-fund-del="f-roll"]')) return "a rollover row is removable";
+      return removeFundAddition("f-roll") === false
+        ? true : "removeFundAddition acted on a rollover";
+    }));
+
+    check("the pot is never taken below zero", () => withLedger(() => {
+      // Money already rolled onward: the entry is larger than what is left in the pot.
+      state.fundHistory = [{ id: "f-big", amount: 5000, date: "2026-08-04", note: "probe" }];
+      state.currentFunds = 200;
+      renderFundHistory();
+      if (removeFundAddition("f-big") !== false) return "removing overdrew the pot";
+      if (state.currentFunds !== 200) return `the pot moved to ${state.currentFunds}`;
+
+      // And on the edit path, which is the *lowering* direction — raising can never overdraw.
+      openFundsDialog(state.fundHistory[0]);
+      const f = document.getElementById("form-funds");
+      f.amount.value = "100";
+      f.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      const stillOpen = document.getElementById("dialog-funds").open;
+      if (document.getElementById("dialog-funds").open) closeDialog(document.getElementById("dialog-funds"));
+      if (state.currentFunds !== 200) return `editing down overdrew the pot to ${state.currentFunds}`;
+      if (state.fundHistory[0].amount !== 5000) return "the entry changed despite the refusal";
+      // The dialog must stay open so the edit is not silently thrown away.
+      return stillOpen ? true : "the dialog closed and lost the edit";
+    }));
   }
 
   /* ===== 1c. Dialog dismissal =====
