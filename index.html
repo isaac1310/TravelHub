@@ -1916,7 +1916,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.11.3";
+const APP_VERSION = "v1.11.4";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -3529,12 +3529,25 @@ function buildTripChoice(selectedId) {
   if (!field || !box) return;
   if (!selectedId) { field.hidden = true; box.innerHTML = ""; return; }
   field.hidden = false;
-  /* Upcoming first, finished last — the same one order every other screen uses. Past trips stay
-     on the list rather than being hidden: adding a receipt to a holiday you have already taken is
-     a real thing to want, and the ordering already keeps them out of the way. */
-  box.innerHTML = sortTripsByUpcoming(state.trips)
+  /* Upcoming and in-progress trips only — the same one order every other screen uses. Finished
+     trips were offered here for one release and Isaac ruled them out: you are adding a booking,
+     and you do not book a holiday you have already taken. Seeing past bookings on the Bookings
+     screen is the real need behind it, and that is a v2 item (design/V2-PLAN.md), not this. */
+  const ordered = sortTripsByUpcoming(state.trips);
+  const live = ordered.filter((t) => tripTiming(t).state !== "past");
+  /* Two escape hatches, both reachable. If nothing is upcoming, offer everything — an empty
+     picker leaves you nothing to pick. And if the trip already selected is a finished one, which
+     happens when you were just viewing it on the Itinerary, keep its chip so the form is not
+     pointing at a trip you cannot see. */
+  const offered = !live.length
+    ? ordered
+    : live.some((t) => t.id === selectedId)
+      ? live
+      : [...live, ...ordered.filter((t) => t.id === selectedId)];
+  box.innerHTML = offered
     .map((t) => {
-      // tripTiming returns { state, text } — comparing the object to a string is always false.
+      /* A past trip can still appear if it is the one already selected — hiding the chip the
+         form points at would leave no way to see which trip you were adding to. */
       const past = tripTiming(t).state === "past";
       return `<button type="button" data-trip-choice="${escapeHtml(t.id)}"
         aria-pressed="${t.id === selectedId ? "true" : "false"}"

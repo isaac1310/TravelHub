@@ -2887,16 +2887,19 @@
         ...structuredClone(seed), id: "many-" + name, name, expenses: [],
         destination: name, destinations: [name], startDate: start, endDate: end,
       });
+      /* All eight ahead of us. The picker drops finished trips, so a fixture that is half past
+         only offers four — which fits without scrolling and quietly stops the layout check
+         proving anything. The past-trip filter has its own fixture below. */
       try {
         state.trips = [
-          mk("Rome", "2024-04-02", "2024-04-09"),
-          mk("Lisbon", "2024-09-11", "2024-09-18"),
-          mk("Prague", "2025-01-05", "2025-01-11"),
-          mk("Athens", "2025-06-20", "2025-06-28"),
           mk("Paris", "2099-09-16", "2099-09-21"),
           mk("Yule", "2099-12-10", "2099-12-16"),
           mk("Tokyo", "2100-03-04", "2100-03-15"),
           mk("Manhattan", "2100-08-01", "2100-08-09"),
+          mk("Kyoto", "2101-04-02", "2101-04-09"),
+          mk("Oslo", "2101-09-11", "2101-09-18"),
+          mk("Cairo", "2102-01-05", "2102-01-11"),
+          mk("Lima", "2102-06-20", "2102-06-28"),
         ];
         return fn();
       } finally { state.trips = backup; renderBookings(); }
@@ -2918,22 +2921,83 @@
         })
       ));
 
-    check("finished trips come last and say so", () =>
-      withManyTrips(() =>
-        withScreen("#bookings", () => {
+    check("finished trips are not offered to book into", () => {
+      const backup = structuredClone(state.trips);
+      const seed = state.trips[0];
+      if (!seed) return skip("no trip to clone");
+      const mk = (name, start, end) => ({
+        ...structuredClone(seed), id: "mix-" + name, name, expenses: [],
+        destination: name, destinations: [name], startDate: start, endDate: end,
+      });
+      try {
+        state.trips = [
+          mk("Rome", "2024-04-02", "2024-04-09"),
+          mk("Athens", "2025-06-20", "2025-06-28"),
+          mk("Paris", "2099-09-16", "2099-09-21"),
+          mk("Tokyo", "2100-03-04", "2100-03-15"),
+        ];
+        return withScreen("#bookings", () => {
           tapAdd();
-          const box = document.getElementById("item-trip-choice");
-          const names = [...box.querySelectorAll("[data-trip-choice]")]
-            .map((b) => b.getAttribute("data-trip-choice").replace("many-", ""));
-          const firstPast = names.indexOf("Athens");
-          if (firstPast === -1) return "the finished trips are missing entirely";
-          // Past trips stay reachable — a receipt for last year's holiday is a real thing to add.
-          if (names.slice(firstPast).some((n) => ["Paris", "Yule", "Tokyo", "Manhattan"].includes(n)))
-            return `an upcoming trip sank below a finished one: ${names.join(", ")}`;
-          const athens = box.querySelector('[data-trip-choice="many-Athens"] .trip-choice__when');
-          return athens ? true : "a finished trip is not marked as past";
-        })
-      ));
+          const names = [...document.querySelectorAll("[data-trip-choice]")]
+            .map((b) => b.getAttribute("data-trip-choice").replace("mix-", ""));
+          /* You do not book a holiday you have already taken. Seeing past *bookings* is a
+             separate need, parked for v2 — see design/V2-PLAN.md. */
+          const past = names.filter((n) => ["Rome", "Athens"].includes(n));
+          if (past.length) return `finished trips are still offered: ${past.join(", ")}`;
+          return names.join(",") === "Paris,Tokyo"
+            ? true : `expected Paris, Tokyo — got ${names.join(", ") || "nothing"}`;
+        });
+      } finally { state.trips = backup; renderBookings(); }
+    });
+
+    check("with nothing upcoming, the picker offers the finished trips", () => {
+      const backup = structuredClone(state.trips);
+      const seed = state.trips[0];
+      if (!seed) return skip("no trip to clone");
+      const mk = (name, start, end) => ({
+        ...structuredClone(seed), id: "old-" + name, name, expenses: [],
+        destination: name, destinations: [name], startDate: start, endDate: end,
+      });
+      try {
+        // Two, so the picker actually shows — with one trip it is hidden and proves nothing.
+        state.trips = [mk("Rome", "2024-04-02", "2024-04-09"), mk("Athens", "2025-06-20", "2025-06-28")];
+        return withScreen("#bookings", () => {
+          tapAdd();
+          const names = [...document.querySelectorAll("[data-trip-choice]")]
+            .map((b) => b.getAttribute("data-trip-choice").replace("old-", ""));
+          /* Filtering to nothing would leave an empty picker and a form pointing at a trip with
+             no chip — the family that stops planning still has to be able to add a receipt. */
+          if (!names.length) return "the picker came back empty";
+          return names.length === 2
+            ? true : `only ${names.join(", ")} was offered`;
+        });
+      } finally { state.trips = backup; renderBookings(); }
+    });
+
+    check("a finished trip you are already on keeps its chip", () => {
+      const backup = structuredClone(state.trips);
+      const backTrip = itineraryTripId;
+      const seed = state.trips[0];
+      if (!seed) return skip("no trip to clone");
+      const mk = (name, start, end) => ({
+        ...structuredClone(seed), id: "sel-" + name, name, expenses: [],
+        destination: name, destinations: [name], startDate: start, endDate: end,
+      });
+      try {
+        state.trips = [mk("Rome", "2024-04-02", "2024-04-09"), mk("Tokyo", "2100-03-04", "2100-03-15")];
+        // You were just looking at the finished trip on the Itinerary, so that is what + targets.
+        itineraryTripId = "sel-Rome";
+        return withScreen("#bookings", () => {
+          tapAdd();
+          const names = [...document.querySelectorAll("[data-trip-choice]")]
+            .map((b) => b.getAttribute("data-trip-choice").replace("sel-", ""));
+          const form = document.getElementById("form-item");
+          if (form.tripId.value !== "sel-Rome") return `the form targets "${form.tripId.value}"`;
+          return names.includes("Rome") && names.includes("Tokyo")
+            ? true : `the selected finished trip has no chip: ${names.join(", ") || "none"}`;
+        });
+      } finally { state.trips = backup; itineraryTripId = backTrip; renderBookings(); }
+    });
 
     check("the picker opens on an upcoming trip, not an old one", () =>
       withManyTrips(() =>
