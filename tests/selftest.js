@@ -2873,6 +2873,78 @@
         });
       } finally { state.trips = backup; renderBookings(); }
     });
+
+    /* A family that keeps its history will have a dozen trips. The picker started as a wrapping
+       segmented control, which at eight trips was 156px of pill blob with the text breaking
+       inside the buttons. */
+
+    function withManyTrips(fn) {
+      const backup = structuredClone(state.trips);
+      const seed = state.trips[0];
+      if (!seed) return "no trip to clone";
+      const mk = (name, start, end) => ({
+        ...structuredClone(seed), id: "many-" + name, name, expenses: [],
+        destination: name, destinations: [name], startDate: start, endDate: end,
+      });
+      try {
+        state.trips = [
+          mk("Rome", "2024-04-02", "2024-04-09"),
+          mk("Lisbon", "2024-09-11", "2024-09-18"),
+          mk("Prague", "2025-01-05", "2025-01-11"),
+          mk("Athens", "2025-06-20", "2025-06-28"),
+          mk("Paris", "2099-09-16", "2099-09-21"),
+          mk("Yule", "2099-12-10", "2099-12-16"),
+          mk("Tokyo", "2100-03-04", "2100-03-15"),
+          mk("Manhattan", "2100-08-01", "2100-08-09"),
+        ];
+        return fn();
+      } finally { state.trips = backup; renderBookings(); }
+    }
+
+    check("the trip picker stays one line however many trips there are", () =>
+      withManyTrips(() =>
+        withScreen("#bookings", () => {
+          tapAdd();
+          const box = document.getElementById("item-trip-choice");
+          const chip = box.firstElementChild;
+          const rowH = Math.round(box.getBoundingClientRect().height);
+          const chipH = Math.round(chip.getBoundingClientRect().height);
+          // One row means the strip is no taller than a chip plus its own small padding.
+          if (rowH > chipH + 12) return `${rowH}px of picker for a ${chipH}px chip — it wrapped`;
+          if (chipH < 44) return `chips are ${chipH}px, under the touch target`;
+          return box.scrollWidth > box.clientWidth
+            ? true : "eight trips fitted without scrolling, so this proves nothing";
+        })
+      ));
+
+    check("finished trips come last and say so", () =>
+      withManyTrips(() =>
+        withScreen("#bookings", () => {
+          tapAdd();
+          const box = document.getElementById("item-trip-choice");
+          const names = [...box.querySelectorAll("[data-trip-choice]")]
+            .map((b) => b.getAttribute("data-trip-choice").replace("many-", ""));
+          const firstPast = names.indexOf("Athens");
+          if (firstPast === -1) return "the finished trips are missing entirely";
+          // Past trips stay reachable — a receipt for last year's holiday is a real thing to add.
+          if (names.slice(firstPast).some((n) => ["Paris", "Yule", "Tokyo", "Manhattan"].includes(n)))
+            return `an upcoming trip sank below a finished one: ${names.join(", ")}`;
+          const athens = box.querySelector('[data-trip-choice="many-Athens"] .trip-choice__when');
+          return athens ? true : "a finished trip is not marked as past";
+        })
+      ));
+
+    check("the picker opens on an upcoming trip, not an old one", () =>
+      withManyTrips(() =>
+        withScreen("#bookings", () => {
+          tapAdd();
+          const id = document.getElementById("form-item").tripId.value;
+          const trip = state.trips.find((t) => t.id === id);
+          if (!trip) return `the form targets "${id}", which is not a trip`;
+          return tripTiming(trip).state !== "past"
+            ? true : `it defaulted to ${trip.name}, which has already happened`;
+        })
+      ));
   }
 
   /* ===== 1c. Dialog dismissal =====

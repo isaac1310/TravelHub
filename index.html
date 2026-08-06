@@ -461,7 +461,21 @@ h1, h2, h3, h4, .brand__name {
   border-radius: var(--radius-pill); padding: 0.4rem 0.5rem;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.segmented--wrap { flex-wrap: wrap; }
+/* The trip picker scrolls on one line however many trips there are. As a wrapping row it grew to
+   156px at eight trips and shoved the form down the screen; the order already puts the trip you
+   mean at the head, so scrolling right is the rare case. Styled here rather than borrowing
+   .filter-chip, which only exists inside the <=900px block. */
+.trip-choice { display: flex; gap: 0.45rem; overflow-x: auto; padding-bottom: 0.2rem; scrollbar-width: none; }
+.trip-choice::-webkit-scrollbar { display: none; }
+.trip-choice button {
+  flex: none; border-radius: var(--radius-pill); padding: 0.5rem 0.9rem; min-height: 44px;
+  display: inline-flex; align-items: center; font: inherit; font-size: 0.82rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer;
+}
+.trip-choice button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+.trip-choice button:focus-visible { outline: none; box-shadow: var(--ring); }
+.trip-choice__when { opacity: 0.7; font-weight: 500; margin-inline-start: 0.3rem; }
+
 .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--brand-active); box-shadow: var(--shadow); }
 .segmented button:focus-visible { outline: none; box-shadow: var(--ring); }
 
@@ -1799,7 +1813,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
              releases. Payment status went the same way. -->
         <div class="field" id="item-trip-field" role="group" aria-labelledby="item-trip-label" hidden>
           <span class="field__label" id="item-trip-label">Trip</span>
-          <div class="segmented segmented--wrap" id="item-trip-choice"></div>
+          <div class="trip-choice" id="item-trip-choice"></div>
         </div>
         <span class="field__label" style="display:block;margin-bottom:0.4rem">Type</span>
         <div class="type-grid" id="type-grid"></div>
@@ -3503,8 +3517,17 @@ function buildTripChoice(selectedId) {
   if (!field || !box) return;
   if (!selectedId) { field.hidden = true; box.innerHTML = ""; return; }
   field.hidden = false;
+  /* Upcoming first, finished last — the same one order every other screen uses. Past trips stay
+     on the list rather than being hidden: adding a receipt to a holiday you have already taken is
+     a real thing to want, and the ordering already keeps them out of the way. */
   box.innerHTML = sortTripsByUpcoming(state.trips)
-    .map((t) => `<button type="button" data-trip-choice="${escapeHtml(t.id)}" aria-pressed="${t.id === selectedId ? "true" : "false"}">${escapeHtml(nameWithCity(t))}</button>`)
+    .map((t) => {
+      // tripTiming returns { state, text } — comparing the object to a string is always false.
+      const past = tripTiming(t).state === "past";
+      return `<button type="button" data-trip-choice="${escapeHtml(t.id)}"
+        aria-pressed="${t.id === selectedId ? "true" : "false"}"
+      >${escapeHtml(nameWithCity(t))}${past ? '<span class="trip-choice__when">past</span>' : ""}</button>`;
+    })
     .join("");
   box.querySelectorAll("[data-trip-choice]").forEach((btn) =>
     btn.addEventListener("click", () => {

@@ -53,6 +53,10 @@ Bookings and the Itinerary, which are lists of reservations. Your question, and 
 4. **Trips → +.** Expect the new-trip form, unchanged.
 5. The Trip row is **buttons, not a dropdown** — deliberately, given the sheet-closing history.
    Confirm tapping one does not dismiss the sheet.
+6. The row is **one line that scrolls**, ordered soonest first with finished trips last and
+   labelled `past`. With two trips you will not see this; it matters once the family has a
+   history. Past trips stay on the list on purpose — adding a receipt to a holiday you have
+   already taken is a real thing to want. **Say if you would rather they were hidden.**
 
 ## 5. Nothing else moved
 
@@ -64,7 +68,7 @@ glance is enough.
 
 ## What the automation covers
 
-198 checks — 197 pass, 1 skip, 0 fail at 412px. All seventeen new checks this release were
+201 checks — 200 pass, 1 skip, 0 fail at 412px. All twenty new checks this release were
 mutation-tested: the fix reverted, the check confirmed failing, the fix restored.
 
 **Still not covered, from the v1.11.0 plan and still outstanding on your phone:** step 1
