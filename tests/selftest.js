@@ -2681,6 +2681,103 @@
       return /Tickets and passes/.test(del.getAttribute("aria-label") || "")
         ? true : `delete is labelled "${del.getAttribute("aria-label")}"`;
     }));
+ 
+    /* The Bookings filter used to be All / Flights / Hotels / Other, where "Other" swept up six
+       of the eight types — attractions, restaurants, cafés, shops, transport and other. It was
+       the biggest bucket and told you nothing. */
+
+    function withBookings(items, fn) {
+      const backup = structuredClone(state.items);
+      const filterBackup = bookingsFilter;
+      const trip = state.trips[0];
+      if (!trip) return "no trip to hang reservations on";
+      try {
+        state.items = items.map((it, i) => ({
+          id: `bk-probe-${i}`, tripId: trip.id, title: `Probe ${i}`, date: "", startTime: "",
+          endTime: "", location: { name: "" }, details: "", confirmation: "", ...it,
+        }));
+        renderBookings();
+        return fn(trip);
+      } finally {
+        state.items = backup;
+        bookingsFilter = filterBackup;
+        renderBookings();
+      }
+    }
+
+    const chipValues = () =>
+      [...document.querySelectorAll("#bookings-body [data-bookings-filter]")]
+        .map((c) => c.getAttribute("data-bookings-filter"));
+
+    check("the Bookings filter offers one chip per type present", () =>
+      withBookings(
+        [{ type: "flight" }, { type: "restaurant" }, { type: "restaurant" }, { type: "transport" }],
+        () => {
+          const got = chipValues();
+          const want = ["all", "flight", "restaurant", "transport"];
+          // Order follows ITEM_TYPES so the chips do not reshuffle as data changes.
+          return got.join(",") === want.join(",")
+            ? true : `chips are ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`;
+        }
+      ));
+
+    check("no chip is offered for a type with no reservations", () =>
+      withBookings([{ type: "hotel" }], () => {
+        const got = chipValues();
+        if (got.includes("flight")) return "a Flights chip appeared with no flights";
+        // Eight types exist; only the one in use may show.
+        return got.length === 2 ? true : `${got.length} chips for a single hotel: ${got.join(",")}`;
+      }));
+
+    check("each chip carries its count", () =>
+      withBookings([{ type: "cafe" }, { type: "cafe" }, { type: "cafe" }, { type: "store" }], () => {
+        const cafe = document.querySelector('[data-bookings-filter="cafe"]');
+        if (!cafe) return "no Cafés chip";
+        const count = cafe.querySelector(".filter-chip__count");
+        if (!count) return "the chip shows no count";
+        if (count.textContent.trim() !== "3") return `the count reads "${count.textContent.trim()}"`;
+        const all = document.querySelector('[data-bookings-filter="all"] .filter-chip__count');
+        if (all.textContent.trim() !== "4") return `All reads "${all.textContent.trim()}", expected 4`;
+        /* The count is inside the label, so a screen reader would say "Cafés 3" — the
+           aria-label spells it out instead. */
+        return /3 reservations/.test(cafe.getAttribute("aria-label") || "")
+          ? true : `aria-label is "${cafe.getAttribute("aria-label")}"`;
+      }));
+
+    check("Other now means the literal other type, not everything unclassified", () =>
+      withBookings([{ type: "other", title: "Spa" }, { type: "restaurant", title: "Le Comptoir" }], () => {
+        document.querySelector('[data-bookings-filter="other"]').click();
+        const titles = [...document.querySelectorAll("#bookings-body .booking__title")]
+          .map((t) => t.textContent);
+        if (titles.length !== 1) return `Other showed ${titles.length} cards: ${titles.join(" | ")}`;
+        return /Spa/.test(titles[0]) ? true : `Other showed "${titles[0]}"`;
+      }));
+
+    check("selecting a type shows only that type", () =>
+      withBookings([{ type: "flight", title: "LY315" }, { type: "hotel", title: "Hotel Bel" }], () => {
+        document.querySelector('[data-bookings-filter="hotel"]').click();
+        const titles = [...document.querySelectorAll("#bookings-body .booking__title")]
+          .map((t) => t.textContent);
+        if (titles.length !== 1 || !/Hotel Bel/.test(titles[0])) return `showed ${titles.join(" | ")}`;
+        const chip = document.querySelector('[data-bookings-filter="hotel"]');
+        // Single-select: exactly one chip active, and it says so out loud.
+        const active = document.querySelectorAll("#bookings-body .filter-chip.is-active").length;
+        if (active !== 1) return `${active} chips are active at once`;
+        return chip.getAttribute("aria-pressed") === "true"
+          ? true : "the active chip does not report aria-pressed";
+      }));
+
+    check("a filter whose last reservation is gone falls back to All", () =>
+      withBookings([{ type: "flight" }, { type: "store", title: "Galeries" }], () => {
+        document.querySelector('[data-bookings-filter="store"]').click();
+        /* Deleting the only shop also deletes its chip — without the fallback you are left on a
+           filter with no cards and nothing to tap to get out of it. */
+        state.items = state.items.filter((i) => i.type !== "store");
+        renderBookings();
+        if (bookingsFilter !== "all") return `the filter stayed on "${bookingsFilter}"`;
+        return document.querySelectorAll("#bookings-body .booking").length === 1
+          ? true : "the flight did not come back into view";
+      }));
   }
 
   /* ===== 1c. Dialog dismissal =====
