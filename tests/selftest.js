@@ -3064,16 +3064,20 @@
             w: Math.round(r.width), h: Math.round(r.height),
           };
         };
-        itinerarySubTab = "timeline"; renderItinerary();
-        const tl = shape("[data-strip-day]");
-        if (!tl) return "the timeline has no day strip";
-        if (!stickyHeaderHeight()) return skip("desktop layout — the strips are styled differently");
         itinerarySubTab = "maps"; renderItinerary();
         const mp = shape('[data-day]:not([data-day="all"])');
         if (!mp) return "the map has no day chips";
-        /* Both render .daychip, so the shared CSS lands on whatever markup each emits. The map
-           used to emit a bare number into a tile sized for two lines. */
+        /* Checked at every width, not only on the phone. The tile styling used to live inside the
+           <=900px block, so adding the two spans made the desktop chip read "Wed16" crammed into
+           a 40px pill — worse than the bare number it replaced. */
         if (!mp.dow) return "the map chip has no day-of-week line";
+        const chip = document.querySelector('[data-day]:not([data-day="all"])');
+        if (getComputedStyle(chip).flexDirection !== "column")
+          return "the two lines are not stacked — they run together";
+        itinerarySubTab = "timeline"; renderItinerary();
+        const tl = shape("[data-strip-day]");
+        // Above 900px the timeline's strip is hidden, so there is nothing to compare against.
+        if (!tl || !stickyHeaderHeight()) return skip("desktop layout — the timeline has no strip");
         if (mp.dow !== tl.dow || mp.num !== tl.num)
           return `timeline shows "${tl.dow}/${tl.num}", the map "${mp.dow}/${mp.num}"`;
         return mp.w === tl.w && mp.h === tl.h

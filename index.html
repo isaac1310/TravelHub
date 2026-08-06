@@ -921,6 +921,18 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         background: var(--surface, #fff); font: inherit; font-weight: 600; cursor: pointer;
       }
       .daychip.is-active { background: var(--coral, #ef8e7f); border-color: var(--coral, #ef8e7f); color: #fff; }
+      /* The two-line tile used to live in the <=900px block, so a chip carrying both spans read
+         as "Wed16" crammed into a 40px pill on desktop — worse than the bare number it replaced.
+         One definition at every width now; the strip containers stay responsive below. */
+      .daychip {
+        min-width: 52px; height: 56px; border-radius: 14px; flex: none;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 0; line-height: 1.15;
+      }
+      .daychip .dc-dow { font-size: 0.62rem; font-weight: 700; color: var(--brand-active); text-transform: uppercase; }
+      .daychip .dc-num { font-size: 1.05rem; font-weight: 700; font-family: "Poppins", sans-serif; }
+      .daychip.is-active .dc-dow { color: rgba(255, 255, 255, 0.85); }
+      .daychip--all .dc-num { font-size: 0.82rem; letter-spacing: 0.02em; }
       .map-layout { display: grid; grid-template-columns: 1fr 280px; gap: 1rem; align-items: start; }
       @media (max-width: 800px) { .map-layout { grid-template-columns: 1fr; } }
       /* ===== Splash / boot loader ===== */
@@ -1262,12 +1274,6 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
            was three rows of 56px tiles before you reached the map. */
         .daychips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 0.7rem; }
         .daychips::-webkit-scrollbar { display: none; }
-        .daychip { flex: none; }
-        .daychip--all .dc-num { font-size: 0.82rem; letter-spacing: 0.02em; }
-        .daychip { min-width: 52px; height: 56px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; line-height: 1.15; }
-        .daychip .dc-dow { font-size: 0.62rem; font-weight: 700; color: var(--brand-active); text-transform: uppercase; }
-        .daychip .dc-num { font-size: 1.05rem; font-weight: 700; font-family: "Poppins", sans-serif; }
-        .daychip.is-active .dc-dow { color: rgba(255,255,255,0.85); }
         /* Measured, not guessed — measureStickyHeader() publishes the real height, so this and
            the drag auto-scroll edge can never drift apart from it. */
         .day { scroll-margin-top: calc(var(--appbar-h, 71px) + var(--itin-sticky-h, 84px) + 10px); }
