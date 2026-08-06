@@ -3048,6 +3048,39 @@
       });
     });
 
+    check("the map's day chips match the timeline's", () => {
+      const trip = dated();
+      if (!trip) return skip("no multi-day trip");
+      return onItinerary(() => {
+        itineraryTripId = trip.id;
+        const shape = (sel) => {
+          const chips = [...document.querySelectorAll(sel)];
+          if (!chips.length) return null;
+          const c = chips[0], r = c.getBoundingClientRect();
+          return {
+            text: c.textContent.trim(),
+            dow: c.querySelector(".dc-dow")?.textContent || "",
+            num: c.querySelector(".dc-num")?.textContent || "",
+            w: Math.round(r.width), h: Math.round(r.height),
+          };
+        };
+        itinerarySubTab = "timeline"; renderItinerary();
+        const tl = shape("[data-strip-day]");
+        if (!tl) return "the timeline has no day strip";
+        if (!stickyHeaderHeight()) return skip("desktop layout — the strips are styled differently");
+        itinerarySubTab = "maps"; renderItinerary();
+        const mp = shape('[data-day]:not([data-day="all"])');
+        if (!mp) return "the map has no day chips";
+        /* Both render .daychip, so the shared CSS lands on whatever markup each emits. The map
+           used to emit a bare number into a tile sized for two lines. */
+        if (!mp.dow) return "the map chip has no day-of-week line";
+        if (mp.dow !== tl.dow || mp.num !== tl.num)
+          return `timeline shows "${tl.dow}/${tl.num}", the map "${mp.dow}/${mp.num}"`;
+        return mp.w === tl.w && mp.h === tl.h
+          ? true : `timeline chips are ${tl.w}x${tl.h}, the map's ${mp.w}x${mp.h}`;
+      });
+    });
+
     check("switching trips does not carry the old trip's day", () => {
       const trips = state.trips.filter((t) => t.startDate && t.endDate);
       if (trips.length < 2) return skip("needs two dated trips");

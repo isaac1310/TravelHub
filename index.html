@@ -1258,6 +1258,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           padding: 0 0 0.6rem;
         }
         .daystrip::-webkit-scrollbar { display: none; }
+        /* The map's strip gets the timeline's scrolling behaviour too — wrapped, a ten-day trip
+           was three rows of 56px tiles before you reached the map. */
+        .daychips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 0.7rem; }
+        .daychips::-webkit-scrollbar { display: none; }
+        .daychip { flex: none; }
+        .daychip--all .dc-num { font-size: 0.82rem; letter-spacing: 0.02em; }
         .daychip { min-width: 52px; height: 56px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; line-height: 1.15; }
         .daychip .dc-dow { font-size: 0.62rem; font-weight: 700; color: var(--brand-active); text-transform: uppercase; }
         .daychip .dc-num { font-size: 1.05rem; font-weight: 700; font-family: "Poppins", sans-serif; }
@@ -5591,11 +5597,14 @@ function renderMapsTab(trip) {
   if (mapDayFilter !== "all" && !dayIsos.includes(mapDayFilter)) mapDayFilter = "all";
 
   const chips = [
+    /* Identical markup to the timeline strip. Both render `.daychip`, but only the timeline
+       emitted the day-of-week span, so at phone width the map got the same 52x56 tile with a
+       bare number rattling around in it — the same control in two formats. */
     ...days.map((d) => {
       const iso = isoOf(d);
-      return `<button type="button" class="daychip ${mapDayFilter === iso ? "is-active" : ""}" data-day="${iso}">${d.getDate()}</button>`;
+      return `<button type="button" class="daychip ${mapDayFilter === iso ? "is-active" : ""}" data-day="${iso}" aria-label="Show ${escapeHtml(fmtDow(d))} ${d.getDate()} on the map"><span class="dc-dow">${fmtDow(d)}</span><span class="dc-num">${d.getDate()}</span></button>`;
     }),
-    `<button type="button" class="daychip ${mapDayFilter === "all" ? "is-active" : ""}" data-day="all">All</button>`,
+    `<button type="button" class="daychip daychip--all ${mapDayFilter === "all" ? "is-active" : ""}" data-day="all" aria-label="Show the whole trip on the map"><span class="dc-num">All</span></button>`,
   ].join("");
 
   const isoFilter = mapDayFilter === "all" ? dayIsos : [mapDayFilter];

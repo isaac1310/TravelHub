@@ -57,7 +57,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Delete a reservation | `data-delete-item`, and ⋯ → Delete |
 | ⋯ action sheet | `dialog-item-actions`: Edit · Move up · Move down · **Open in Google Maps** · Delete |
 | Geocode a place | `data-locate-item` ("Locate") |
-| Filter the map by day | day chips, `mapDayFilter`. The day travels with you between Timeline and Maps: scroll or tap a day, switch tabs, and the other view opens on it. Only a day you *chose* carries — the scroll spy sets one on arrival, and carrying that would stop Maps ever opening on the whole route |
+| Filter the map by day | day chips in the same format as the timeline's — day-of-week over the date, same tile, one scrolling line — plus `All`. `mapDayFilter`. The day travels with you between Timeline and Maps: scroll or tap a day, switch tabs, and the other view opens on it. Only a day you *chose* carries — the scroll spy sets one on arrival, and carrying that would stop Maps ever opening on the whole route |
 | **Tap a stop to focus it** | `data-focus-stop` on the row body — *v1.10.1*. Centres the map and opens that pin; the Locate and Maps buttons sit outside it. The v1.10.0 carousel was removed (it never rendered) |
 | Collapse/expand the stops sheet | tap `.map-list__title` (≤900px, and only while the filter is "All" — a selected day lists in full) |
 | Open a stop in Google Maps | "Maps ↗" per stop, **the hotel row**, and **both marker popups** — *coords since v1.9.0* |
@@ -188,7 +188,7 @@ Since *v1.11.0*:
 
 ## Diagnostics
 
-`?selftest=1` runs 206 checks and prints a pass/skip/fail panel. **A skip is reported
+`?selftest=1` runs 207 checks and prints a pass/skip/fail panel. **A skip is reported
 separately and never counted as a pass** — *v1.11.0*. Two checks used to `return true` early at
 desktop width, so a desktop run showed them green without exercising anything. Run the suite at
 **412px** for full coverage. It refuses to run while joined to
