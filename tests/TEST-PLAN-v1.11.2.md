@@ -71,6 +71,9 @@ glance is enough.
 201 checks — 200 pass, 1 skip, 0 fail at 412px. All twenty new checks this release were
 mutation-tested: the fix reverted, the check confirmed failing, the fix restored.
 
-**Still not covered, from the v1.11.0 plan and still outstanding on your phone:** step 1
-(Payment status) and step 2 (Category) of `TEST-PLAN-v1.11.0.md`. Those need a real Android
-dropdown, which the harness cannot open.
+**Confirmed by hand, 6 Aug 2026:** Payment status and the Category dropdown both behave on the
+phone, closing the last two items of `TEST-PLAN-v1.11.0.md`. Category stays a `<select>`; the
+only other dropdowns left in the app are the two Roll-budget year pickers, also confirmed.
+
+The harness still cannot open a native Android dropdown, drive `confirm()`, or run
+`IntersectionObserver` — so that class of change will always need a pass on your device.

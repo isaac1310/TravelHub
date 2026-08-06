@@ -1,5 +1,10 @@
 # v1.11.0 — manual test plan
 
+> **Closed 6 Aug 2026.** Isaac ran this on the phone. Steps 1 and 2 — Payment status and the
+> Category dropdown, the two the harness cannot drive — both **passed**. The select-popup bug
+> that took three attempts across v1.10.3-v1.10.5 is confirmed fixed on a real device. Kept for
+> the record; nothing here is outstanding.
+
 Roughly 15 minutes. **Steps 1–4 are the ones worth your attention** — they are the changes no
 automated check in this project can actually judge, and two of them are bugs I got wrong twice.
 Everything from 5 onward is confirmation.
