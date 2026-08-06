@@ -1904,7 +1904,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.11.2";
+const APP_VERSION = "v1.11.3";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -4158,10 +4158,15 @@ let collapsedDays = new Set();
    class on a chip, because the DOM is rebuilt on every render — so the selection
    used to vanish on a Maps round trip, and the FAB had nothing to read. */
 let timelineDayIso = null;
+/* Whether the day above was *chosen* — scrolled to, tapped, or folded — rather than merely
+   defaulted on arrival. The scroll spy sets timelineDayIso the moment the timeline renders, so
+   without this the map would open filtered to day 1 and you could never reach it on the whole
+   trip in one tap. */
+let dayChosen = false;
 
 /* Switching trips clears the folds — the ISO keys belong to the old trip's dates. */
 function setItineraryTrip(id) {
-  if (itineraryTripId !== id) { collapsedDays = new Set(); timelineDayIso = null; }
+  if (itineraryTripId !== id) { collapsedDays = new Set(); timelineDayIso = null; dayChosen = false; }
   itineraryTripId = id;
 }
 
@@ -4866,9 +4871,30 @@ function renderItinerary() {
   body.querySelector("[data-edit-trip]")?.addEventListener("click", () => openTripDialog(trip));
 
   const activateSubTab = (b) => {
-    itinerarySubTab = b.getAttribute("data-subtab");
+    const next = b.getAttribute("data-subtab");
+    const isos = eachDay(trip).map(isoOf);
+    /* Timeline and Maps are two views of the same day, so the day travels with you. Without this
+       they kept separate variables: scrolling to day 5 and tapping Maps showed the whole trip, or
+       worse, whichever day the map was last left on. */
+    let jumpTo = null;
+    if (next === "maps" && dayChosen && isos.includes(timelineDayIso)) {
+      mapDayFilter = timelineDayIso;
+    } else if (next === "timeline" && mapDayFilter !== "all" && isos.includes(mapDayFilter)) {
+      jumpTo = mapDayFilter; // land on that day rather than at the top of the trip
+    }
+    itinerarySubTab = next;
     pendingTabFocus = "views";
     renderItinerary();
+    if (jumpTo) {
+      /* After the render, never before: rendering the timeline arms the scroll spy, which
+         immediately sets timelineDayIso to whatever is under the header — day 1, at this point —
+         and would overwrite the day we just came back with. */
+      timelineDayIso = jumpTo;
+      dayChosen = true;
+      markActiveDayChip(jumpTo);
+      scrollToDay(jumpTo);
+      return;
+    }
     /* Switching view is a mode change, so start at the top of it. Not scrollIntoView: the header
        is sticky, so it is always "in view" and the call does nothing. Use its static offset. */
     const hdr = document.getElementById("itin-sticky");
@@ -5107,6 +5133,7 @@ function renderTimelineTab(trip) {
     btn.addEventListener("click", () => {
       const iso = btn.getAttribute("data-day-toggle");
       timelineDayIso = iso;
+      dayChosen = true;
       if (collapsedDays.has(iso)) collapsedDays.delete(iso); else collapsedDays.add(iso);
       renderItinerary(); // the Set is applied in the template, not toggled on the node
       scrollToDay(iso);
@@ -5121,6 +5148,7 @@ function renderTimelineTab(trip) {
          "4 reservations" summary, so there is a real target to scroll to — the
          auto-expand this used to do is what reopened days you had closed. */
       timelineDayIso = iso;
+      dayChosen = true;
       markActiveDayChip(iso); // no re-render needed just to move the highlight
       scrollToDay(iso);
     })
@@ -5196,7 +5224,7 @@ function teardownDayScrollSpy() {
    *queued* proves nothing about what the frame does. */
 let dayScrollIsos = [];
 
-function syncDayFromScroll() {
+function syncDayFromScroll(fromScroll) {
   dayScrollRaf = 0;
   /* Skip while a tap-to-jump is animating — otherwise the highlight strobes through every day
      on the way — and while a card is being dragged, since v1.10.2's auto-scroll moves the
@@ -5205,6 +5233,7 @@ function syncDayFromScroll() {
   const iso = dayUnderHeader(dayScrollIsos);
   if (!iso || iso === timelineDayIso) return;
   timelineDayIso = iso; // also what the FAB pre-fills — scrolling IS selecting
+  if (fromScroll) dayChosen = true;
   markActiveDayChip(iso);
 }
 
@@ -5217,10 +5246,10 @@ function observeTimelineDays(isos) {
   dayScrollIsos = isos;
   dayScrollHandler = () => {
     if (dayScrollRaf) return; // coalesce a burst of scroll events into one frame
-    dayScrollRaf = requestAnimationFrame(syncDayFromScroll);
+    dayScrollRaf = requestAnimationFrame(() => syncDayFromScroll(true));
   };
   window.addEventListener("scroll", dayScrollHandler, { passive: true });
-  syncDayFromScroll(); // highlight the right day on arrival, not only after the first scroll
+  syncDayFromScroll(false); // highlight the right day on arrival, not only after the first scroll
 }
 
 function bindItemActions(scope, trip) {

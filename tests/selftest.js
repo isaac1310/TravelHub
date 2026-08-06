@@ -123,6 +123,7 @@
       releaseV1110();
       releaseV1111();
       releaseV1112();
+      releaseV1113();
       releaseV1105();
       dialogBehaviour();
       trustBoundary();
@@ -2945,6 +2946,124 @@
             ? true : `it defaulted to ${trip.name}, which has already happened`;
         })
       ));
+  }
+
+  function releaseV1113() {
+    group("v1.11.3");
+
+    /* Timeline and Maps each kept their own idea of "the day". Scroll the timeline to day 5,
+       tap Maps, and you got the whole trip — or whichever day the map happened to be left on. */
+
+    const dated = () => state.trips.find((t) => t.startDate && t.endDate && eachDay(t).length > 2);
+
+    function onItinerary(fn) {
+      const backTab = itinerarySubTab, backTrip = itineraryTripId;
+      const backIso = timelineDayIso, backFilter = mapDayFilter, backChosen = dayChosen;
+      const backY = window.scrollY;
+      try { return window.__withScreenVisible("screen-itinerary", renderItinerary, fn); }
+      finally {
+        itinerarySubTab = backTab; itineraryTripId = backTrip; timelineDayIso = backIso;
+        mapDayFilter = backFilter; dayChosen = backChosen;
+        window.scrollTo(0, backY); renderItinerary();
+      }
+    }
+
+    const tapSubTab = (key) =>
+      document.querySelector(`.switcher--sub [data-subtab="${key}"]`)?.click();
+
+    check("the day you scrolled to is the day the map opens on", () => {
+      const trip = dated();
+      if (!trip) return skip("no multi-day trip");
+      return onItinerary(() => {
+        itineraryTripId = trip.id; itinerarySubTab = "timeline";
+        mapDayFilter = "all"; renderItinerary();
+        if (!stickyHeaderHeight()) return skip("desktop layout — no sticky day strip");
+        const isos = eachDay(trip).map(isoOf);
+        const target = isos[2];
+        // Go through the strip: the same code path a scroll ends in, minus the flaky scrolling.
+        const chip = document.querySelector(`[data-strip-day="${target}"]`);
+        if (!chip) return "the day strip has no chip for that day";
+        chip.click();
+        if (!dayChosen) return "tapping a day did not count as choosing one";
+        tapSubTab("maps");
+        return mapDayFilter === target
+          ? true : `the map opened on "${mapDayFilter}", not ${target}`;
+      });
+    });
+
+    check("a real scroll, not just a tap, carries the day across", () => {
+      const trip = dated();
+      if (!trip) return skip("no multi-day trip");
+      return onItinerary(() => {
+        itineraryTripId = trip.id; itinerarySubTab = "timeline";
+        timelineDayIso = null; dayChosen = false; mapDayFilter = "all"; renderItinerary();
+        if (!stickyHeaderHeight()) return skip("desktop layout — no sticky day strip");
+        const isos = eachDay(trip).map(isoOf);
+        /* Point the strip at a later day, then scroll to the top so the spy has somewhere to move
+           it back to. Scrolling *down* proves nothing on the seed trip: it is four days in ~580px,
+           so the day under the header never changes. */
+        timelineDayIso = isos[isos.length - 1];
+        dayChosen = false;
+        window.scrollTo(0, 0);
+        /* Two things this has to defeat: the rAF throttle, so call the body directly rather than
+           waiting a frame that may never come; and a previous check's jump leaving the
+           programmatic-scroll guard armed, which made this order-dependent the first time. */
+        programmaticScrollUntil = 0;
+        syncDayFromScroll(true);
+        if (timelineDayIso === isos[isos.length - 1]) return "the scroll spy did not move the day";
+        if (!dayChosen) return "a scroll did not count as choosing a day";
+        const scrolledTo = timelineDayIso;
+        tapSubTab("maps");
+        return mapDayFilter === scrolledTo
+          ? true : `scrolled to ${scrolledTo} but the map shows "${mapDayFilter}"`;
+      });
+    });
+
+    check("Maps still opens on the whole trip when you have not picked a day", () => {
+      const trip = dated();
+      if (!trip) return skip("no multi-day trip");
+      return onItinerary(() => {
+        itineraryTripId = trip.id; itinerarySubTab = "timeline";
+        /* The scroll spy sets a day the instant the timeline renders. Carrying that would mean
+           the map never opened on the full route, which is the point of the map. */
+        timelineDayIso = null; dayChosen = false; mapDayFilter = "all";
+        renderItinerary();
+        tapSubTab("maps");
+        return mapDayFilter === "all"
+          ? true : `the map filtered itself to "${mapDayFilter}" without being asked`;
+      });
+    });
+
+    check("a day picked on the map is where the timeline lands", () => {
+      const trip = dated();
+      if (!trip) return skip("no multi-day trip");
+      return onItinerary(() => {
+        itineraryTripId = trip.id; itinerarySubTab = "maps";
+        const isos = eachDay(trip).map(isoOf);
+        mapDayFilter = isos[1];
+        renderItinerary();
+        tapSubTab("timeline");
+        return timelineDayIso === isos[1]
+          ? true : `the timeline came back on "${timelineDayIso}", not ${isos[1]}`;
+      });
+    });
+
+    check("switching trips does not carry the old trip's day", () => {
+      const trips = state.trips.filter((t) => t.startDate && t.endDate);
+      if (trips.length < 2) return skip("needs two dated trips");
+      return onItinerary(() => {
+        itineraryTripId = trips[0].id;
+        timelineDayIso = eachDay(trips[0]).map(isoOf)[1];
+        dayChosen = true;
+        // The ISO belongs to the old trip's calendar and means nothing in the new one.
+        setItineraryTrip(trips[1].id);
+        if (dayChosen) return "the new trip inherited a chosen day";
+        itinerarySubTab = "timeline"; mapDayFilter = "all"; renderItinerary();
+        tapSubTab("maps");
+        return mapDayFilter === "all"
+          ? true : `the new trip's map opened filtered to "${mapDayFilter}"`;
+      });
+    });
   }
 
   /* ===== 1c. Dialog dismissal =====
