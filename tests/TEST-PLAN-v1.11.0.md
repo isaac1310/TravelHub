@@ -50,7 +50,11 @@ Same sheet, one field up.
 
 **This is the real test of whether my theory about this bug was ever right.** QA proved my
 previous fix here could never fire. If Category still closes the sheet, tell me — it gets the
-same three-button treatment. Also worth trying **Type** in Add/Edit reservation, same idea.
+same three-button treatment.
+
+Correction to an earlier version of this plan: I also asked you to try **Type** in Add/Edit
+reservation. Skip it — that field is an icon grid, and its `<select>` is hidden. The only real
+dropdowns left in the app are **Category** here and the **two year pickers in Roll budget**.
 
 ## 3. Itinerary scrolling and the sticky header ⚠️
 
