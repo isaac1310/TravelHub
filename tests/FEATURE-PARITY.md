@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.11.1**.
+Every user-reachable action in the app, as of **v1.11.2**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -85,7 +85,8 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 
 | Action | Wiring |
 |---|---|
-| Filter by type | All / Flights / Hotels / Other |
+| Appbar **+** | Adds what the screen is made of: a trip on Trips, a reservation on Bookings and Itinerary, funds on Budget, a checklist item on Family. On Bookings it asks which trip — a one-line scrolling row of buttons, not a select, upcoming first and finished ones last and marked `past` — and prefills the type from the active filter |
+| Filter by type | One chip per type actually present, each with a count, single-select. "Other" means the literal `other` type — it used to sweep up six of the eight |
 | Open a reservation | **Tap the card** — *fixed v1.11.0*. `data-item` + `openItemDialog`, the same gesture the timeline learned in v1.10.2. This row previously claimed the cards routed into the itinerary; in fact nothing was bound at all |
 
 ## Family
@@ -94,7 +95,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 |---|---|
 | Who's travelling | member list |
 | Trips by travellers | per-trip roster |
-| Shared checklist | add (`checklist-add`), tick (`data-chk`), delete (`data-chk-del`). Items have always had a checkbox and a strikethrough; *v1.11.0* fixed the wording, which called them "notes" and read as free text, and made the whole row the 44px tick target. **Document attachments were removed in v1.11.0**, along with the payload size-cap machinery and the merge special case that existed only for them |
+| Shared checklist | add (`checklist-add`), tick (`data-chk`), **edit (`data-chk-edit`)** and delete (`data-chk-del`). Editing is inline — the pencil swaps the label for an input; Enter saves, Escape abandons, blur saves. Not a `prompt()`: a system dialog on a phone hides the list you are correcting, and the label itself is the 44px tick target so it cannot double as the edit target. **The keyboard no longer opens just from visiting Family** — *v1.11.2*; `renderFamily` focused the add field unconditionally, so you got a text cursor when all you wanted was to read the list. It still focuses after you add an item, so several can be typed in a row. Items have always had a checkbox and a strikethrough; *v1.11.0* fixed the wording, which called them "notes" and read as free text, and made the whole row the 44px tick target. **Document attachments were removed in v1.11.0**, along with the payload size-cap machinery and the merge special case that existed only for them |
 
 ## Sharing and sync — `dialog-overflow` (the Menu)
 
@@ -109,7 +110,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.11.1 · <sha>` — selectable |
+| Build version | `TravelHub v1.11.2 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
@@ -187,7 +188,7 @@ Since *v1.11.0*:
 
 ## Diagnostics
 
-`?selftest=1` runs 181 checks and prints a pass/skip/fail panel. **A skip is reported
+`?selftest=1` runs 201 checks and prints a pass/skip/fail panel. **A skip is reported
 separately and never counted as a pass** — *v1.11.0*. Two checks used to `return true` early at
 desktop width, so a desktop run showed them green without exercising anything. Run the suite at
 **412px** for full coverage. It refuses to run while joined to

@@ -122,6 +122,7 @@
       releaseV1104();
       releaseV1110();
       releaseV1111();
+      releaseV1112();
       releaseV1105();
       dialogBehaviour();
       trustBoundary();
@@ -1669,19 +1670,23 @@
        focused. Several checks were skipping or failing purely for that reason. Make it
        visible for the duration, then put the previous screen back. This changes visibility
        only; it does not seed any state. */
-    function withItineraryVisible(fn) {
+    function withScreenVisible(screenId, render, fn) {
       const screens = [...document.querySelectorAll(".screen")];
       const wasActive = screens.filter((s) => s.classList.contains("is-active"));
-      screens.forEach((s) => s.classList.toggle("is-active", s.id === "screen-itinerary"));
+      screens.forEach((s) => s.classList.toggle("is-active", s.id === screenId));
       try {
-        renderItinerary(); // re-measure now that the header has a real box
+        render();  // re-render now that the screen has a real box
         return fn();
       } finally {
         screens.forEach((s) => s.classList.remove("is-active"));
         wasActive.forEach((s) => s.classList.add("is-active"));
-        renderItinerary();
+        render();
       }
     }
+    function withItineraryVisible(fn) {
+      return withScreenVisible("screen-itinerary", renderItinerary, fn);
+    }
+    window.__withScreenVisible = withScreenVisible; // later groups reuse it
 
     /* ---- saveState reports failure ---- */
 
@@ -1901,6 +1906,9 @@
       return withItineraryVisible(() => {
       const h = stickyHeaderHeight();
       if (!h) return skip("desktop layout — no sticky header");
+      /* A degenerate viewport puts the BOTTOM edge zone above the top one (innerHeight - 72
+         goes negative), so the clear-of-the-zone probe lands inside it and both calls scroll. */
+      if (window.innerHeight < h + DRAG_EDGE_PX * 3) return skip("viewport too short to separate the two edge zones");
       /* Measured from the viewport top, the whole zone sat under the header, so dragging
          upward scrolled while the card was hidden behind the chrome. */
       const calls = [];
@@ -2588,6 +2596,355 @@
       // The dialog must stay open so the edit is not silently thrown away.
       return stillOpen ? true : "the dialog closed and lost the edit";
     }));
+  }
+
+  /* ===== 1b14. v1.11.2 — Family keyboard and checklist editing ===== */
+
+  function releaseV1112() {
+    group("v1.11.2");
+
+    function withChecklist(fn) {
+      const backup = structuredClone(state.checklist || []);
+      try { return fn(); }
+      finally { state.checklist = backup; saveState(); renderFamily(); }
+    }
+
+    check("opening Family does not steal focus into the add field", () => withChecklist(() => {
+      /* renderFamily called input.focus() unconditionally, so the phone keyboard opened every
+         time the tab was viewed — a text cursor when all you wanted was to read the list. */
+      return window.__withScreenVisible("screen-family", renderFamily, () => {
+        document.body.focus();
+        const input = document.getElementById("checklist-input");
+        if (!input) return "the add field is missing";
+        renderFamily();
+        return document.activeElement !== document.getElementById("checklist-input")
+          ? true : "focus jumped to the add field just from opening the tab";
+      });
+    }));
+
+    check("adding an item keeps the cursor for the next one", () => withChecklist(() => {
+      /* focus() is a no-op on a display:none screen, so this has to run with Family visible —
+         the fifth check this release to be caught by that. */
+      return window.__withScreenVisible("screen-family", renderFamily, () => {
+        const input = document.getElementById("checklist-input");
+        input.value = "Probe item";
+        document.getElementById("checklist-add").click();
+        // The focus IS wanted here — you are mid-flow adding several things.
+        const focused = document.activeElement === document.getElementById("checklist-input");
+        if (!state.checklist.some((c) => c.text === "Probe item")) return "the item was not added";
+        return focused ? true : "the cursor left the field after adding";
+      });
+    }));
+
+    check("a checklist item can be edited, not only deleted", () => withChecklist(() => {
+      state.checklist = [{ id: "chk-probe", text: "Passprts", done: false }];
+      renderFamily();
+      const btn = document.querySelector('[data-chk-edit="chk-probe"]');
+      if (!btn) return "no edit control on a checklist item";
+      btn.click();
+      const input = document.querySelector(".checklist__edit");
+      if (!input) return "the row did not become editable";
+      if (input.value !== "Passprts") return `the editor prefilled "${input.value}"`;
+      input.value = "Passports";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      const item = state.checklist.find((c) => c.id === "chk-probe");
+      // The id must survive, or ticking and deleting break the way expenses once did.
+      return item && item.text === "Passports" && item.id === "chk-probe"
+        ? true : `the item reads ${JSON.stringify(item)}`;
+    }));
+
+    check("Escape abandons a checklist edit", () => withChecklist(() => {
+      state.checklist = [{ id: "chk-esc", text: "Keep me", done: true }];
+      renderFamily();
+      document.querySelector('[data-chk-edit="chk-esc"]').click();
+      const input = document.querySelector(".checklist__edit");
+      if (!input) return "the row did not become editable";
+      input.value = "discard me";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      const item = state.checklist.find((c) => c.id === "chk-esc");
+      if (item.text !== "Keep me") return `Escape saved "${item.text}"`;
+      return item.done === true ? true : "the ticked state was lost";
+    }));
+
+    check("editing leaves ticking and deleting working", () => withChecklist(() => {
+      state.checklist = [{ id: "chk-both", text: "Tickets", done: false }];
+      renderFamily();
+      document.querySelector('[data-chk-edit="chk-both"]').click();
+      const input = document.querySelector(".checklist__edit");
+      input.value = "Tickets and passes";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      document.querySelector('[data-chk="chk-both"]').click();
+      if (!state.checklist[0].done) return "ticking stopped working after an edit";
+      const del = document.querySelector('[data-chk-del="chk-both"]');
+      if (!del) return "the delete control vanished";
+      // Both controls must name the NEW text, not the text it was created with.
+      return /Tickets and passes/.test(del.getAttribute("aria-label") || "")
+        ? true : `delete is labelled "${del.getAttribute("aria-label")}"`;
+    }));
+ 
+    /* The Bookings filter used to be All / Flights / Hotels / Other, where "Other" swept up six
+       of the eight types — attractions, restaurants, cafés, shops, transport and other. It was
+       the biggest bucket and told you nothing. */
+
+    function withBookings(items, fn) {
+      const backup = structuredClone(state.items);
+      const filterBackup = bookingsFilter;
+      const trip = state.trips[0];
+      if (!trip) return "no trip to hang reservations on";
+      try {
+        state.items = items.map((it, i) => ({
+          id: `bk-probe-${i}`, tripId: trip.id, title: `Probe ${i}`, date: "", startTime: "",
+          endTime: "", location: { name: "" }, details: "", confirmation: "", ...it,
+        }));
+        renderBookings();
+        return fn(trip);
+      } finally {
+        state.items = backup;
+        bookingsFilter = filterBackup;
+        renderBookings();
+      }
+    }
+
+    const chipValues = () =>
+      [...document.querySelectorAll("#bookings-body [data-bookings-filter]")]
+        .map((c) => c.getAttribute("data-bookings-filter"));
+
+    check("the Bookings filter offers one chip per type present", () =>
+      withBookings(
+        [{ type: "flight" }, { type: "restaurant" }, { type: "restaurant" }, { type: "transport" }],
+        () => {
+          const got = chipValues();
+          const want = ["all", "flight", "restaurant", "transport"];
+          // Order follows ITEM_TYPES so the chips do not reshuffle as data changes.
+          return got.join(",") === want.join(",")
+            ? true : `chips are ${JSON.stringify(got)}, expected ${JSON.stringify(want)}`;
+        }
+      ));
+
+    check("no chip is offered for a type with no reservations", () =>
+      withBookings([{ type: "hotel" }], () => {
+        const got = chipValues();
+        if (got.includes("flight")) return "a Flights chip appeared with no flights";
+        // Eight types exist; only the one in use may show.
+        return got.length === 2 ? true : `${got.length} chips for a single hotel: ${got.join(",")}`;
+      }));
+
+    check("each chip carries its count", () =>
+      withBookings([{ type: "cafe" }, { type: "cafe" }, { type: "cafe" }, { type: "store" }], () => {
+        const cafe = document.querySelector('[data-bookings-filter="cafe"]');
+        if (!cafe) return "no Cafés chip";
+        const count = cafe.querySelector(".filter-chip__count");
+        if (!count) return "the chip shows no count";
+        if (count.textContent.trim() !== "3") return `the count reads "${count.textContent.trim()}"`;
+        const all = document.querySelector('[data-bookings-filter="all"] .filter-chip__count');
+        if (all.textContent.trim() !== "4") return `All reads "${all.textContent.trim()}", expected 4`;
+        /* The count is inside the label, so a screen reader would say "Cafés 3" — the
+           aria-label spells it out instead. */
+        return /3 reservations/.test(cafe.getAttribute("aria-label") || "")
+          ? true : `aria-label is "${cafe.getAttribute("aria-label")}"`;
+      }));
+
+    check("Other now means the literal other type, not everything unclassified", () =>
+      withBookings([{ type: "other", title: "Spa" }, { type: "restaurant", title: "Le Comptoir" }], () => {
+        document.querySelector('[data-bookings-filter="other"]').click();
+        const titles = [...document.querySelectorAll("#bookings-body .booking__title")]
+          .map((t) => t.textContent);
+        if (titles.length !== 1) return `Other showed ${titles.length} cards: ${titles.join(" | ")}`;
+        return /Spa/.test(titles[0]) ? true : `Other showed "${titles[0]}"`;
+      }));
+
+    check("selecting a type shows only that type", () =>
+      withBookings([{ type: "flight", title: "LY315" }, { type: "hotel", title: "Hotel Bel" }], () => {
+        document.querySelector('[data-bookings-filter="hotel"]').click();
+        const titles = [...document.querySelectorAll("#bookings-body .booking__title")]
+          .map((t) => t.textContent);
+        if (titles.length !== 1 || !/Hotel Bel/.test(titles[0])) return `showed ${titles.join(" | ")}`;
+        const chip = document.querySelector('[data-bookings-filter="hotel"]');
+        // Single-select: exactly one chip active, and it says so out loud.
+        const active = document.querySelectorAll("#bookings-body .filter-chip.is-active").length;
+        if (active !== 1) return `${active} chips are active at once`;
+        return chip.getAttribute("aria-pressed") === "true"
+          ? true : "the active chip does not report aria-pressed";
+      }));
+
+    check("a filter whose last reservation is gone falls back to All", () =>
+      withBookings([{ type: "flight" }, { type: "store", title: "Galeries" }], () => {
+        document.querySelector('[data-bookings-filter="store"]').click();
+        /* Deleting the only shop also deletes its chip — without the fallback you are left on a
+           filter with no cards and nothing to tap to get out of it. */
+        state.items = state.items.filter((i) => i.type !== "store");
+        renderBookings();
+        if (bookingsFilter !== "all") return `the filter stayed on "${bookingsFilter}"`;
+        return document.querySelectorAll("#bookings-body .booking").length === 1
+          ? true : "the flight did not come back into view";
+      }));
+
+    /* The appbar + used to open the *trip* form on every screen but Budget and Family — so on
+       Bookings, a list of reservations, it asked you to name a new holiday. */
+
+    function withScreen(hash, fn) {
+      const backHash = location.hash;
+      const backFilter = bookingsFilter;
+      const backTrip = itineraryTripId;
+      ["dialog-item", "dialog-trip"].forEach((id) => { const d = document.getElementById(id); if (d?.open) closeDialog(d); });
+      try { location.hash = hash; return fn(); }
+      finally {
+        ["dialog-item", "dialog-trip"].forEach((id) => { const d = document.getElementById(id); if (d?.open) closeDialog(d); });
+        location.hash = backHash; bookingsFilter = backFilter; itineraryTripId = backTrip;
+      }
+    }
+
+    const tapAdd = () => document.getElementById("btn-appbar-add").click();
+
+    check("the + on Bookings adds a reservation, not a trip", () =>
+      withScreen("#bookings", () => {
+        tapAdd();
+        if (document.getElementById("dialog-trip").open) return "it opened the new-trip form";
+        const dlg = document.getElementById("dialog-item");
+        if (!dlg.open) return "nothing opened";
+        const title = document.getElementById("item-dialog-title").textContent;
+        return /Add reservation/.test(title) ? true : `the dialog is titled "${title}"`;
+      }));
+
+    check("Bookings asks which trip, since it spans all of them", () =>
+      withScreen("#bookings", () => {
+        if (state.trips.length < 2) return skip("only one trip exists");
+        tapAdd();
+        const field = document.getElementById("item-trip-field");
+        if (field.hidden) return "the trip picker stayed hidden";
+        const btns = [...field.querySelectorAll("[data-trip-choice]")];
+        if (btns.length !== state.trips.length) return `${btns.length} choices for ${state.trips.length} trips`;
+        const pressed = btns.filter((b) => b.getAttribute("aria-pressed") === "true");
+        if (pressed.length !== 1) return `${pressed.length} trips are selected at once`;
+        // Picking a different trip must actually retarget the reservation.
+        const other = btns.find((b) => b !== pressed[0]);
+        other.click();
+        const form = document.getElementById("form-item");
+        return form.tripId.value === other.getAttribute("data-trip-choice")
+          ? true : `the form still targets ${form.tripId.value}`;
+      }));
+
+    check("the active filter prefills the type", () =>
+      withScreen("#bookings", () => {
+        const form = document.getElementById("form-item");
+        /* Poison the field first. Without this the check passed against a mutant that never
+           opened the reservation dialog at all — it was reading a leftover value from an
+           earlier check rather than anything this tap did. */
+        form.reset();
+        form.type.value = "attraction";
+        bookingsFilter = "hotel";
+        tapAdd();
+        if (!document.getElementById("dialog-item").open) return "the reservation dialog did not open";
+        return form.type.value === "hotel" ? true : `a new reservation defaulted to "${form.type.value}"`;
+      }));
+
+    check("the + on the Itinerary adds to the trip and day you are looking at", () =>
+      withScreen("#itinerary", () => {
+        const trip = state.trips.find((t) => getMeta(t).startDate);
+        if (!trip) return skip("no dated trip to open");
+        setItineraryTrip(trip.id);
+        renderItinerary();
+        const iso = timelineDayIso;
+        tapAdd();
+        const form = document.getElementById("form-item");
+        if (!document.getElementById("dialog-item").open) return "the reservation dialog did not open";
+        if (form.tripId.value !== trip.id) return `it targeted ${form.tripId.value}, not the open trip`;
+        // The trip is implied by the screen, so asking again would be noise.
+        if (!document.getElementById("item-trip-field").hidden) return "it asked which trip anyway";
+        return !iso || form.date.value === iso ? true : `the date defaulted to "${form.date.value}", not ${iso}`;
+      }));
+
+    check("the + on Trips still adds a trip", () =>
+      withScreen("#trips", () => {
+        tapAdd();
+        if (document.getElementById("dialog-item").open) return "it opened the reservation form";
+        return document.getElementById("dialog-trip").open ? true : "nothing opened";
+      }));
+
+    check("with no trips at all, + falls back to creating one", () => {
+      const backup = structuredClone(state.trips);
+      try {
+        return withScreen("#bookings", () => {
+          state.trips = [];
+          tapAdd();
+          /* A reservation with no trip to belong to is not a thing the model can hold — this is
+             the one case where the trip form is the right answer on Bookings. */
+          return document.getElementById("dialog-trip").open ? true : "it offered an orphan reservation";
+        });
+      } finally { state.trips = backup; renderBookings(); }
+    });
+
+    /* A family that keeps its history will have a dozen trips. The picker started as a wrapping
+       segmented control, which at eight trips was 156px of pill blob with the text breaking
+       inside the buttons. */
+
+    function withManyTrips(fn) {
+      const backup = structuredClone(state.trips);
+      const seed = state.trips[0];
+      if (!seed) return "no trip to clone";
+      const mk = (name, start, end) => ({
+        ...structuredClone(seed), id: "many-" + name, name, expenses: [],
+        destination: name, destinations: [name], startDate: start, endDate: end,
+      });
+      try {
+        state.trips = [
+          mk("Rome", "2024-04-02", "2024-04-09"),
+          mk("Lisbon", "2024-09-11", "2024-09-18"),
+          mk("Prague", "2025-01-05", "2025-01-11"),
+          mk("Athens", "2025-06-20", "2025-06-28"),
+          mk("Paris", "2099-09-16", "2099-09-21"),
+          mk("Yule", "2099-12-10", "2099-12-16"),
+          mk("Tokyo", "2100-03-04", "2100-03-15"),
+          mk("Manhattan", "2100-08-01", "2100-08-09"),
+        ];
+        return fn();
+      } finally { state.trips = backup; renderBookings(); }
+    }
+
+    check("the trip picker stays one line however many trips there are", () =>
+      withManyTrips(() =>
+        withScreen("#bookings", () => {
+          tapAdd();
+          const box = document.getElementById("item-trip-choice");
+          const chip = box.firstElementChild;
+          const rowH = Math.round(box.getBoundingClientRect().height);
+          const chipH = Math.round(chip.getBoundingClientRect().height);
+          // One row means the strip is no taller than a chip plus its own small padding.
+          if (rowH > chipH + 12) return `${rowH}px of picker for a ${chipH}px chip — it wrapped`;
+          if (chipH < 44) return `chips are ${chipH}px, under the touch target`;
+          return box.scrollWidth > box.clientWidth
+            ? true : "eight trips fitted without scrolling, so this proves nothing";
+        })
+      ));
+
+    check("finished trips come last and say so", () =>
+      withManyTrips(() =>
+        withScreen("#bookings", () => {
+          tapAdd();
+          const box = document.getElementById("item-trip-choice");
+          const names = [...box.querySelectorAll("[data-trip-choice]")]
+            .map((b) => b.getAttribute("data-trip-choice").replace("many-", ""));
+          const firstPast = names.indexOf("Athens");
+          if (firstPast === -1) return "the finished trips are missing entirely";
+          // Past trips stay reachable — a receipt for last year's holiday is a real thing to add.
+          if (names.slice(firstPast).some((n) => ["Paris", "Yule", "Tokyo", "Manhattan"].includes(n)))
+            return `an upcoming trip sank below a finished one: ${names.join(", ")}`;
+          const athens = box.querySelector('[data-trip-choice="many-Athens"] .trip-choice__when');
+          return athens ? true : "a finished trip is not marked as past";
+        })
+      ));
+
+    check("the picker opens on an upcoming trip, not an old one", () =>
+      withManyTrips(() =>
+        withScreen("#bookings", () => {
+          tapAdd();
+          const id = document.getElementById("form-item").tripId.value;
+          const trip = state.trips.find((t) => t.id === id);
+          if (!trip) return `the form targets "${id}", which is not a trip`;
+          return tripTiming(trip).state !== "past"
+            ? true : `it defaulted to ${trip.name}, which has already happened`;
+        })
+      ));
   }
 
   /* ===== 1c. Dialog dismissal =====

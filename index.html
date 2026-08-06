@@ -461,6 +461,21 @@ h1, h2, h3, h4, .brand__name {
   border-radius: var(--radius-pill); padding: 0.4rem 0.5rem;
   transition: background 0.15s ease, color 0.15s ease;
 }
+/* The trip picker scrolls on one line however many trips there are. As a wrapping row it grew to
+   156px at eight trips and shoved the form down the screen; the order already puts the trip you
+   mean at the head, so scrolling right is the rare case. Styled here rather than borrowing
+   .filter-chip, which only exists inside the <=900px block. */
+.trip-choice { display: flex; gap: 0.45rem; overflow-x: auto; padding-bottom: 0.2rem; scrollbar-width: none; }
+.trip-choice::-webkit-scrollbar { display: none; }
+.trip-choice button {
+  flex: none; border-radius: var(--radius-pill); padding: 0.5rem 0.9rem; min-height: 44px;
+  display: inline-flex; align-items: center; font: inherit; font-size: 0.82rem; font-weight: 600;
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer;
+}
+.trip-choice button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+.trip-choice button:focus-visible { outline: none; box-shadow: var(--ring); }
+.trip-choice__when { opacity: 0.7; font-weight: 500; margin-inline-start: 0.3rem; }
+
 .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--brand-active); box-shadow: var(--shadow); }
 .segmented button:focus-visible { outline: none; box-shadow: var(--ring); }
 
@@ -637,6 +652,7 @@ h1, h2, h3, .hero h1, .hero p {
    target rather than just a 24px box. */
 .checklist label { flex: 1; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .checklist .done { text-decoration: line-through; color: var(--muted); }
+.checklist__edit { flex: 1; min-width: 0; min-height: 44px; font: inherit; }
 .checklist__add { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 /* min-width:0 overrides the flex default of min-width:auto — without it the input
    refuses to shrink below its intrinsic width and pushes the Add button off-screen
@@ -1098,10 +1114,15 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       #btn-overflow { display: none; }
       .daystrip { display: none; }
       .filter-chips { display: flex; gap: 0.45rem; overflow-x: auto; padding: 0.1rem 0 0.7rem; scrollbar-width: none; }
+      .filter-chip__count { opacity: 0.65; font-variant-numeric: tabular-nums; margin-inline-start: 0.15rem; }
+      .filter-chip.is-active .filter-chip__count { opacity: 0.85; }
       .filter-chips::-webkit-scrollbar { display: none; }
       .filter-chip {
         flex: none; border-radius: 999px; padding: 0.5rem 0.9rem; font: inherit; font-size: 0.82rem; font-weight: 600;
         border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer;
+        /* v1.9.1's 44px sweep missed these; now that there are up to nine of them side by side,
+           an under-sized chip is easy to mis-tap. */
+        min-height: 44px; display: inline-flex; align-items: center;
       }
       .filter-chip.is-active { background: var(--brand); border-color: var(--brand); color: #fff; }
       .sheet-item {
@@ -1787,6 +1808,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <h3 class="dialog__title" id="item-dialog-title">Add reservation</h3>
         <input type="hidden" name="itemId" />
         <input type="hidden" name="tripId" />
+        <!-- Buttons, not a select: opened from Bookings there is no trip context to inherit, and
+             a native select popup on this dialog is the mechanism that fought us for three
+             releases. Payment status went the same way. -->
+        <div class="field" id="item-trip-field" role="group" aria-labelledby="item-trip-label" hidden>
+          <span class="field__label" id="item-trip-label">Trip</span>
+          <div class="trip-choice" id="item-trip-choice"></div>
+        </div>
         <span class="field__label" style="display:block;margin-bottom:0.4rem">Type</span>
         <div class="type-grid" id="type-grid"></div>
         <select name="type" required hidden aria-hidden="true" tabindex="-1">
@@ -1876,7 +1904,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.11.1";
+const APP_VERSION = "v1.11.2";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -3385,6 +3413,13 @@ function openExpenseDialog(tripId, expense = null) {
 }
 
 /* ---------- Itinerary reservation dialog ---------- */
+/* Plural names for the Bookings filter. ITEM_TYPE_LABELS below holds per-type *field* labels
+   for the reservation dialog ("Check-in date", "Depart time"), which is a different job. */
+const ITEM_TYPE_PLURAL = {
+  flight: "Flights", hotel: "Hotels", attraction: "Attractions", restaurant: "Restaurants",
+  cafe: "Cafés", store: "Shops", transport: "Transport", other: "Other",
+};
+
 const ITEM_TYPE_LABELS = {
   flight:     { title: "Airline", date: "Depart date", start: "Depart time", endDate: "Arrival date", end: "Arrival time" },
   hotel:      { title: "Hotel name", date: "Check-in date", start: "Check-in time", endDate: "Check-out date", end: "Check-out time" },
@@ -3469,8 +3504,38 @@ function openItemDialog(tripId, item = null, defaults = {}) {
     form.date.value = defaults.date || "";
   }
 
+  buildTripChoice(defaults.chooseTrip ? tripId : null);
   syncItemTypeFields();
   openDialog($("dialog-item"));
+}
+
+/* Shown only when the dialog is opened from a screen that spans every trip — Bookings. From the
+   itinerary the trip is implied by the screen you are on, and offering it again is noise. */
+function buildTripChoice(selectedId) {
+  const field = $("item-trip-field");
+  const box = $("item-trip-choice");
+  if (!field || !box) return;
+  if (!selectedId) { field.hidden = true; box.innerHTML = ""; return; }
+  field.hidden = false;
+  /* Upcoming first, finished last — the same one order every other screen uses. Past trips stay
+     on the list rather than being hidden: adding a receipt to a holiday you have already taken is
+     a real thing to want, and the ordering already keeps them out of the way. */
+  box.innerHTML = sortTripsByUpcoming(state.trips)
+    .map((t) => {
+      // tripTiming returns { state, text } — comparing the object to a string is always false.
+      const past = tripTiming(t).state === "past";
+      return `<button type="button" data-trip-choice="${escapeHtml(t.id)}"
+        aria-pressed="${t.id === selectedId ? "true" : "false"}"
+      >${escapeHtml(nameWithCity(t))}${past ? '<span class="trip-choice__when">past</span>' : ""}</button>`;
+    })
+    .join("");
+  box.querySelectorAll("[data-trip-choice]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      $("form-item").tripId.value = btn.getAttribute("data-trip-choice");
+      box.querySelectorAll("[data-trip-choice]").forEach((b) =>
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+    })
+  );
 }
 
 function handleItemSubmit(e) {
@@ -5694,11 +5759,22 @@ function renderMapsTab(trip) {
 /* ---------- BOOKINGS & DOCUMENTS screen ---------- */
 function renderBookings() {
   const body = $("bookings-body");
-  const matchesFilter = (it) =>
-    bookingsFilter === "all" ? true :
-    bookingsFilter === "flight" ? it.type === "flight" :
-    bookingsFilter === "hotel" ? it.type === "hotel" :
-    it.type !== "flight" && it.type !== "hotel"; // "other"
+  /* One chip per type, so "Other" now means the literal `other` type and nothing else. It used
+     to be everything that was not a flight or a hotel — six of the eight types sharing a single
+     chip, which made it useless for finding anything. */
+  /* Counted over the trips' items rather than `state.items`, so the counts match what the
+     groups below actually render — an item whose trip was deleted must not mint a chip that
+     then filters to nothing. */
+  const allItems = state.trips.flatMap(tripItems);
+  const counts = {};
+  allItems.forEach((it) => { counts[it.type] = (counts[it.type] || 0) + 1; });
+  const presentTypes = ITEM_TYPES.filter((t) => counts[t] > 0);
+
+  /* A filter whose last reservation was deleted would otherwise show an empty screen with no
+     hint why, and its chip is gone so there is nothing to tap to escape. */
+  if (bookingsFilter !== "all" && !counts[bookingsFilter]) bookingsFilter = "all";
+
+  const matchesFilter = (it) => bookingsFilter === "all" || it.type === bookingsFilter;
 
   const groups = sortTripsByUpcoming(state.trips)
     .map((trip) => {
@@ -5746,11 +5822,18 @@ function renderBookings() {
     })
     .join("");
 
+  const chip = (value, label, count) =>
+    `<button type="button" class="filter-chip ${bookingsFilter === value ? "is-active" : ""}"
+       data-bookings-filter="${escapeHtml(value)}"
+       aria-pressed="${bookingsFilter === value ? "true" : "false"}"
+       aria-label="${escapeHtml(label)}, ${count} reservation${count === 1 ? "" : "s"}"
+     >${escapeHtml(label)} <span class="filter-chip__count">${count}</span></button>`;
+
+  // Only types that actually exist, so a chip never leads to an empty list.
   const filterChips = [
-    ["all", "All"], ["flight", "Flights"], ["hotel", "Hotels"], ["other", "Other"],
-  ]
-    .map(([v, label]) => `<button type="button" class="filter-chip ${bookingsFilter === v ? "is-active" : ""}" data-bookings-filter="${v}">${label}</button>`)
-    .join("");
+    chip("all", "All", allItems.length),
+    ...presentTypes.map((t) => chip(t, ITEM_TYPE_PLURAL[t] || t, counts[t])),
+  ].join("");
 
   body.innerHTML = `
     <div class="filter-chips">${filterChips}</div>
@@ -5853,11 +5936,18 @@ function renderFamily() {
     if (!v) return;
     state.checklist.push({ id: uid("chk"), text: v, done: false });
     saveState();
+    focusChecklistInput = true; // keep the cursor here for the next item
     renderFamily();
   };
   $("checklist-add").addEventListener("click", addItem);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
-  input.focus();
+  /* Focus only when the render came from adding an item, so you can type several in a row.
+     Unconditionally, this popped the phone keyboard every single time the Family tab was
+     opened — you were shown a text cursor when all you wanted was to read the list. */
+  if (focusChecklistInput) {
+    focusChecklistInput = false;
+    input.focus();
+  }
   bindSharedListActions(body, renderFamily);
 
   // Members are derived from trip travelers: rename/remove applies across all trips.
@@ -5887,12 +5977,16 @@ function renderFamily() {
   );
 }
 
+/* Set only by "add", so the keyboard opens when you are adding and not when you are reading. */
+let focusChecklistInput = false;
+
 /* ---------- Shared checklist ---------- */
+const PENCIL_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function sharedListRowsHtml() {
   const noteRows = state.checklist.map(
-    (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete ${escapeHtml(c.text)}" title="Delete">${TRASH_ICON}</button></li>`
+    (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-edit="${escapeHtml(c.id)}" aria-label="Edit ${escapeHtml(c.text)}" title="Edit">${PENCIL_ICON}</button><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete ${escapeHtml(c.text)}" title="Delete">${TRASH_ICON}</button></li>`
   );
   return noteRows.length ? noteRows.join("") : `<li class="empty-state">Nothing on the list yet — add the first item below.</li>`;
 }
@@ -5906,6 +6000,43 @@ function bindSharedListActions(scope, rerender) {
       rerender();
     })
   );
+  /* Inline, not a prompt(): a system prompt on a phone hides the list you are correcting, and
+     the label itself is the 44px tick target so it cannot double as the edit target. */
+  scope.querySelectorAll("[data-chk-edit]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const item = state.checklist.find((c) => c.id === btn.getAttribute("data-chk-edit"));
+      const li = btn.closest("li");
+      if (!item || !li || li.querySelector(".checklist__edit")) return;
+      const label = li.querySelector("label");
+      if (!label) return;
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "checklist__edit";
+      input.dir = "auto";
+      input.maxLength = 80;
+      input.value = item.text;
+      input.setAttribute("aria-label", `Edit ${item.text}`);
+      label.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let settled = false;
+      const commit = (save) => {
+        if (settled) return;         // blur fires again as the re-render tears the input out
+        settled = true;
+        const v = input.value.trim();
+        if (save && v && v !== item.text) { item.text = v; saveState(); }
+        rerender();
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(true); }
+        else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+      });
+      input.addEventListener("blur", () => commit(true));
+    })
+  );
+
   scope.querySelectorAll("[data-chk-del]").forEach((btn) =>
     btn.addEventListener("click", () => {
       state.checklist = state.checklist.filter((c) => c.id !== btn.getAttribute("data-chk-del"));
@@ -5917,11 +6048,26 @@ function bindSharedListActions(scope, rerender) {
 
 /* ---------- Appbar contextual actions ---------- */
 function bindShellEvents() {
+  /* The + adds the thing the screen is made of. It used to add a *trip* from Bookings and from
+     the Itinerary — screens that list reservations — which is a non-sequitur; you would notice
+     only after filling in a trip form. New trips are still one tap away on the Trips screen. */
   $("btn-appbar-add").addEventListener("click", () => {
     const id = currentScreenId();
-    if (id === "budget") openFundsDialog();
-    else if (id === "family") { location.hash = "#family"; setTimeout(() => $("checklist-input")?.focus(), 0); }
-    else openTripDialog();
+    if (id === "budget") return openFundsDialog();
+    if (id === "family") { location.hash = "#family"; setTimeout(() => $("checklist-input")?.focus(), 0); return; }
+    if (id === "bookings" || id === "itinerary") {
+      const trip = state.trips.find((t) => t.id === itineraryTripId) || featuredTrip();
+      // Nothing to hang a reservation on yet, so the trip form is genuinely the right answer.
+      if (!trip) return openTripDialog();
+      return openItemDialog(trip.id, null, {
+        // Bookings spans every trip, so which one has to be asked rather than assumed.
+        chooseTrip: id === "bookings" && state.trips.length > 1,
+        date: id === "itinerary" ? timelineDayIso || "" : "",
+        // Filtered to Hotels and tapping +? You are adding a hotel.
+        type: id === "bookings" && bookingsFilter !== "all" ? bookingsFilter : undefined,
+      });
+    }
+    openTripDialog();
   });
   $("btn-appbar-account").addEventListener("click", () => {
     const name = getDeviceName();
