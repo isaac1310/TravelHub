@@ -85,6 +85,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 
 | Action | Wiring |
 |---|---|
+| Appbar **+** | Adds what the screen is made of: a trip on Trips, a reservation on Bookings and Itinerary, funds on Budget, a checklist item on Family. On Bookings it asks which trip (buttons, not a select) and prefills the type from the active filter |
 | Filter by type | One chip per type actually present, each with a count, single-select. "Other" means the literal `other` type — it used to sweep up six of the eight |
 | Open a reservation | **Tap the card** — *fixed v1.11.0*. `data-item` + `openItemDialog`, the same gesture the timeline learned in v1.10.2. This row previously claimed the cards routed into the itinerary; in fact nothing was bound at all |
 
@@ -187,7 +188,7 @@ Since *v1.11.0*:
 
 ## Diagnostics
 
-`?selftest=1` runs 192 checks and prints a pass/skip/fail panel. **A skip is reported
+`?selftest=1` runs 198 checks and prints a pass/skip/fail panel. **A skip is reported
 separately and never counted as a pass** — *v1.11.0*. Two checks used to `return true` early at
 desktop width, so a desktop run showed them green without exercising anything. Run the suite at
 **412px** for full coverage. It refuses to run while joined to

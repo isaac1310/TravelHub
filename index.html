@@ -461,6 +461,7 @@ h1, h2, h3, h4, .brand__name {
   border-radius: var(--radius-pill); padding: 0.4rem 0.5rem;
   transition: background 0.15s ease, color 0.15s ease;
 }
+.segmented--wrap { flex-wrap: wrap; }
 .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--brand-active); box-shadow: var(--shadow); }
 .segmented button:focus-visible { outline: none; box-shadow: var(--ring); }
 
@@ -1793,6 +1794,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <h3 class="dialog__title" id="item-dialog-title">Add reservation</h3>
         <input type="hidden" name="itemId" />
         <input type="hidden" name="tripId" />
+        <!-- Buttons, not a select: opened from Bookings there is no trip context to inherit, and
+             a native select popup on this dialog is the mechanism that fought us for three
+             releases. Payment status went the same way. -->
+        <div class="field" id="item-trip-field" role="group" aria-labelledby="item-trip-label" hidden>
+          <span class="field__label" id="item-trip-label">Trip</span>
+          <div class="segmented segmented--wrap" id="item-trip-choice"></div>
+        </div>
         <span class="field__label" style="display:block;margin-bottom:0.4rem">Type</span>
         <div class="type-grid" id="type-grid"></div>
         <select name="type" required hidden aria-hidden="true" tabindex="-1">
@@ -3482,8 +3490,29 @@ function openItemDialog(tripId, item = null, defaults = {}) {
     form.date.value = defaults.date || "";
   }
 
+  buildTripChoice(defaults.chooseTrip ? tripId : null);
   syncItemTypeFields();
   openDialog($("dialog-item"));
+}
+
+/* Shown only when the dialog is opened from a screen that spans every trip — Bookings. From the
+   itinerary the trip is implied by the screen you are on, and offering it again is noise. */
+function buildTripChoice(selectedId) {
+  const field = $("item-trip-field");
+  const box = $("item-trip-choice");
+  if (!field || !box) return;
+  if (!selectedId) { field.hidden = true; box.innerHTML = ""; return; }
+  field.hidden = false;
+  box.innerHTML = sortTripsByUpcoming(state.trips)
+    .map((t) => `<button type="button" data-trip-choice="${escapeHtml(t.id)}" aria-pressed="${t.id === selectedId ? "true" : "false"}">${escapeHtml(nameWithCity(t))}</button>`)
+    .join("");
+  box.querySelectorAll("[data-trip-choice]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      $("form-item").tripId.value = btn.getAttribute("data-trip-choice");
+      box.querySelectorAll("[data-trip-choice]").forEach((b) =>
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+    })
+  );
 }
 
 function handleItemSubmit(e) {
@@ -5996,11 +6025,26 @@ function bindSharedListActions(scope, rerender) {
 
 /* ---------- Appbar contextual actions ---------- */
 function bindShellEvents() {
+  /* The + adds the thing the screen is made of. It used to add a *trip* from Bookings and from
+     the Itinerary — screens that list reservations — which is a non-sequitur; you would notice
+     only after filling in a trip form. New trips are still one tap away on the Trips screen. */
   $("btn-appbar-add").addEventListener("click", () => {
     const id = currentScreenId();
-    if (id === "budget") openFundsDialog();
-    else if (id === "family") { location.hash = "#family"; setTimeout(() => $("checklist-input")?.focus(), 0); }
-    else openTripDialog();
+    if (id === "budget") return openFundsDialog();
+    if (id === "family") { location.hash = "#family"; setTimeout(() => $("checklist-input")?.focus(), 0); return; }
+    if (id === "bookings" || id === "itinerary") {
+      const trip = state.trips.find((t) => t.id === itineraryTripId) || featuredTrip();
+      // Nothing to hang a reservation on yet, so the trip form is genuinely the right answer.
+      if (!trip) return openTripDialog();
+      return openItemDialog(trip.id, null, {
+        // Bookings spans every trip, so which one has to be asked rather than assumed.
+        chooseTrip: id === "bookings" && state.trips.length > 1,
+        date: id === "itinerary" ? timelineDayIso || "" : "",
+        // Filtered to Hotels and tapping +? You are adding a hotel.
+        type: id === "bookings" && bookingsFilter !== "all" ? bookingsFilter : undefined,
+      });
+    }
+    openTripDialog();
   });
   $("btn-appbar-account").addEventListener("click", () => {
     const name = getDeviceName();

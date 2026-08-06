@@ -39,7 +39,22 @@ Bookings.
 5. **Tell me if nine chips feels like too many** on the phone. The alternative is grouping the
    food/shopping types back together, and that is a judgement call, not a bug.
 
-## 4. Nothing else moved
+## 4. The + button ⚠️ new in this build
+
+It used to open the **new-trip** form on every screen except Budget and Family — including
+Bookings and the Itinerary, which are lists of reservations. Your question, and you were right.
+
+1. **Bookings → +.** Expect **Add reservation**, with a **Trip** row at the top (Paris /
+   Christmas) since Bookings spans both. Pick the other trip, save something, and check it lands
+   in that trip's group.
+2. **Filter to Hotels first, then +.** Expect **Hotel** already selected in the Type grid.
+3. **Itinerary → +.** Expect Add reservation for the trip you are viewing, dated to the day you
+   are scrolled to, and **no** Trip row — the screen already tells you which trip.
+4. **Trips → +.** Expect the new-trip form, unchanged.
+5. The Trip row is **buttons, not a dropdown** — deliberately, given the sheet-closing history.
+   Confirm tapping one does not dismiss the sheet.
+
+## 5. Nothing else moved
 
 Tap a booking card → its reservation opens. Add/edit a reservation. Add funds, and edit or remove
 a fund addition. Itinerary scroll and the sticky header. These are unchanged from v1.11.1, so a
@@ -49,7 +64,7 @@ glance is enough.
 
 ## What the automation covers
 
-192 checks — 191 pass, 1 skip, 0 fail at 412px. All eleven new checks this release were
+198 checks — 197 pass, 1 skip, 0 fail at 412px. All seventeen new checks this release were
 mutation-tested: the fix reverted, the check confirmed failing, the fix restored.
 
 **Still not covered, from the v1.11.0 plan and still outstanding on your phone:** step 1

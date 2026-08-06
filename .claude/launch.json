@@ -4,8 +4,14 @@
     {
       "name": "travelhub",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["/private/tmp/claude-501/-Users-issacavineta-Documents-Vacation-POC/7e72a9c7-fe4f-420c-a0ee-c8fa719704a8/scratchpad/serve.js"],
+      "runtimeArgs": ["tools/serve.js", "8722"],
       "port": 8722
+    },
+    {
+      "name": "travelhub-selftest",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/serve.js", "8723"],
+      "port": 8723
     }
   ]
 }

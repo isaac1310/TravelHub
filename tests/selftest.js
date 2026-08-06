@@ -2778,6 +2778,101 @@
         return document.querySelectorAll("#bookings-body .booking").length === 1
           ? true : "the flight did not come back into view";
       }));
+
+    /* The appbar + used to open the *trip* form on every screen but Budget and Family — so on
+       Bookings, a list of reservations, it asked you to name a new holiday. */
+
+    function withScreen(hash, fn) {
+      const backHash = location.hash;
+      const backFilter = bookingsFilter;
+      const backTrip = itineraryTripId;
+      ["dialog-item", "dialog-trip"].forEach((id) => { const d = document.getElementById(id); if (d?.open) closeDialog(d); });
+      try { location.hash = hash; return fn(); }
+      finally {
+        ["dialog-item", "dialog-trip"].forEach((id) => { const d = document.getElementById(id); if (d?.open) closeDialog(d); });
+        location.hash = backHash; bookingsFilter = backFilter; itineraryTripId = backTrip;
+      }
+    }
+
+    const tapAdd = () => document.getElementById("btn-appbar-add").click();
+
+    check("the + on Bookings adds a reservation, not a trip", () =>
+      withScreen("#bookings", () => {
+        tapAdd();
+        if (document.getElementById("dialog-trip").open) return "it opened the new-trip form";
+        const dlg = document.getElementById("dialog-item");
+        if (!dlg.open) return "nothing opened";
+        const title = document.getElementById("item-dialog-title").textContent;
+        return /Add reservation/.test(title) ? true : `the dialog is titled "${title}"`;
+      }));
+
+    check("Bookings asks which trip, since it spans all of them", () =>
+      withScreen("#bookings", () => {
+        if (state.trips.length < 2) return skip("only one trip exists");
+        tapAdd();
+        const field = document.getElementById("item-trip-field");
+        if (field.hidden) return "the trip picker stayed hidden";
+        const btns = [...field.querySelectorAll("[data-trip-choice]")];
+        if (btns.length !== state.trips.length) return `${btns.length} choices for ${state.trips.length} trips`;
+        const pressed = btns.filter((b) => b.getAttribute("aria-pressed") === "true");
+        if (pressed.length !== 1) return `${pressed.length} trips are selected at once`;
+        // Picking a different trip must actually retarget the reservation.
+        const other = btns.find((b) => b !== pressed[0]);
+        other.click();
+        const form = document.getElementById("form-item");
+        return form.tripId.value === other.getAttribute("data-trip-choice")
+          ? true : `the form still targets ${form.tripId.value}`;
+      }));
+
+    check("the active filter prefills the type", () =>
+      withScreen("#bookings", () => {
+        const form = document.getElementById("form-item");
+        /* Poison the field first. Without this the check passed against a mutant that never
+           opened the reservation dialog at all — it was reading a leftover value from an
+           earlier check rather than anything this tap did. */
+        form.reset();
+        form.type.value = "attraction";
+        bookingsFilter = "hotel";
+        tapAdd();
+        if (!document.getElementById("dialog-item").open) return "the reservation dialog did not open";
+        return form.type.value === "hotel" ? true : `a new reservation defaulted to "${form.type.value}"`;
+      }));
+
+    check("the + on the Itinerary adds to the trip and day you are looking at", () =>
+      withScreen("#itinerary", () => {
+        const trip = state.trips.find((t) => getMeta(t).startDate);
+        if (!trip) return skip("no dated trip to open");
+        setItineraryTrip(trip.id);
+        renderItinerary();
+        const iso = timelineDayIso;
+        tapAdd();
+        const form = document.getElementById("form-item");
+        if (!document.getElementById("dialog-item").open) return "the reservation dialog did not open";
+        if (form.tripId.value !== trip.id) return `it targeted ${form.tripId.value}, not the open trip`;
+        // The trip is implied by the screen, so asking again would be noise.
+        if (!document.getElementById("item-trip-field").hidden) return "it asked which trip anyway";
+        return !iso || form.date.value === iso ? true : `the date defaulted to "${form.date.value}", not ${iso}`;
+      }));
+
+    check("the + on Trips still adds a trip", () =>
+      withScreen("#trips", () => {
+        tapAdd();
+        if (document.getElementById("dialog-item").open) return "it opened the reservation form";
+        return document.getElementById("dialog-trip").open ? true : "nothing opened";
+      }));
+
+    check("with no trips at all, + falls back to creating one", () => {
+      const backup = structuredClone(state.trips);
+      try {
+        return withScreen("#bookings", () => {
+          state.trips = [];
+          tapAdd();
+          /* A reservation with no trip to belong to is not a thing the model can hold — this is
+             the one case where the trip form is the right answer on Bookings. */
+          return document.getElementById("dialog-trip").open ? true : "it offered an orphan reservation";
+        });
+      } finally { state.trips = backup; renderBookings(); }
+    });
   }
 
   /* ===== 1c. Dialog dismissal =====
