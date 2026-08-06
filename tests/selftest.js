@@ -122,6 +122,7 @@
       releaseV1104();
       releaseV1110();
       releaseV1111();
+      releaseV1112();
       releaseV1105();
       dialogBehaviour();
       trustBoundary();
@@ -1669,19 +1670,23 @@
        focused. Several checks were skipping or failing purely for that reason. Make it
        visible for the duration, then put the previous screen back. This changes visibility
        only; it does not seed any state. */
-    function withItineraryVisible(fn) {
+    function withScreenVisible(screenId, render, fn) {
       const screens = [...document.querySelectorAll(".screen")];
       const wasActive = screens.filter((s) => s.classList.contains("is-active"));
-      screens.forEach((s) => s.classList.toggle("is-active", s.id === "screen-itinerary"));
+      screens.forEach((s) => s.classList.toggle("is-active", s.id === screenId));
       try {
-        renderItinerary(); // re-measure now that the header has a real box
+        render();  // re-render now that the screen has a real box
         return fn();
       } finally {
         screens.forEach((s) => s.classList.remove("is-active"));
         wasActive.forEach((s) => s.classList.add("is-active"));
-        renderItinerary();
+        render();
       }
     }
+    function withItineraryVisible(fn) {
+      return withScreenVisible("screen-itinerary", renderItinerary, fn);
+    }
+    window.__withScreenVisible = withScreenVisible; // later groups reuse it
 
     /* ---- saveState reports failure ---- */
 
@@ -1901,6 +1906,9 @@
       return withItineraryVisible(() => {
       const h = stickyHeaderHeight();
       if (!h) return skip("desktop layout — no sticky header");
+      /* A degenerate viewport puts the BOTTOM edge zone above the top one (innerHeight - 72
+         goes negative), so the clear-of-the-zone probe lands inside it and both calls scroll. */
+      if (window.innerHeight < h + DRAG_EDGE_PX * 3) return skip("viewport too short to separate the two edge zones");
       /* Measured from the viewport top, the whole zone sat under the header, so dragging
          upward scrolled while the card was hidden behind the chrome. */
       const calls = [];
@@ -2587,6 +2595,91 @@
       if (state.fundHistory[0].amount !== 5000) return "the entry changed despite the refusal";
       // The dialog must stay open so the edit is not silently thrown away.
       return stillOpen ? true : "the dialog closed and lost the edit";
+    }));
+  }
+
+  /* ===== 1b14. v1.11.2 — Family keyboard and checklist editing ===== */
+
+  function releaseV1112() {
+    group("v1.11.2");
+
+    function withChecklist(fn) {
+      const backup = structuredClone(state.checklist || []);
+      try { return fn(); }
+      finally { state.checklist = backup; saveState(); renderFamily(); }
+    }
+
+    check("opening Family does not steal focus into the add field", () => withChecklist(() => {
+      /* renderFamily called input.focus() unconditionally, so the phone keyboard opened every
+         time the tab was viewed — a text cursor when all you wanted was to read the list. */
+      return window.__withScreenVisible("screen-family", renderFamily, () => {
+        document.body.focus();
+        const input = document.getElementById("checklist-input");
+        if (!input) return "the add field is missing";
+        renderFamily();
+        return document.activeElement !== document.getElementById("checklist-input")
+          ? true : "focus jumped to the add field just from opening the tab";
+      });
+    }));
+
+    check("adding an item keeps the cursor for the next one", () => withChecklist(() => {
+      /* focus() is a no-op on a display:none screen, so this has to run with Family visible —
+         the fifth check this release to be caught by that. */
+      return window.__withScreenVisible("screen-family", renderFamily, () => {
+        const input = document.getElementById("checklist-input");
+        input.value = "Probe item";
+        document.getElementById("checklist-add").click();
+        // The focus IS wanted here — you are mid-flow adding several things.
+        const focused = document.activeElement === document.getElementById("checklist-input");
+        if (!state.checklist.some((c) => c.text === "Probe item")) return "the item was not added";
+        return focused ? true : "the cursor left the field after adding";
+      });
+    }));
+
+    check("a checklist item can be edited, not only deleted", () => withChecklist(() => {
+      state.checklist = [{ id: "chk-probe", text: "Passprts", done: false }];
+      renderFamily();
+      const btn = document.querySelector('[data-chk-edit="chk-probe"]');
+      if (!btn) return "no edit control on a checklist item";
+      btn.click();
+      const input = document.querySelector(".checklist__edit");
+      if (!input) return "the row did not become editable";
+      if (input.value !== "Passprts") return `the editor prefilled "${input.value}"`;
+      input.value = "Passports";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      const item = state.checklist.find((c) => c.id === "chk-probe");
+      // The id must survive, or ticking and deleting break the way expenses once did.
+      return item && item.text === "Passports" && item.id === "chk-probe"
+        ? true : `the item reads ${JSON.stringify(item)}`;
+    }));
+
+    check("Escape abandons a checklist edit", () => withChecklist(() => {
+      state.checklist = [{ id: "chk-esc", text: "Keep me", done: true }];
+      renderFamily();
+      document.querySelector('[data-chk-edit="chk-esc"]').click();
+      const input = document.querySelector(".checklist__edit");
+      if (!input) return "the row did not become editable";
+      input.value = "discard me";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+      const item = state.checklist.find((c) => c.id === "chk-esc");
+      if (item.text !== "Keep me") return `Escape saved "${item.text}"`;
+      return item.done === true ? true : "the ticked state was lost";
+    }));
+
+    check("editing leaves ticking and deleting working", () => withChecklist(() => {
+      state.checklist = [{ id: "chk-both", text: "Tickets", done: false }];
+      renderFamily();
+      document.querySelector('[data-chk-edit="chk-both"]').click();
+      const input = document.querySelector(".checklist__edit");
+      input.value = "Tickets and passes";
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      document.querySelector('[data-chk="chk-both"]').click();
+      if (!state.checklist[0].done) return "ticking stopped working after an edit";
+      const del = document.querySelector('[data-chk-del="chk-both"]');
+      if (!del) return "the delete control vanished";
+      // Both controls must name the NEW text, not the text it was created with.
+      return /Tickets and passes/.test(del.getAttribute("aria-label") || "")
+        ? true : `delete is labelled "${del.getAttribute("aria-label")}"`;
     }));
   }
 

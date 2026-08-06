@@ -637,6 +637,7 @@ h1, h2, h3, .hero h1, .hero p {
    target rather than just a 24px box. */
 .checklist label { flex: 1; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
 .checklist .done { text-decoration: line-through; color: var(--muted); }
+.checklist__edit { flex: 1; min-width: 0; min-height: 44px; font: inherit; }
 .checklist__add { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 /* min-width:0 overrides the flex default of min-width:auto — without it the input
    refuses to shrink below its intrinsic width and pushes the Add button off-screen
@@ -1876,7 +1877,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.11.1";
+const APP_VERSION = "v1.11.2";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -5853,11 +5854,18 @@ function renderFamily() {
     if (!v) return;
     state.checklist.push({ id: uid("chk"), text: v, done: false });
     saveState();
+    focusChecklistInput = true; // keep the cursor here for the next item
     renderFamily();
   };
   $("checklist-add").addEventListener("click", addItem);
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") addItem(); });
-  input.focus();
+  /* Focus only when the render came from adding an item, so you can type several in a row.
+     Unconditionally, this popped the phone keyboard every single time the Family tab was
+     opened — you were shown a text cursor when all you wanted was to read the list. */
+  if (focusChecklistInput) {
+    focusChecklistInput = false;
+    input.focus();
+  }
   bindSharedListActions(body, renderFamily);
 
   // Members are derived from trip travelers: rename/remove applies across all trips.
@@ -5887,12 +5895,16 @@ function renderFamily() {
   );
 }
 
+/* Set only by "add", so the keyboard opens when you are adding and not when you are reading. */
+let focusChecklistInput = false;
+
 /* ---------- Shared checklist ---------- */
+const PENCIL_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M4 20h4l10-10a2.8 2.8 0 0 0-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13.5 6.5l4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 const TRASH_ICON = '<svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 function sharedListRowsHtml() {
   const noteRows = state.checklist.map(
-    (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete ${escapeHtml(c.text)}" title="Delete">${TRASH_ICON}</button></li>`
+    (c) => `<li><input type="checkbox" id="chk-${escapeHtml(c.id)}" ${c.done ? "checked" : ""} data-chk="${escapeHtml(c.id)}" /><label for="chk-${escapeHtml(c.id)}" class="${c.done ? "done" : ""}">${escapeHtml(c.text)}</label><button type="button" class="icon-btn icon-btn--small" data-chk-edit="${escapeHtml(c.id)}" aria-label="Edit ${escapeHtml(c.text)}" title="Edit">${PENCIL_ICON}</button><button type="button" class="icon-btn icon-btn--small" data-chk-del="${escapeHtml(c.id)}" aria-label="Delete ${escapeHtml(c.text)}" title="Delete">${TRASH_ICON}</button></li>`
   );
   return noteRows.length ? noteRows.join("") : `<li class="empty-state">Nothing on the list yet — add the first item below.</li>`;
 }
@@ -5906,6 +5918,43 @@ function bindSharedListActions(scope, rerender) {
       rerender();
     })
   );
+  /* Inline, not a prompt(): a system prompt on a phone hides the list you are correcting, and
+     the label itself is the 44px tick target so it cannot double as the edit target. */
+  scope.querySelectorAll("[data-chk-edit]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const item = state.checklist.find((c) => c.id === btn.getAttribute("data-chk-edit"));
+      const li = btn.closest("li");
+      if (!item || !li || li.querySelector(".checklist__edit")) return;
+      const label = li.querySelector("label");
+      if (!label) return;
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "checklist__edit";
+      input.dir = "auto";
+      input.maxLength = 80;
+      input.value = item.text;
+      input.setAttribute("aria-label", `Edit ${item.text}`);
+      label.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let settled = false;
+      const commit = (save) => {
+        if (settled) return;         // blur fires again as the re-render tears the input out
+        settled = true;
+        const v = input.value.trim();
+        if (save && v && v !== item.text) { item.text = v; saveState(); }
+        rerender();
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(true); }
+        else if (e.key === "Escape") { e.preventDefault(); commit(false); }
+      });
+      input.addEventListener("blur", () => commit(true));
+    })
+  );
+
   scope.querySelectorAll("[data-chk-del]").forEach((btn) =>
     btn.addEventListener("click", () => {
       state.checklist = state.checklist.filter((c) => c.id !== btn.getAttribute("data-chk-del"));
