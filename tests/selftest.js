@@ -125,6 +125,7 @@
       releaseV1112();
       releaseV1113();
       releaseV1105();
+      releaseV1120();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -3165,6 +3166,129 @@
           ? true : `the new trip's map opened filtered to "${mapDayFilter}"`;
       });
     });
+  }
+
+  /* ===== v1.12.0 — text contrast =====
+     The coral is a fill colour that had been doing text duty, at ratios as low as 2.62:1 on a
+     number about money. The fix was a set of *-text tokens, and the thing worth guarding is not
+     "the tokens exist" but "the tokens still clear 4.5:1 against every warm surface" — the
+     margins are thin (0.17 on --cream for --muted, 0.23 for --brand-text), so a nudge to any
+     surface token silently breaks them. Everything below is computed from the live custom
+     properties, never from a hard-coded hex, so editing a token moves the test with it. */
+
+  function releaseV1120() {
+    group("v1.12.0");
+
+    const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+    function rgbOf(value) {
+      // Resolve any CSS colour (hex, rgb(), name) to channels via the browser itself.
+      const probe = document.createElement("span");
+      probe.style.color = value;
+      document.body.appendChild(probe);
+      const resolved = getComputedStyle(probe).color;
+      probe.remove();
+      const m = resolved.match(/-?[\d.]+/g);
+      return m ? m.slice(0, 3).map(Number) : null;
+    }
+    function luminance(rgb) {
+      const [r, g, b] = rgb.map((v) => {
+        const c = v / 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+    function ratio(a, b) {
+      const x = luminance(rgbOf(a)), y = luminance(rgbOf(b));
+      return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+    }
+
+    /* Every background a token-coloured label can land on. --brand-soft and --cream are the
+       tight ones; checking only against white would pass tokens that fail in the sidebar. */
+    const SURFACES = ["--surface", "--bg", "--cream-2", "--cream", "--brand-soft"];
+    const TEXT_TOKENS = ["--brand-text", "--warn-text", "--success-text", "--danger-text", "--muted"];
+
+    TEXT_TOKENS.forEach((token) => {
+      check(`${token} clears 4.5:1 on every warm surface`, () => {
+        const colour = css(token);
+        if (!colour) return `${token} is not defined`;
+        const failures = SURFACES
+          .map((s) => ({ s, r: ratio(colour, css(s)) }))
+          .filter((x) => x.r < 4.5)
+          .map((x) => `${x.s}=${x.r.toFixed(2)}`);
+        return failures.length ? `${token} (${colour}) fails on ${failures.join(", ")}` : true;
+      });
+    });
+
+    check("the coral fill token is NOT used as text anywhere", () => {
+      /* The point of the split: if --brand ever creeps back onto glyphs the ratios above stop
+         describing the app. Walks rendered text nodes rather than the stylesheet, so it also
+         catches inline styles and JS-set colours. */
+      const brand = rgbOf(css("--brand")).join(",");
+      const offenders = [];
+      document.querySelectorAll("body *").forEach((el) => {
+        const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
+        if (!hasText) return;
+        const c = getComputedStyle(el).color.match(/-?[\d.]+/g);
+        if (c && c.slice(0, 3).join(",") === brand) offenders.push(el.className || el.tagName);
+      });
+      return offenders.length ? `--brand used as text on: ${offenders.slice(0, 5).join(", ")}` : true;
+    });
+
+    check("hero kicker does not rely on the coral gradient for contrast", () => {
+      /* It sits on the gradient, where white tops out at 3.77:1 — too low for 12.8px. It must
+         therefore carry its own opaque-enough background rather than being bare text. */
+      const kicker = document.querySelector(".hero__kicker");
+      if (!kicker) return skip("no hero on screen (no upcoming trip)");
+      const bg = getComputedStyle(kicker).backgroundColor;
+      const alpha = Number((bg.match(/-?[\d.]+/g) || [])[3] ?? 1);
+      if (alpha < 0.9) return `kicker background is too transparent to guarantee contrast: ${bg}`;
+      const r = ratio(getComputedStyle(kicker).color, `rgb(${rgbOf(bg).join(",")})`);
+      return r >= 4.5 ? true : `kicker text on its own badge is ${r.toFixed(2)}:1`;
+    });
+
+    check("small icon buttons expose a >=42x44 tap target", () => {
+      const btn = document.querySelector(".icon-btn--small");
+      if (!btn) return skip("no compact icon buttons rendered on this screen");
+      const after = getComputedStyle(btn, "::after");
+      const w = parseFloat(after.width), h = parseFloat(after.height);
+      if (!w || !h) return "no ::after overlay found on .icon-btn--small";
+      return (w >= 42 && h >= 44) ? true : `tap overlay is ${w}x${h}`;
+    });
+
+    check("the appbar + names what it will actually do", () => {
+      /* It used to say "New trip" on Itinerary and Bookings while opening the reservation
+         dialog. Asserted per screen because the mismatch only existed on two of the five. */
+      const add = document.getElementById("btn-appbar-add");
+      if (!add) return "btn-appbar-add missing";
+      const expected = {
+        trips: "New trip", itinerary: "Add reservation", budget: "Add funds",
+        bookings: "Add reservation", family: "Add checklist item",
+      };
+      const startHash = location.hash;
+      const wrong = [];
+      try {
+        for (const [screen, label] of Object.entries(expected)) {
+          location.hash = "#" + screen;
+          router();  // synchronous; the hashchange listener would not have run yet
+          const actual = add.getAttribute("aria-label");
+          if (actual !== label) wrong.push(`${screen}: "${actual}" (want "${label}")`);
+        }
+      } finally {
+        location.hash = startHash || "#trips";
+        try { router(); } catch (e) { /* restoring the screen isn't what we're testing */ }
+      }
+      return wrong.length ? wrong.join("; ") : true;
+    });
+
+    check("fund history shows a formatted date, never raw ISO", () => {
+      const formatted = fmtHistoryDate("2026-07-08");
+      if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) return `still ISO: ${formatted}`;
+      return formatted.includes("2026") ? true : `lost the year: ${formatted}`;
+    });
+
+    check("fmtHistoryDate passes junk through instead of throwing", () =>
+      eq(fmtHistoryDate("not-a-date"), "not-a-date", "junk date"));
   }
 
   /* ===== 1c. Dialog dismissal =====

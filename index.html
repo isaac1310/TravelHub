@@ -27,6 +27,14 @@
   --brand-hover: #e87a6a;
   --brand-active: #dd6d5d;
   --brand-soft: #fbe4de;    /* coral tint — active nav bg, badges */
+  /* The coral above is a FILL colour and only a fill colour. As text it tops out at 3.27:1 on
+     --surface and 2.69:1 on --brand-soft, so every coral label in the app was failing 4.5:1.
+     These *-text tokens are the darkened variants to use whenever the colour lands on glyphs.
+     Each is the lightest value that clears 4.5 against ALL five warm backgrounds — --surface,
+     --bg, --cream-2, --cream and --brand-soft — the last two being the tight ones. Margins on
+     the worst background: brand 4.73, warn 4.79, success 4.72, danger 4.82. Any change here
+     must be re-checked against --brand-soft, not against white. */
+  --brand-text: #ad4433;    /* coral, as text */
   --peach: #f3d9c6;         /* secondary "Start now" button */
   --peach-hover: #ecc9b0;
   --cream: #f6e8dc;         /* footer / sidebar band */
@@ -62,10 +70,13 @@
   --primary-hover: var(--brand-hover);
   --danger: #d9534f;
   --danger-bg: #fdeeec;
+  --danger-text: #b8352b;
   --success: #3f9b7c;
   --success-bg: #eaf5f0;
+  --success-text: #2c7259;
   --warn: #d9903f;
   --warn-bg: #fdf1e2;
+  --warn-text: #8d5a12;   /* the committed-money amber; it labels a number about money */
 
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color-scheme: light;
@@ -119,24 +130,24 @@ h1, h2, h3, h4, .brand__name {
    `--brand` itself is untouched: it still drives pins, progress fills, the route
    dots, act icons and focus rings, which is where the warmth belongs. */
 .btn--primary { background: #2c2a28; color: #fff; }
-.btn--primary:hover { background: #413d3a; }
+@media (hover: hover) { .btn--primary:hover { background: #413d3a; } }
 .btn--primary:active { background: #1f1d1c; }
 
 .btn--secondary { background: var(--peach); color: #6b4a3a; }
-.btn--secondary:hover { background: var(--peach-hover); }
+@media (hover: hover) { .btn--secondary:hover { background: var(--peach-hover); } }
 
 .btn--outline {
   background: var(--surface);
-  color: var(--brand-hover);
+  color: var(--brand-text);
   border-color: var(--border-strong);
 }
-.btn--outline:hover { border-color: var(--brand); background: var(--cream-2); }
+@media (hover: hover) { .btn--outline:hover { border-color: var(--brand); background: var(--cream-2); } }
 
 .btn--ghost { background: transparent; color: var(--muted); }
-.btn--ghost:hover { background: var(--cream); color: var(--text); }
+@media (hover: hover) { .btn--ghost:hover { background: var(--cream); color: var(--text); } }
 
-.btn--danger { background: transparent; color: var(--danger); }
-.btn--danger:hover { background: var(--danger-bg); }
+.btn--danger { background: transparent; color: var(--danger-text); }
+@media (hover: hover) { .btn--danger:hover { background: var(--danger-bg); } }
 
 .btn--small { padding: 0.32rem 0.7rem; font-size: 0.8rem; min-height: 44px; }
 
@@ -150,17 +161,17 @@ h1, h2, h3, h4, .brand__name {
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer;
   background: var(--brand-soft);
-  color: var(--brand-hover);
+  color: var(--brand-text);
   transition: background 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
 }
-.icon-btn:hover { background: var(--brand); color: #fff; }
+@media (hover: hover) { .icon-btn:hover { background: var(--brand); color: #fff; } }
 .icon-btn:focus-visible { outline: none; box-shadow: var(--ring); }
 .icon-btn:active { transform: translateY(1px); }
 .icon-btn svg { width: 20px; height: 20px; }
 
 .pill {
   display: inline-flex; align-items: center; gap: 0.3rem;
-  background: var(--brand-soft); color: var(--brand-hover);
+  background: var(--brand-soft); color: var(--brand-text);
   border-radius: var(--radius-pill);
   /* Horizontal padding balances the 44px height below — at the old 0.7rem the pill became a
      lozenge once it grew taller. */
@@ -172,7 +183,7 @@ h1, h2, h3, h4, .brand__name {
   min-height: 44px;
   transition: background 0.15s ease;
 }
-.pill:hover { background: var(--brand); color: #fff; }
+@media (hover: hover) { .pill:hover { background: var(--brand); color: #fff; } }
 .pill:focus-visible { outline: none; box-shadow: var(--ring); }
 
 .card {
@@ -191,7 +202,7 @@ h1, h2, h3, h4, .brand__name {
 
 .eyebrow {
   font-family: "Poppins", sans-serif;
-  color: var(--brand-hover);
+  color: var(--brand-text);
   font-style: italic;
   font-weight: 600;
   font-size: 1.05rem;
@@ -275,9 +286,9 @@ h1, h2, h3, h4, .brand__name {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .navitem svg { width: 21px; height: 21px; color: var(--muted); flex: none; transition: color 0.15s ease; }
-.navitem:hover { background: var(--cream-2); }
+@media (hover: hover) { .navitem:hover { background: var(--cream-2); } }
 .navitem:focus-visible { outline: none; box-shadow: var(--ring); }
-.navitem.is-active { background: var(--brand-soft); color: var(--brand-active); font-weight: 600; }
+.navitem.is-active { background: var(--brand-soft); color: var(--brand-text); font-weight: 600; }
 .navitem.is-active svg { color: var(--brand); }
 
 .sidebar__spacer { flex: 1; }
@@ -300,7 +311,7 @@ h1, h2, h3, h4, .brand__name {
   font-size: 0.78rem; font-weight: 600; cursor: pointer;
 }
 .room-badge::before { content: "●"; color: var(--brand, #ef8e7f); font-size: 0.7em; }
-.room-badge:hover { background: var(--brand-soft, #fbe4de); }
+@media (hover: hover) { .room-badge:hover { background: var(--brand-soft, #fbe4de); } }
 
 .app__body { min-width: 0; display: flex; flex-direction: column; }
 
@@ -324,9 +335,12 @@ h1, h2, h3, h4, .brand__name {
   margin: 0 auto;
 }
 
-.screen { display: none; animation: fade 0.25s ease; }
+/* 120ms and opacity only. At 0.25s with a translateY the whole page sat visibly half-drawn and
+   sliding while the nav had already moved on, which reads as the app lagging rather than as a
+   transition. Short enough to feel like a cut, long enough not to flash. */
+.screen { display: none; animation: fade 0.12s ease-out; }
 .screen.is-active { display: block; }
-@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
 
 .tabbar { display: none; }
 
@@ -344,7 +358,12 @@ h1, h2, h3, h4, .brand__name {
 }
 /* The original peach, on every card. v1.10.0 generated a hue per destination;
    the monument now does the distinguishing instead, so the colour is uniform. */
-.hero, .tripcard__cover { background: linear-gradient(135deg, #f2a08f 0%, #ef8e7f 45%, #e07a86 100%); }
+/* Deepened from #f2a08f/#ef8e7f/#e07a86, where white text measured 2.06–2.88:1. The move is
+   down in lightness but NOT in chroma — a black wash over the old stops hits the same numbers
+   but turns the brand dusty brown, whereas these stay a vivid coral. White now reads 3.77:1 at
+   the lightest stop, which clears the 3:1 that the large trip names need. See .hero__kicker for
+   the small text, which 3.77 does not cover. */
+.hero, .tripcard__cover { background: linear-gradient(135deg, #d95c44 0%, #d24d3c 45%, #c44459 100%); }
 /* The monument sits behind the text and never intercepts a tap. */
 .cover__art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 /* The hero's lower-left is dense — title, dates, Edit pill, avatars, names — so
@@ -363,12 +382,25 @@ h1, h2, h3, h4, .brand__name {
     radial-gradient(160px 160px at 12% 90%, rgba(255,255,255,0.14), transparent 70%);
 }
 .hero__plane { position: absolute; right: -10px; top: 14px; width: 190px; opacity: 0.25; color: #fff; z-index: -1; transform: rotate(-8deg); }
-.hero__kicker { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.16em; opacity: 0.9; font-weight: 600; }
+
+/* White on the coral gradient measures 2.06:1 at its light end, so the hero and the trip-card
+   covers were failing on every word. Two different fixes, because the text has two jobs:
+
+   - The big trip names need only 3:1, and the deepened gradient above covers them (3.77:1).
+   - The kicker is 12.8px and needs 4.5, which no gradient dark enough to reach it would still
+     be coral. It becomes a badge instead — the translucent-white pill already used for Edit,
+     with --brand-text on it, which measures 4.73 and needs nothing from the background. */
+.hero__kicker {
+  display: inline-block;
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700;
+  background: rgba(255, 255, 255, 0.92); color: var(--brand-text);
+  padding: 0.2rem 0.7rem; border-radius: var(--radius-pill);
+}
 .hero__title { font-size: 2.1rem; margin: 0.3rem 0 0.5rem; color: #fff; }
 .hero__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem; font-weight: 600; }
 .hero__dates { display: inline-flex; align-items: center; gap: 0.4rem; }
-.hero .pill { background: rgba(255,255,255,0.9); color: var(--brand-active); }
-.hero .pill:hover { background: #fff; }
+.hero .pill { background: rgba(255,255,255,0.9); color: var(--brand-text); }
+@media (hover: hover) { .hero .pill:hover { background: #fff; } }
 .hero__travellers { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
 .hero__travellers .avatar { box-shadow: 0 0 0 2px rgba(255,255,255,0.6); }
 
@@ -388,7 +420,7 @@ h1, h2, h3, h4, .brand__name {
   display: flex; flex-direction: column; align-items: center; gap: 0.55rem;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.step-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+@media (hover: hover) { .step-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); } }
 .step-card__icon { color: var(--heading); }
 .step-card__icon svg { width: 34px; height: 34px; }
 .step-card h3 { margin: 0; font-size: 1rem; }
@@ -409,9 +441,9 @@ h1, h2, h3, h4, .brand__name {
   display: flex; flex-direction: column;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.tripcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+@media (hover: hover) { .tripcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); } }
 .tripcard__cover { height: 96px; position: relative; color: #fff; padding: 0.8rem 1rem; display: flex; align-items: flex-end; }
-.tripcard__cover .tag { position: absolute; top: 0.7rem; right: 0.8rem; background: rgba(255,255,255,0.85); color: var(--brand-active); border-radius: var(--radius-pill); padding: 0.15rem 0.6rem; font-size: 0.72rem; font-weight: 700; }
+.tripcard__cover .tag { position: absolute; top: 0.7rem; right: 0.8rem; background: rgba(255,255,255,0.85); color: var(--brand-text); border-radius: var(--radius-pill); padding: 0.15rem 0.6rem; font-size: 0.72rem; font-weight: 700; }
 /* The timing badge sits opposite the year so the two never stack (both are absolute).
    Travelling gets a solid fill because "you are on this trip now" is the one state worth
    interrupting for; the rest stay quiet on the coral. */
@@ -449,7 +481,7 @@ h1, h2, h3, h4, .brand__name {
   transition: background 0.15s ease, color 0.15s ease;
 }
 .switcher button:focus-visible { outline: none; box-shadow: var(--ring); }
-.switcher button.is-active { background: var(--surface); color: var(--brand-active); box-shadow: var(--shadow); }
+.switcher button.is-active { background: var(--surface); color: var(--brand-text); box-shadow: var(--shadow); }
 
 /* Segmented control — three tap targets in place of a <select>. See the note by the Payment
    status field: a native option list on Android delivers its dismissal in a way that closed the
@@ -476,7 +508,7 @@ h1, h2, h3, h4, .brand__name {
 .trip-choice button:focus-visible { outline: none; box-shadow: var(--ring); }
 .trip-choice__when { opacity: 0.7; font-weight: 500; margin-inline-start: 0.3rem; }
 
-.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--brand-active); box-shadow: var(--shadow); }
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--brand-text); box-shadow: var(--shadow); }
 .segmented button:focus-visible { outline: none; box-shadow: var(--ring); }
 
 /* The trip switcher reads as tabs, not as a toggle (v1.11.0) — flat, no track, an underline
@@ -494,7 +526,7 @@ h1, h2, h3, h4, .brand__name {
 }
 #itinerary-switcher button.is-active {
   background: none; box-shadow: none;
-  color: var(--brand-active); border-bottom-color: var(--brand);
+  color: var(--brand-text); border-bottom-color: var(--brand);
 }
 #itinerary-switcher button:focus-visible { box-shadow: var(--ring); border-radius: var(--radius-sm); }
 
@@ -516,8 +548,8 @@ h1, h2, h3, h4, .brand__name {
   font: inherit; color: inherit; cursor: pointer; width: 100%; display: block;
   min-height: 44px;
 }
-.day__date:hover { border-color: var(--brand); }
-.day__date .dow { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-hover); font-weight: 700; }
+@media (hover: hover) { .day__date:hover { border-color: var(--brand); } }
+.day__date .dow { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--brand-text); font-weight: 700; }
 .day__date .dnum { display: block; font-family: "Poppins", sans-serif; font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
 .day__date .mon { display: block; font-size: 0.74rem; color: var(--muted); }
 /* A folded day keeps its date and says what's inside, so you know what you're opening. */
@@ -527,7 +559,7 @@ h1, h2, h3, h4, .brand__name {
   background: none; border: 1px dashed var(--border); border-radius: var(--radius-sm);
   padding: 0.6rem 0.9rem; color: var(--muted); font: inherit; font-size: 0.85rem; cursor: pointer;
 }
-.day__summary:hover { border-color: var(--brand); color: var(--ink, #3b2b26); }
+@media (hover: hover) { .day__summary:hover { border-color: var(--brand); color: var(--ink, #3b2b26); } }
 .day__items { display: flex; flex-direction: column; gap: 0.55rem; }
 .act {
   display: flex; align-items: center; gap: 0.75rem;
@@ -552,7 +584,7 @@ body.is-dragging { user-select: none; -webkit-user-select: none; }
   border: 1px dashed var(--brand); border-radius: var(--radius-sm);
   background: var(--brand-soft); opacity: 0.6;
 }
-.act__icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; background: var(--brand-soft); color: var(--brand-hover); }
+.act__icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex: none; background: var(--brand-soft); color: var(--brand-text); }
 .act__icon svg { width: 18px; height: 18px; }
 .act__icon--hotel { background: #f0e6fb; color: #7c4fc4; }
 .act__icon--flight { background: #dcf1f4; color: #2f8a9b; }
@@ -594,7 +626,7 @@ h1, h2, h3, .hero h1, .hero p {
 
 .act__time { margin-left: auto; color: var(--muted); font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
 .act--add { border-style: dashed; background: transparent; color: var(--muted); cursor: pointer; font: inherit; width: 100%; justify-content: flex-start; }
-.act--add:hover { border-color: var(--brand); color: var(--brand-hover); background: var(--cream-2); }
+@media (hover: hover) { .act--add:hover { border-color: var(--brand); color: var(--brand-text); background: var(--cream-2); } }
 .act--add:focus-visible { outline: none; box-shadow: var(--ring); }
 
 /* ============================================================
@@ -611,7 +643,7 @@ h1, h2, h3, .hero h1, .hero p {
 }
 /* The whole card opens its reservation (v1.11.0) — same affordance as a timeline card. */
 .booking[data-item] { cursor: pointer; }
-.booking[data-item]:hover { border-color: var(--border-strong); }
+@media (hover: hover) { .booking[data-item]:hover { border-color: var(--border-strong); } }
 .booking[data-item]:focus-visible { outline: none; box-shadow: var(--ring); }
 .booking__when { color: var(--muted); font-weight: 500; }
 .booking__icon { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex: none; }
@@ -647,7 +679,7 @@ h1, h2, h3, .hero h1, .hero p {
 }
 .checklist li:last-child { border-bottom: none; }
 .checklist input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--brand); flex: none; }
-.checklist li svg { width: 18px; height: 18px; color: var(--brand-hover); }
+.checklist li svg { width: 18px; height: 18px; color: var(--brand-text); }
 /* The label is `for` the checkbox, so making it fill the row turns the whole row into the tick
    target rather than just a 24px box. */
 .checklist label { flex: 1; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
@@ -670,6 +702,54 @@ h1, h2, h3, .hero h1, .hero p {
 .budget-head__intro .subtitle { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.9rem; }
 .header__controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; }
 
+/* The dismiss sits in the corner rather than in the flex flow: as a third flex item it was the
+   one that wrapped, landing alone on a line under the text and reading as another action. */
+.local-notice {
+  position: relative;
+  display: flex; align-items: center; gap: 0.7rem 0.9rem; flex-wrap: wrap;
+  margin: 0 0 1rem; padding: 0.75rem 2.6rem 0.75rem 0.9rem;
+  background: var(--warn-bg); border: 1px solid #f0dcbc;
+  border-radius: var(--radius-sm);
+}
+.local-notice__body { flex: 1 1 200px; font-size: 0.88rem; line-height: 1.35; }
+.local-notice__body strong { display: block; color: var(--heading); }
+.local-notice__body span { color: var(--warn-text); }
+#btn-local-notice-share { flex: none; }
+#btn-local-notice-dismiss {
+  position: absolute; top: 0.35rem; right: 0.35rem;
+  background: transparent; color: var(--warn-text);
+}
+
+/* Disclosure for the rare budget actions. A native <details> rather than a scripted popover:
+   it is keyboard- and screen-reader-correct for free, and the only JS it needs is the click
+   that closes it again. The summary is styled as a button because the old bare-text Export /
+   Import did not read as pressable. */
+.toolbar-more { position: relative; }
+.toolbar-more > summary {
+  list-style: none; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  min-height: 44px; padding: 0.6rem 1.1rem;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text);
+  font-weight: 600; white-space: nowrap;
+}
+.toolbar-more > summary::-webkit-details-marker { display: none; }
+.toolbar-more > summary::after {
+  content: ""; width: 7px; height: 7px; margin-left: 0.1rem;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translate(-2px, -2px);
+}
+.toolbar-more[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
+.toolbar-more > summary:focus-visible { outline: none; box-shadow: var(--ring); }
+.toolbar-more__menu {
+  position: absolute; z-index: 30; right: 0; top: calc(100% + 0.35rem);
+  display: flex; flex-direction: column; align-items: stretch; gap: 0.15rem;
+  min-width: 190px; padding: 0.35rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+}
+.toolbar-more__menu .btn { justify-content: flex-start; border-radius: var(--radius-sm); }
+
 .panel {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 1.3rem; margin-bottom: 1.3rem; box-shadow: var(--shadow);
@@ -681,7 +761,7 @@ h1, h2, h3, .hero h1, .hero p {
   background: #2c2a28; color: #fff; border-radius: var(--radius-md, 16px);
   padding: 1.1rem 1.2rem; margin-bottom: 0.9rem; display: flex; flex-direction: column; gap: 0.15rem;
 }
-.answer-card__label { font-size: 0.66rem; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.72; font-weight: 700; }
+.answer-card__label { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.72; font-weight: 700; }
 .answer-card__value { font-family: "Poppins", sans-serif; font-size: 2.1rem; font-weight: 700; line-height: 1.05; }
 .answer-card--clear .answer-card__value { color: #9fe0bf; }
 .answer-card__sub { font-size: 0.82rem; opacity: 0.75; }
@@ -695,9 +775,9 @@ h1, h2, h3, .hero h1, .hero p {
 .stat__label { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.3rem; font-weight: 600; }
 .stat__value { font-size: 1.3rem; font-weight: 700; font-family: "Poppins", sans-serif; }
 .stat--warn { background: var(--danger-bg); border-color: #f4cfca; }
-.stat--warn .stat__value { color: var(--danger); }
+.stat--warn .stat__value { color: var(--danger-text); }
 .stat--ok { background: var(--success-bg); border-color: #cfe8dd; }
-.stat--ok .stat__value { color: var(--success); }
+.stat--ok .stat__value { color: var(--success-text); }
 
 .trips-section__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .trips-section__head .panel__heading { margin: 0; }
@@ -721,11 +801,11 @@ h1, h2, h3, .hero h1, .hero p {
 
 .trip-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; font-size: 0.85rem; }
 .trip-metrics--payment { grid-template-columns: repeat(2, 1fr); }
-.trip-metrics__due { color: var(--warn); font-weight: 700; }
+.trip-metrics__due { color: var(--warn-text); font-weight: 700; }
 .trip-metrics dt { color: var(--muted); margin: 0; }
 .trip-metrics dd { margin: 0; font-weight: 700; }
 
-.over-badge { display: inline-block; font-size: 0.7rem; font-weight: 700; color: var(--danger); background: var(--danger-bg); padding: 0.15rem 0.5rem; border-radius: var(--radius-pill); margin-top: 0.25rem; }
+.over-badge { display: inline-block; font-size: 0.7rem; font-weight: 700; color: var(--danger-text); background: var(--danger-bg); padding: 0.15rem 0.5rem; border-radius: var(--radius-pill); margin-top: 0.25rem; }
 
 .expense-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
 .btn-add-expense--card { width: 100%; margin-top: 0.5rem; justify-content: center; }
@@ -735,15 +815,15 @@ h1, h2, h3, .hero h1, .hero p {
 .expense-item:last-child { border-bottom: none; }
 .expense-item--paid { background: var(--success-bg); margin: 0; padding: 0.7rem 0.5rem; border-radius: 10px; border-left: 3px solid var(--success); }
 .expense-item--paid .btn--ghost { color: var(--text); background: rgba(255,255,255,0.9); border: 1px solid var(--border); }
-.expense-item--paid .btn--ghost:hover { background: #fff; }
+@media (hover: hover) { .expense-item--paid .btn--ghost:hover { background: #fff; } }
 .expense-item__label { font-weight: 600; }
 .expense-item__paid-line { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
 
-.payment-status { display: inline-block; font-size: 0.66rem; font-weight: 700; padding: 0.12rem 0.45rem; border-radius: var(--radius-pill); margin-left: 0.25rem; vertical-align: middle; }
+.payment-status { display: inline-block; font-size: 0.74rem; font-weight: 700; padding: 0.12rem 0.45rem; border-radius: var(--radius-pill); margin-left: 0.25rem; vertical-align: middle; }
 .payment-status--planned { background: #efe9e3; color: #8a7f74; }
 .payment-status--booked { background: #e3edfa; color: #4a6fa5; }
-.payment-status--paid { background: var(--success-bg); color: var(--success); }
-.payment-status--partial { background: var(--warn-bg); color: var(--warn); }
+.payment-status--paid { background: var(--success-bg); color: var(--success-text); }
+.payment-status--partial { background: var(--warn-bg); color: var(--warn-text); }
 
 .expense-item__meta { color: var(--muted); font-size: 0.75rem; }
 
@@ -780,10 +860,10 @@ h1, h2, h3, .hero h1, .hero p {
    The spacer keeps every amount in one column. */
 .history-item--roll strong { margin-inline-end: 44px; }
 .history-item--editable { cursor: pointer; }
-.history-item--editable:hover { background: var(--cream-2); }
+@media (hover: hover) { .history-item--editable:hover { background: var(--cream-2); } }
 .history-item--editable:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--radius-sm); }
 .history-item:last-child { border-bottom: none; }
-.history-item--roll strong { color: var(--brand-hover); }
+.history-item--roll strong { color: var(--brand-text); }
 
 /* forms */
 /* min-width: 0 stops the input's intrinsic width propagating out and forcing a grid
@@ -808,7 +888,7 @@ input, select {
 /* Its own token, not --muted. Once --muted darkened for contrast, reusing it here made every
    input's hover border read as a heavy outline against the resting --border. Text contrast and
    a hover affordance want different values. */
-input:hover, select:hover { border-color: var(--border-hover); }
+@media (hover: hover) { input:hover, select:hover { border-color: var(--border-hover); } }
 input:focus, select:focus { outline: none; border-color: var(--brand); box-shadow: var(--ring); }
 input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 
@@ -832,7 +912,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .roll-preview__list li { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.25rem 0; border-bottom: 1px solid var(--border); }
 .roll-preview__list li:last-child { border-bottom: none; }
 .roll-preview__total { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); font-weight: 700; }
-.roll-preview--warn { background: var(--danger-bg); border-color: #f0b6b2; color: var(--danger); }
+.roll-preview--warn { background: var(--danger-bg); border-color: #f0b6b2; color: var(--danger-text); }
 .fieldset { border: none; padding: 0; margin-bottom: 0.85rem; }
 .fieldset legend { margin-bottom: 0.5rem; }
 .radio { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.9rem; margin-bottom: 0.4rem; cursor: pointer; }
@@ -865,13 +945,24 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
     min-height: 52px;
   }
   .tab svg { width: 22px; height: 22px; }
-  .tab span { font-size: 0.66rem; font-weight: 600; }
-  .tab.is-active { color: var(--brand-active); }
+  .tab span { font-size: 0.7rem; font-weight: 600; }
+  .tab.is-active { color: var(--brand-text); }
   .tab.is-active svg { color: var(--brand); }
   .tab:focus-visible { outline: none; box-shadow: var(--ring); }
 
   .hero__title { font-size: 1.6rem; }
   .hero__plane { display: none; }
+
+  /* On a phone the hero plus the step-card row filled the whole first screen and pushed "Your
+     trips" — the list the page is named after — to roughly 930px down, so the app opened on a
+     banner about one trip and nothing you could act on. Tightened on SHORT viewports only, by
+     height rather than width: a tall phone has the room to spare and keeps the full hero. */
+  @media (max-height: 780px) {
+    .hero { padding: 1.1rem 1.2rem; }
+    .hero__title { font-size: 1.35rem; margin: 0.15rem 0 0.35rem; }
+    .hero__travellers { margin-top: 0.55rem; }
+    .hero::after { display: none; }
+  }
   .budget-head { align-items: stretch; }
   .header__controls { width: 100%; }
   .header__controls .btn { flex: 1; justify-content: center; }
@@ -913,8 +1004,31 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       @keyframes syncflash { 0% { transform: scale(0.85); } 40% { transform: scale(1.08); } 100% { transform: scale(1); } }
       .act { position: relative; }
       .act__actions { display: inline-flex; gap: 0.3rem; margin-left: 0.5rem; opacity: 0; transition: opacity 0.15s; }
-      .act:hover .act__actions, .act:focus-within .act__actions { opacity: 1; }
-      .icon-btn--small { width: 28px; height: 28px; min-width: 28px; padding: 5px; }
+      /* Split deliberately: only the hover half is gated. focus-within is how a keyboard user —
+         and a touch user who has tabbed to the card — reveals these actions at all, so putting
+         it behind (hover: hover) would hide Edit/Delete on the devices that need them most. */
+      @media (hover: hover) { .act:hover .act__actions { opacity: 1; } }
+      .act:focus-within .act__actions { opacity: 1; }
+      /* 28px is a deliberate *visual* size — these sit in dense rows (checklist lines, timeline
+         cards, member chips, fund history) where a 44px disc would crowd the text off the row.
+         The tap target is decoupled from it: the ::after below is the thing a finger hits, and
+         it is a centred 44x44 overlay. Half of each pair is destructive, so the previous 28px
+         target was one mis-tap away from deleting a trip member. `overflow: visible` matters —
+         the pill border-radius would otherwise clip the overlay away. */
+      .icon-btn--small { width: 28px; height: 28px; min-width: 28px; padding: 5px; position: relative; overflow: visible; }
+      /* Sizing note: 42, not 44. These buttons come in pairs whose second member is destructive
+         (Delete / Remove), and sibling overlays that overlap hand the shared strip to the LATER
+         one — i.e. a near-miss on Edit would land on Delete, which is the exact mis-tap this is
+         meant to prevent. So the width is capped at the sibling pitch: 28px button + 0.9rem gap
+         = 42.4px between centres. Height is a full 44 because rows are ≥48px and nothing above
+         or below competes. 28px already clears WCAG 2.5.8 (24px); this is for thumbs. */
+      .icon-btn--small::after {
+        content: ""; position: absolute; top: 50%; left: 50%;
+        width: 42px; height: 44px; transform: translate(-50%, -50%);
+      }
+      /* Widened from 0.3rem/0.7rem so the overlays above can reach 42px without overlapping. */
+      .act__actions { gap: 0.9rem; }
+      .checklist li { gap: 0.9rem; }
       .daychips { display: flex; gap: 0.45rem; flex-wrap: wrap; margin-bottom: 1rem; }
       .daychip {
         min-width: 40px; height: 40px; border-radius: 999px; border: 1px solid var(--line, #e8ddd5);
@@ -929,7 +1043,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         gap: 0; line-height: 1.15;
       }
-      .daychip .dc-dow { font-size: 0.62rem; font-weight: 700; color: var(--brand-active); text-transform: uppercase; }
+      .daychip .dc-dow { font-size: 0.72rem; font-weight: 700; color: var(--brand-text); text-transform: uppercase; }
       .daychip .dc-num { font-size: 1.05rem; font-weight: 700; font-family: "Poppins", sans-serif; }
       .daychip.is-active .dc-dow { color: rgba(255, 255, 255, 0.85); }
       .daychip--all .dc-num { font-size: 0.82rem; letter-spacing: 0.02em; }
@@ -1020,7 +1134,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
   flex: none; width: 44px; height: 44px; background: transparent; color: var(--muted);
   text-decoration: none;
 }
-.icon-btn--stop:hover { background: var(--cream); color: var(--brand-hover); }
+@media (hover: hover) { .icon-btn--stop:hover { background: var(--cream); color: var(--brand-text); } }
 .icon-btn--stop svg { width: 19px; height: 19px; }
       .map-pin {
         display: grid; place-items: center; min-width: 30px; height: 30px; padding: 0 5px; box-sizing: border-box;
@@ -1073,7 +1187,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         font: inherit; font-size: 0.82rem; cursor: pointer;
       }
       .loc-suggest__opt:last-child { border-bottom: 0; }
-      .loc-suggest__opt:hover, .loc-suggest__opt:focus { background: var(--cream, #f8efe8); }
+      /* Same split as .act__actions: the :focus half is the keyboard highlight while arrowing
+         through location suggestions, and must not depend on the device having a pointer. */
+      @media (hover: hover) { .loc-suggest__opt:hover { background: var(--cream, #f8efe8); } }
+      .loc-suggest__opt:focus { background: var(--cream, #f8efe8); }
       .loc-suggest__empty { padding: 0.6rem 0.8rem; font-size: 0.8rem; color: var(--muted, #8a7a70); }
       .checklist li .icon-btn--small { margin-left: auto; }
 
@@ -1089,7 +1206,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       .act__icon--cafe,       .booking__icon--cafe       { background: #f7ead9; color: #a9764a; }
       .act__icon--store,      .booking__icon--store      { background: #e8f0e2; color: #5f8f56; }
       .act__icon--transport,  .booking__icon--transport  { background: #e9ecf7; color: #5c6bc0; }
-      .act__icon--attraction, .booking__icon--attraction { background: var(--brand-soft); color: var(--brand-active); }
+      .act__icon--attraction, .booking__icon--attraction { background: var(--brand-soft); color: var(--brand-text); }
       .act__icon--other,      .booking__icon--other      { background: var(--cream-2); color: var(--muted); }
       .booking__icon--hotel  { background: #f0e6fb; color: #7c4fc4; }
       .booking__icon--flight { background: #dcf1f4; color: #2f8a9b; }
@@ -1103,12 +1220,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         font: inherit; font-size: 0.7rem; font-weight: 600;
       }
       .type-grid__opt svg { width: 20px; height: 20px; }
-      .type-grid__opt.is-active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-active); }
+      .type-grid__opt.is-active { border-color: var(--brand); background: var(--brand-soft); color: var(--brand-text); }
 
       /* --- Progressive disclosure (shared) --- */
       details.disclosure { margin-bottom: 0.85rem; }
       details.disclosure > summary {
-        list-style: none; cursor: pointer; color: var(--brand-hover); font-weight: 600; font-size: 0.85rem;
+        list-style: none; cursor: pointer; color: var(--brand-text); font-weight: 600; font-size: 0.85rem;
         padding: 0.3rem 0;
       }
       details.disclosure > summary::-webkit-details-marker { display: none; }
@@ -1117,7 +1234,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       /* --- Segmented control restyle (shared) --- */
       .switcher--sub { background: var(--cream); border-radius: 999px; padding: 3px; display: inline-flex; gap: 3px; border: none; }
       .switcher--sub button { border: none; background: transparent; color: var(--muted); font: inherit; font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1rem; border-radius: 999px; cursor: pointer; }
-      .switcher--sub button.is-active { background: var(--surface); color: var(--brand-active); box-shadow: var(--shadow); }
+      .switcher--sub button.is-active { background: var(--surface); color: var(--brand-text); box-shadow: var(--shadow); }
 
       /* --- ⋯ card action button + sheets/FAB/chips (mobile reveals them) --- */
       .act__more { display: none; }
@@ -1145,7 +1262,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       }
       .sheet-item:last-of-type { border-bottom: none; }
       .sheet-item svg { width: 20px; height: 20px; color: var(--muted); }
-      .sheet-item--danger, .sheet-item--danger svg { color: var(--danger); }
+      .sheet-item--danger, .sheet-item--danger svg { color: var(--danger-text); }
       .sheet-item[hidden] { display: none; }
       .expenses-fold > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.85rem; color: var(--muted); padding: 0.4rem 0; }
       .expenses-fold > summary::-webkit-details-marker { display: none; }
@@ -1158,6 +1275,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .appbar__eyebrow { display: block; font-size: 0.62rem; letter-spacing: 0.14em; }
         .appbar__title { display: block; font-size: 1.05rem; }
         #sync-status, #btn-share, #btn-copy-link, #btn-sync-now, #btn-appbar-account { display: none; }
+        /* See setActiveScreen: on Itinerary the FAB already adds a reservation, and two plus
+           buttons on one screen with no way to tell them apart is worse than one. */
+        #btn-appbar-add[data-duplicate-of-fab="true"] { display: none; }
         .sync-chip {
           display: inline-flex; align-items: center; gap: 0.3rem; position: relative;
           border-radius: 999px; border: 1px solid var(--border); background: var(--surface);
@@ -1166,7 +1286,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         }
         .sync-chip--ok { background: #e4f4ea; color: #1f7a44; border-color: #cfe8dd; }
         .sync-chip--busy { background: #fbf1dd; color: #9a6a12; border-color: #f0ddb8; }
-        .sync-chip--error { background: var(--danger-bg); color: var(--danger); border-color: #f4cfca; }
+        .sync-chip--error { background: var(--danger-bg); color: var(--danger-text); border-color: #f4cfca; }
         .sync-chip__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); flex: none; }
         .sync-chip__dot[hidden] { display: none; }
         .sync-chip[hidden] { display: none; }
@@ -1211,7 +1331,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           background: var(--cream-2); color: var(--muted); font: inherit;
         }
         .act { padding-right: 0.6rem; }
-        .act__time { background: var(--brand-soft); color: var(--brand-active); font-weight: 700; font-size: 0.78rem; border-radius: 8px; padding: 0.25rem 0.5rem; }
+        .act__time { background: var(--brand-soft); color: var(--brand-text); font-weight: 700; font-size: 0.78rem; border-radius: 8px; padding: 0.25rem 0.5rem; }
 
         /* The FAB is fixed, so it sits on top of whatever is at that spot — it was
            covering the ⋯ button of the last reservation. Padding lets the list
@@ -1280,6 +1400,23 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 
         /* Toast above FAB/tabbar */
         .toast { bottom: calc(140px + env(safe-area-inset-bottom)); z-index: 45; }
+
+        /* These rows scroll sideways with the scrollbar hidden, so a card cut off at the screen
+           edge looked like a layout bug rather than an invitation to swipe. The fade is painted
+           by a sticky overlay that only exists while `data-scroll-end="false"` — i.e. it is gone
+           the moment you reach the end, which a plain always-on mask cannot do. Set in
+           markScrollableRows(). `mask` is not used: it would fade the row's own background too. */
+        .steps, .stats-grid, .members { position: relative; }
+        .steps[data-scroll-end="false"]::after,
+        .stats-grid[data-scroll-end="false"]::after,
+        .members[data-scroll-end="false"]::after {
+          content: ""; position: sticky; right: 0; flex: none; align-self: stretch;
+          width: 34px; margin-left: -34px; pointer-events: none;
+          /* The transparent stop is --bg at zero alpha, spelled out rather than `transparent`,
+             which is transparent BLACK and greys the middle of the fade. Keep it in step if
+             --bg ever changes. */
+          background: linear-gradient(to right, rgba(251, 247, 243, 0), var(--bg));
+        }
 
         /* Trips: steps become swipe chips */
         .steps { display: flex !important; grid-template-columns: none; overflow-x: auto; gap: 0.5rem; margin: 0 -1rem; padding: 0.15rem 1rem 0.5rem; scrollbar-width: none; }
@@ -1412,6 +1549,20 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <!-- ===== TRIPS ===== -->
           <section class="screen" id="screen-trips" data-screen="trips" aria-label="Trips">
             <div id="trips-hero"></div>
+            <!-- Until someone shares, every trip and every shekel in this app lives in ONE
+                 browser profile on ONE device, and the only thing that said so was the greyest
+                 line on the screen. data-when-local hides it the moment the device is in a
+                 room; the dismiss is remembered so it does not nag. -->
+            <div class="local-notice" id="local-notice" data-when-local hidden>
+              <div class="local-notice__body">
+                <strong>These trips are only on this device.</strong>
+                <span>Nothing is backed up or visible to the family until you share them.</span>
+              </div>
+              <button type="button" class="btn btn--primary btn--small" id="btn-local-notice-share">Share my trips</button>
+              <button type="button" class="icon-btn icon-btn--small" id="btn-local-notice-dismiss" aria-label="Dismiss this reminder" title="Dismiss">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+            </div>
             <p class="eyebrow">Pick your next step of the trip</p>
             <div class="steps" id="steps"></div>
             <div class="section-head"><h2>Your trips</h2></div>
@@ -1436,11 +1587,21 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
                   <span class="field__label">Year</span>
                   <select id="year-filter" aria-label="Filter by year"></select>
                 </label>
-                <button type="button" id="btn-export-data" class="btn btn--ghost">Export</button>
-                <button type="button" id="btn-import-data" class="btn btn--ghost">Import</button>
-                <button type="button" id="btn-restore-backup" class="btn btn--outline" hidden title="Bring back the data this device had before joining the shared trip">Restore my old data</button>
                 <input type="file" id="import-file-input" accept="application/json,.json" hidden />
-                <button type="button" id="btn-roll-budget" class="btn btn--outline">Roll budget</button>
+                <!-- Add funds is the only one of these you do more than once a year. The rest
+                     are archival plumbing — Roll budget runs at year end, Export/Import and
+                     Restore are recovery — and giving all five equal billing in one row made
+                     the routine action hard to pick out. They keep their ids: the mobile ⋯
+                     sheet drives the same buttons by clicking them. -->
+                <details class="toolbar-more">
+                  <summary>Data &amp; year-end</summary>
+                  <div class="toolbar-more__menu">
+                    <button type="button" id="btn-roll-budget" class="btn btn--ghost">Roll budget</button>
+                    <button type="button" id="btn-export-data" class="btn btn--ghost">Export</button>
+                    <button type="button" id="btn-import-data" class="btn btn--ghost">Import</button>
+                    <button type="button" id="btn-restore-backup" class="btn btn--ghost" hidden title="Bring back the data this device had before joining the shared trip">Restore my old data</button>
+                  </div>
+                </details>
                 <button type="button" id="btn-add-funds" class="btn btn--primary">Add funds</button>
               </div>
             </div>
@@ -1510,7 +1671,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <p class="dialog__hint">So the family knows who made changes from this device.</p>
         <div id="whoami-options" class="whoami-options"></div>
         <label class="field">
-          <span class="field__label">Or type a name</span>
+          <!-- Text is set in askWhoAmI: "Or …" only makes sense when preset buttons rendered
+               above it, and on a device with no trips yet there are none. -->
+          <span class="field__label" id="whoami-name-label">Your name</span>
           <input type="text" dir="auto" name="name" maxlength="40" placeholder="e.g. Grandma" />
         </label>
         <div class="dialog__actions">
@@ -1916,7 +2079,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.11.4";
+const APP_VERSION = "v1.12.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -3109,7 +3272,7 @@ function removeFundAddition(id) {
     return false;
   }
 
-  if (!confirm(`Remove ${formatMoney(amount)} from the vacation funds?\n\n${entry.note || "Fund addition"} · ${entry.date}`)) {
+  if (!confirm(`Remove ${formatMoney(amount)} from the vacation funds?\n\n${entry.note || "Fund addition"} · ${fmtHistoryDate(entry.date)}`)) {
     return false;
   }
 
@@ -3170,7 +3333,7 @@ function renderFundHistory() {
       return `
     <li class="history-item history-item--${h.kind}${tappable ? " history-item--editable" : ""}"
         ${tappable ? `data-fund-edit="${escapeHtml(h.id)}" role="button" tabindex="0"` : ""}>
-      <span>${escapeHtml(h.date)} — ${escapeHtml(h.label)}</span>
+      <span>${escapeHtml(fmtHistoryDate(h.date))} — ${escapeHtml(h.label)}</span>
       <strong>${prefix}${formatMoney(h.amount)}</strong>
       ${remove}
     </li>`;
@@ -3219,6 +3382,15 @@ function render() {
    on the second try. Exposed for the self-test. */
 const SELECT_POPUP_GRACE_MS = 700;
 function nowMs() { return Date.now(); }
+
+/* The fund/roll ledger stored raw ISO and printed it, so "2026-07-08" sat in a screen where
+   every other date reads "16 – 19 Sept 2026". Same en-GB shape as fmtDay/fmtDateRange. Falls
+   back to the raw string rather than throwing: these rows can carry hand-imported dates. */
+function fmtHistoryDate(iso) {
+  const d = parseISO(iso);
+  if (!d || Number.isNaN(d.getTime())) return iso || "";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
 
 /* A snapshot of the dialog's form when it opened, so a backdrop tap can tell
    "nothing typed yet" (safe to dismiss) from "half-filled" (don't discard it). */
@@ -4029,6 +4201,18 @@ function bindEvents() {
   });
 
   $("btn-add-funds").addEventListener("click", openFundsDialog);
+  /* <details> has no "dismiss" behaviour of its own — it stays open until the summary is
+     clicked again, so it would sit over the Overview panel after you picked something and
+     after you moved on. Close it on choosing an item and on any click outside it. */
+  document.querySelectorAll(".toolbar-more").forEach((more) => {
+    more.querySelector(".toolbar-more__menu")?.addEventListener("click", (e) => {
+      if (e.target.closest("button")) more.open = false;
+    });
+    document.addEventListener("click", (e) => {
+      if (more.open && !more.contains(e.target)) more.open = false;
+    });
+  });
+
   $("btn-export-data").addEventListener("click", exportData);
   const restoreBtn = $("btn-restore-backup");
   restoreBtn.addEventListener("click", () => {
@@ -4499,7 +4683,26 @@ function renderActiveShellScreen() {
   else if (id === "itinerary") renderItinerary();
   else if (id === "bookings") renderBookings();
   else if (id === "family") renderFamily();
+  markScrollableRows();
 }
+
+/* Flags the sideways-scrolling card rows so CSS can show a "more this way" fade, and drops the
+   flag once the row is scrolled to its end. Rounding in scrollLeft on fractional-DPI screens
+   never lands exactly on the maximum, hence the 2px slack. Rows that fit entirely (desktop, or
+   two trips instead of five) report end=true and get no fade at all. */
+function markScrollableRows() {
+  document.querySelectorAll(".steps, .stats-grid, .members").forEach((row) => {
+    const atEnd = row.scrollLeft + row.clientWidth >= row.scrollWidth - 2;
+    row.dataset.scrollEnd = String(atEnd);
+  });
+}
+/* Delegated because these rows are replaced wholesale on every render — a listener bound to the
+   element would be thrown away with it. Capture: scroll does not bubble. */
+document.addEventListener("scroll", (e) => {
+  const row = e.target instanceof Element && e.target.closest?.(".steps, .stats-grid, .members");
+  if (row) row.dataset.scrollEnd = String(row.scrollLeft + row.clientWidth >= row.scrollWidth - 2);
+}, true);
+window.addEventListener("resize", markScrollableRows);
 
 function router() {
   const id = currentScreenId();
@@ -4519,10 +4722,24 @@ function router() {
   $("appbar-title").textContent = meta.label;
 
   // contextual "+" action
+  /* The label has to name what the button will actually do on THIS screen, because the handler
+     branches per screen. Itinerary and Bookings were falling through to "New trip" while opening
+     the reservation dialog — the one pairing where the label actively lied. Trips is the only
+     screen that really adds a trip. */
   const addBtn = $("btn-appbar-add");
-  if (id === "budget") { addBtn.setAttribute("aria-label", "Add funds"); addBtn.title = "Add funds"; }
-  else if (id === "family") { addBtn.setAttribute("aria-label", "Add checklist item"); addBtn.title = "Add checklist item"; }
-  else { addBtn.setAttribute("aria-label", "New trip"); addBtn.title = "New trip"; }
+  const ADD_LABEL = {
+    budget: "Add funds",
+    family: "Add checklist item",
+    itinerary: "Add reservation",
+    bookings: "Add reservation",
+  };
+  const addLabel = ADD_LABEL[id] || "New trip";
+  addBtn.setAttribute("aria-label", addLabel);
+  addBtn.title = addLabel;
+  /* Itinerary carries a FAB that adds a reservation too, and on mobile both were on screen at
+     once with no way to tell them apart. The FAB is the one placed for a thumb, so it wins and
+     the appbar + stands down — on mobile only; on desktop there is no FAB to collide with. */
+  addBtn.dataset.duplicateOfFab = id === "itinerary" ? "true" : "false";
 
   /* Leaving the itinerary has to stop the scroll spy. Screens are hidden with display:none,
      so its day nodes survive with all-zero rects — every day then reads as "above the header",
@@ -6126,6 +6343,31 @@ function bindShellEvents() {
     }
     openTripDialog();
   });
+  /* The local-only banner. It ships `hidden` with a data-when-local hook, and share.js is what
+     reveals it: updateRoomChrome() un-hides every [data-when-local] once it knows the device is
+     not in a room. That indirection is deliberate rather than lazy — share.js only gets that far
+     when Supabase is actually configured, so a build with no config never shows a banner urging
+     the user towards a Share button that does not exist. Do NOT gate this on #btn-share here:
+     share.js's bootstrap awaits the config script, so at bindShellEvents time the button is
+     still hidden no matter what, and an eager check hides the banner forever.
+
+     Dismissal has to drop the attribute, not just set hidden — updateRoomChrome() re-runs on
+     every sync poll and would otherwise bring the banner back within about 20 seconds. */
+  const notice = $("local-notice");
+  const LOCAL_NOTICE_DISMISSED_KEY = "travelhub-local-notice-dismissed";
+  let noticeDismissed = false;
+  try { noticeDismissed = localStorage.getItem(LOCAL_NOTICE_DISMISSED_KEY) === "1"; } catch { /* private mode */ }
+  if (noticeDismissed) {
+    notice.removeAttribute("data-when-local");
+    notice.hidden = true;
+  }
+  $("btn-local-notice-share").addEventListener("click", () => $("btn-share").click());
+  $("btn-local-notice-dismiss").addEventListener("click", () => {
+    notice.removeAttribute("data-when-local");
+    notice.hidden = true;
+    try { localStorage.setItem(LOCAL_NOTICE_DISMISSED_KEY, "1"); } catch { /* private mode */ }
+  });
+
   $("btn-appbar-account").addEventListener("click", () => {
     const name = getDeviceName();
     alert(`This device: ${name || "no name set yet"}.\nYour name is stamped on changes you make to a shared trip.`);
@@ -6240,9 +6482,11 @@ function ensureDeviceName() {
     const form = $("form-whoami");
     const opts = $("whoami-options");
     form.reset();
-    opts.innerHTML = familyMembers()
+    const presets = familyMembers();
+    opts.innerHTML = presets
       .map((n) => `<button type="button" class="btn btn--outline" data-whoami="${escapeHtml(n)}">${escapeHtml(n)}</button>`)
       .join("");
+    $("whoami-name-label").textContent = presets.length ? "Or type a name" : "Your name";
     const done = (name) => {
       try { localStorage.setItem(DEVICE_NAME_KEY, name); } catch { /* private mode */ }
       dlg.close();
