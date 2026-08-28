@@ -69,16 +69,20 @@ This is the part I most want your opinion on rather than a pass/fail.
 
 ### 4. The hero and trip cards
 
+**The salmon is unchanged — same three gradient stops as v1.11.4.** What changed is the
+text on top of it: it is now **charcoal instead of white**.
+
 1. Open **Trips**.
-   - The big header card and the trip card covers are a **noticeably deeper, more
-     saturated coral** than before — closer to a warm red than the old salmon.
-   - "NEXT TRIP · IN 19 DAYS" is now a **white pill badge** with coral text, rather than
-     plain white letters on the gradient.
-2. **The question for you:** does this still read as TravelHub? The old salmon could not
-   carry white text legibly at any size (2.06:1 against a 4.5 requirement), so something
-   had to give — either the colour got deeper or the text stopped being white. I chose
-   deeper. **If you hate it, say so and I will take the opposite route instead** — it is
-   a two-line change, not a rework.
+   - The header card and the trip card covers are the **same salmon you already had**.
+   - "NEXT TRIP · IN 19 DAYS", "Paris", the dates and "Itzik, Moran" are all **dark**
+     rather than white.
+   - The **avatar initials** (I, M, G) are dark now too, on the same pastel circles.
+2. **What to look at:** the salmon is a *light* surface — white on it measured 2.06:1
+   against a 4.5 requirement, which is why none of it was readable in sunlight. Dark text
+   on the same salmon measures 4.97–6.94. So the colour you liked stays and the text
+   stops fighting it.
+3. Things that are deliberately still white: the thin plane/monument line art, the ring
+   around each avatar, and the "in 19 days" badge (which sits on its own dark pill).
 
 ### 5. Coral text everywhere else
 
@@ -93,6 +97,11 @@ Check these read comfortably in daylight, not washed out:
 - Bookings → the **Booked** / **Flight** category tags.
 
 **Expect:** all noticeably darker than you remember, still warm, none of them grey.
+
+Note this is a *different* coral from the hero's: `--brand` (the salmon) is now strictly a
+**fill** colour — backgrounds, map pins, progress bars, the focus ring — and `--brand-text`
+is the darker one used whenever coral lands on actual letters. If you ever see the pale
+salmon on text again, that is a regression and the suite has a check for it.
 
 ---
 

@@ -3235,16 +3235,52 @@
       return offenders.length ? `--brand used as text on: ${offenders.slice(0, 5).join(", ")}` : true;
     });
 
-    check("hero kicker does not rely on the coral gradient for contrast", () => {
-      /* It sits on the gradient, where white tops out at 3.77:1 — too low for 12.8px. It must
-         therefore carry its own opaque-enough background rather than being bare text. */
-      const kicker = document.querySelector(".hero__kicker");
-      if (!kicker) return skip("no hero on screen (no upcoming trip)");
-      const bg = getComputedStyle(kicker).backgroundColor;
-      const alpha = Number((bg.match(/-?[\d.]+/g) || [])[3] ?? 1);
-      if (alpha < 0.9) return `kicker background is too transparent to guarantee contrast: ${bg}`;
-      const r = ratio(getComputedStyle(kicker).color, `rgb(${rgbOf(bg).join(",")})`);
-      return r >= 4.5 ? true : `kicker text on its own badge is ${r.toFixed(2)}:1`;
+    /* The hero and the trip-card covers are the one place text sits on a GRADIENT rather than
+       on a flat token, so the surface loop above cannot see them — and it is where the worst
+       ratio in the app lived (white on salmon, 2.06:1). Rather than asserting a particular
+       remedy, this reads the gradient's own colour stops out of the computed background and
+       checks the text against each one. That survives the decision going either way: darken
+       the salmon and keep white text, or keep the salmon and darken the text. */
+    function gradientStops(el) {
+      const bg = getComputedStyle(el).backgroundImage;
+      const stops = bg.match(/rgba?\([^)]+\)/g) || [];
+      // Drop fully-transparent stops: they contribute nothing to what sits behind the glyphs.
+      return stops.filter((s) => Number((s.match(/-?[\d.]+/g) || [])[3] ?? 1) > 0.5);
+    }
+
+    [
+      { sel: ".hero", label: "hero", minRatio: 4.5 },
+      { sel: ".tripcard__cover h3", label: "trip-card cover title", minRatio: 3 },
+    ].forEach(({ sel, label, minRatio }) => {
+      check(`${label} text clears ${minRatio}:1 on every stop of the coral gradient`, () => {
+        const el = document.querySelector(sel);
+        if (!el) return skip(`no ${label} on screen`);
+        // The gradient is painted by .hero / .tripcard__cover, which may be an ancestor.
+        const painted = el.closest(".hero, .tripcard__cover");
+        const stops = gradientStops(painted);
+        if (!stops.length) return `no gradient stops found behind the ${label}`;
+        const colour = getComputedStyle(el).color;
+        const bad = stops
+          .map((s) => ({ s, r: ratio(colour, s) }))
+          .filter((x) => x.r < minRatio)
+          .map((x) => `${x.s}=${x.r.toFixed(2)}`);
+        return bad.length ? `${label} text ${colour} fails on ${bad.join(", ")}` : true;
+      });
+    });
+
+    check("avatar initials are legible on all three family colours", () => {
+      /* The fills are light pastels chosen to tell people apart, so the initial on top of them
+         has to be dark; white measured 2.29–2.43:1 across the three. */
+      const avatars = [...document.querySelectorAll(".avatar")];
+      if (!avatars.length) return skip("no avatars rendered on this screen");
+      const bad = avatars
+        .map((a) => {
+          const cs = getComputedStyle(a);
+          return { bg: cs.backgroundColor, r: ratio(cs.color, cs.backgroundColor) };
+        })
+        .filter((x) => x.r < 4.5)
+        .map((x) => `${x.bg}=${x.r.toFixed(2)}`);
+      return bad.length ? `initials fail on ${[...new Set(bad)].join(", ")}` : true;
     });
 
     check("small icon buttons expose a >=42x44 tap target", () => {

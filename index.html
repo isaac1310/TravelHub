@@ -227,7 +227,10 @@ h1, h2, h3, h4, .brand__name {
 .avatar {
   width: 38px; height: 38px; border-radius: var(--radius-pill);
   display: inline-flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 0.85rem; color: #fff;
+  /* Same reasoning as the hero: all three avatar fills are light pastels, so a white initial
+     sat at 2.29–2.43:1. Charcoal reads 5.88–6.24 on the same three without touching the
+     colours themselves, which are how you tell the family apart at a glance. */
+  font-weight: 700; font-size: 0.85rem; color: var(--heading);
   font-family: "Poppins", sans-serif;
   box-shadow: 0 0 0 2px var(--surface);
 }
@@ -351,19 +354,23 @@ h1, h2, h3, h4, .brand__name {
   position: relative; overflow: hidden;
   border-radius: var(--radius-lg);
   padding: 2rem 1.8rem;
-  color: #fff;
+  /* Charcoal, not white. The salmon behind it is a light surface: white measured 2.06:1 on it,
+     charcoal measures 4.97 at the worst stop. Every descendant that used to be explicitly #fff
+     now inherits this instead. */
+  color: var(--heading);
   box-shadow: var(--shadow-md);
   margin-bottom: 1.6rem;
   isolation: isolate;
 }
 /* The original peach, on every card. v1.10.0 generated a hue per destination;
    the monument now does the distinguishing instead, so the colour is uniform. */
-/* Deepened from #f2a08f/#ef8e7f/#e07a86, where white text measured 2.06–2.88:1. The move is
-   down in lightness but NOT in chroma — a black wash over the old stops hits the same numbers
-   but turns the brand dusty brown, whereas these stay a vivid coral. White now reads 3.77:1 at
-   the lightest stop, which clears the 3:1 that the large trip names need. See .hero__kicker for
-   the small text, which 3.77 does not cover. */
-.hero, .tripcard__cover { background: linear-gradient(135deg, #d95c44 0%, #d24d3c 45%, #c44459 100%); }
+/* The salmon is deliberately unchanged. White text on it measured 2.06:1, and there were only
+   two ways out: darken the salmon until white works, or keep the salmon and stop using white.
+   This is the second. Charcoal on these three stops measures 6.94 / 6.02 / 4.97 — it clears 4.5
+   even at the darkest stop and even at the 12.8px kicker, so nothing here needs a size or a
+   badge to rescue it. See .hero and .tripcard__cover below for the text colour that depends
+   on this; darkening these stops again would invert the problem rather than fix it. */
+.hero, .tripcard__cover { background: linear-gradient(135deg, #f2a08f 0%, #ef8e7f 45%, #e07a86 100%); }
 /* The monument sits behind the text and never intercepts a tap. */
 .cover__art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 /* The hero's lower-left is dense — title, dates, Edit pill, avatars, names — so
@@ -383,20 +390,11 @@ h1, h2, h3, h4, .brand__name {
 }
 .hero__plane { position: absolute; right: -10px; top: 14px; width: 190px; opacity: 0.25; color: #fff; z-index: -1; transform: rotate(-8deg); }
 
-/* White on the coral gradient measures 2.06:1 at its light end, so the hero and the trip-card
-   covers were failing on every word. Two different fixes, because the text has two jobs:
-
-   - The big trip names need only 3:1, and the deepened gradient above covers them (3.77:1).
-   - The kicker is 12.8px and needs 4.5, which no gradient dark enough to reach it would still
-     be coral. It becomes a badge instead — the translucent-white pill already used for Edit,
-     with --brand-text on it, which measures 4.73 and needs nothing from the background. */
-.hero__kicker {
-  display: inline-block;
-  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700;
-  background: rgba(255, 255, 255, 0.92); color: var(--brand-text);
-  padding: 0.2rem 0.7rem; border-radius: var(--radius-pill);
-}
-.hero__title { font-size: 2.1rem; margin: 0.3rem 0 0.5rem; color: #fff; }
+/* opacity:0.9 diluted the kicker toward the background it sits on, which is exactly the wrong
+   direction now that the contrast comes from the text being dark. Weight carries the emphasis
+   instead. */
+.hero__kicker { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.16em; font-weight: 700; }
+.hero__title { font-size: 2.1rem; margin: 0.3rem 0 0.5rem; color: var(--heading); }
 .hero__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem; font-weight: 600; }
 .hero__dates { display: inline-flex; align-items: center; gap: 0.4rem; }
 .hero .pill { background: rgba(255,255,255,0.9); color: var(--brand-text); }
@@ -442,7 +440,7 @@ h1, h2, h3, h4, .brand__name {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 @media (hover: hover) { .tripcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); } }
-.tripcard__cover { height: 96px; position: relative; color: #fff; padding: 0.8rem 1rem; display: flex; align-items: flex-end; }
+.tripcard__cover { height: 96px; position: relative; color: var(--heading); padding: 0.8rem 1rem; display: flex; align-items: flex-end; }
 .tripcard__cover .tag { position: absolute; top: 0.7rem; right: 0.8rem; background: rgba(255,255,255,0.85); color: var(--brand-text); border-radius: var(--radius-pill); padding: 0.15rem 0.6rem; font-size: 0.72rem; font-weight: 700; }
 /* The timing badge sits opposite the year so the two never stack (both are absolute).
    Travelling gets a solid fill because "you are on this trip now" is the one state worth
@@ -455,7 +453,7 @@ h1, h2, h3, h4, .brand__name {
    gradient's light end, which fails for 11px text. Measured, not eyeballed — the release's
    contrast check only covered the opaque surface tokens, so these badges slipped past it. */
 .tripcard__cover .tag--past { background: rgba(44,42,40,0.58); }
-.tripcard__cover h3 { margin: 0; color: #fff; font-size: 1.25rem; }
+.tripcard__cover h3 { margin: 0; color: var(--heading); font-size: 1.25rem; }
 .tripcard__body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; }
 .tripcard__row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.86rem; }
 .tripcard__row svg { width: 16px; height: 16px; flex: none; }
