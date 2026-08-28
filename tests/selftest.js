@@ -3268,6 +3268,66 @@
       });
     });
 
+    /* v1.12.1. The ≤900px rule `.act__actions { display: none }` is written against the
+       bare class, so it also hid the Family member row's rename/remove — a row that has no
+       ⋯ menu to fall back on. Result: for several releases you could not rename or remove a
+       family member on a phone at all, while desktop worked fine. Both review agents missed
+       it because both tested Family at desktop width.
+
+       This asserts reachability, not styling: the control must have a real box AND a tap
+       area, because display:none and a 0-height overlay fail a user identically. It only
+       runs below the breakpoint, since above it there is nothing to prove. */
+    check("family member actions stay reachable at phone width", () => {
+      if (window.innerWidth > 900) return skip("desktop width — the mobile rule is not in play");
+      const members = [...document.querySelectorAll(".member")];
+      if (!members.length) return skip("no family members in the document");
+      /* Deliberately computed-style, not getBoundingClientRect: the suite runs with Trips
+         active, so the whole Family section is display:none and every rect is 0x0 — which
+         would fail identically whether or not the bug is present. An element inside a
+         display:none subtree still reports its OWN specified display, so this reads the
+         thing that actually broke (`.act__actions { display: none }` catching the member
+         row) without needing the screen on-shelf. */
+      const problems = [];
+      members.forEach((m) => {
+        const name = m.querySelector(".member__name")?.textContent?.trim() || "?";
+        const actions = m.querySelector(".act__actions");
+        if (!actions) return problems.push(`${name}: no actions container`);
+        if (getComputedStyle(actions).display === "none") {
+          return problems.push(`${name}: actions are display:none at ${window.innerWidth}px`);
+        }
+        [
+          ["rename", "[data-member-edit]"],
+          ["remove", "[data-member-del]"],
+        ].forEach(([label, sel]) => {
+          const btn = m.querySelector(sel);
+          if (!btn) return problems.push(`${name}: no ${label} button`);
+          if (getComputedStyle(btn).display === "none") {
+            return problems.push(`${name}: ${label} is display:none`);
+          }
+          // ::after is the tap overlay and is sized in fixed px, so it reads correctly here too.
+          const a = getComputedStyle(btn, "::after");
+          const w = parseFloat(a.width) || 0;
+          const h = parseFloat(a.height) || 0;
+          if (w < 42 || h < 44) problems.push(`${name}: ${label} tap area ${w}x${h}`);
+        });
+      });
+      return problems.length ? problems.join("; ") : true;
+    });
+
+    check("expense row actions are 44px tall at phone width", () => {
+      /* These are .btn--small, not .icon-btn--small, so the v1.12.0 tap-target work missed
+         them: a max-width:600px rule overrode the 44px base down to 40 for exactly the row
+         where Delete sits last. min-height is read from computed style so this holds while
+         the Budget screen is off-shelf. */
+      if (window.innerWidth > 600) return skip("above the rule's breakpoint");
+      const btns = [...document.querySelectorAll(".expense-item__actions .btn")];
+      if (!btns.length) return skip("no expense rows in the document");
+      const bad = btns
+        .map((b) => ({ n: b.getAttribute("aria-label") || b.textContent.trim(), h: parseFloat(getComputedStyle(b).minHeight) || 0 }))
+        .filter((x) => x.h < 44);
+      return bad.length ? `${bad.length} action(s) under 44px, e.g. ${bad[0].n} at ${bad[0].h}` : true;
+    });
+
     check("avatar initials are legible on all three family colours", () => {
       /* The fills are light pastels chosen to tell people apart, so the initial on top of them
          has to be dark; white measured 2.29–2.43:1 across the three. */

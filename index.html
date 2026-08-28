@@ -970,7 +970,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
   .trip-metrics { grid-template-columns: repeat(2, 1fr); }
   .day { grid-template-columns: 66px 1fr; gap: 0.7rem; }
   .day__date .dnum { font-size: 1.25rem; }
-  .expense-item__actions .btn--small { min-height: 40px; }
+  /* Was min-height:40px, an override of the 44px base that shrank exactly the three
+     buttons where Delete sits last in the row. v1.12.0 raised every other compact control
+     to a 44px hit height and missed these because they are .btn--small, not .icon-btn--small.
+     min-height does not affect width, so nothing rewraps; the row is 4px taller. */
   .booking-list, .trip-cards, .trips-grid, .members { grid-template-columns: 1fr; }
   .hero { padding: 1.5rem 1.2rem; }
 }
@@ -1321,6 +1324,15 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 
         /* Cards: hide hover actions, show always-visible ⋯ */
         .act__actions { display: none; }
+        /* ...except on member cards, which never had a ⋯ to fall back to. This rule is
+           written against the bare class, so since v1.5.0 it has also caught the Family
+           member row — leaving rename and remove with no mobile affordance at all while
+           desktop kept them. The inline style="opacity:1" on that row is the tell: these
+           were always meant to be visible, not hover-revealed, so the blanket hide caught
+           them by accident. Safe to show inline now that .icon-btn--small carries a
+           42x44 tap area; before v1.12.0 these were 28px targets next to a destructive
+           twin, which is the hazard the ⋯ pattern existed to avoid. */
+        .member .act__actions { display: inline-flex; }
         .act__more {
           display: flex; align-items: center; justify-content: center; flex: none;
           /* 44px, not 36 — the FAB clearance in #itinerary-view is derived from the FAB's own
