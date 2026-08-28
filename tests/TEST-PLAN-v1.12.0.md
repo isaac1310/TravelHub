@@ -1,6 +1,15 @@
 # Manual test plan — v1.12.0
 
-**Device:** Samsung S24 Ultra, Chrome. **Where:** the Vercel preview for this PR, not production.
+**Device:** Samsung Galaxy S26 Ultra, Chrome. **Where:** the Vercel preview for this PR,
+not production.
+
+> **One thing I need from you:** your S26 Ultra's CSS viewport width has never been
+> measured — my notes still carry the S24 Ultra's 412px, and Samsung's *Display size*
+> setting shifts it. Open the app and tell me what `window.innerWidth` reports (Chrome →
+> ⋮ → Desktop site off, then the address bar: `javascript:alert(innerWidth)` is blocked,
+> so easiest is just to tell me your Display size setting). I have swept **360 / 384 /
+> 412 / 480 px portrait and 915×412 landscape** so the release is covered either way, but
+> I would rather test your actual number than a band around it.
 
 This release is almost entirely visual: colour, labels, tap targets, and where a few
 controls live. Nothing in the trip/budget/sync data model changed. So most of what you
@@ -43,8 +52,18 @@ area. The risk is that the two in a pair overlap and Edit now triggers Delete.
 2. Tap **Edit** ten times, deliberately aiming slightly off-centre — a bit left, a bit
    right, a bit high, a bit low.
    - **Expect:** the inline editor opens every single time. **Delete must never fire.**
-3. Do the same on a **family member chip** (Rename vs Remove) — same pairing, and Remove
+3. Do the same on a **family member pill** (Rename vs Remove) — same pairing, and Remove
    is the destructive one.
+   - **These were invisible on phones until v1.12.1.** A blanket mobile rule hid them and
+     the member row had no ⋯ menu to fall back on, so rename/remove were desktop-only for
+     several releases. If you are testing a build before v1.12.1, skip this step — it is
+     not possible, and that is the bug, not your phone.
+   - Safe to repeat: Rename opens a box **with a text field**, Remove opens one **without**.
+     Press Cancel every time and nothing is written either way. Ten text-field boxes out of
+     ten taps is a pass; a single "Remove ... from N trips?" when you aimed at the pencil is
+     the blocker.
+   - The member row **scrolls sideways** — with three of you, Goni sits off-screen. Swipe
+     the row left to reach her, then run the same ten taps on her pill.
 4. Now tap **Delete** on a throwaway checklist item and confirm it *does* still work.
 
 **Any single instance of Edit firing Delete is a blocker.** That is the exact failure the
@@ -194,3 +213,39 @@ step 8 is the small version. Say the word if you want the full thing scoped sepa
 Three review findings turned out not to be real and are documented in the commit message:
 the Escape claim (step 1 is why it is still on your list), the Family "+" label, and
 missing delete confirmations.
+
+
+---
+
+## Appendix — what the width sweep already covered
+
+You do not need to re-run any of this; it is here so you know what is *already* proven and
+what is left to your thumb.
+
+Swept at **360, 384, 412 and 480 px** portrait (the realistic band for an Ultra across
+Samsung's Display-size settings) plus **915×412 landscape**, across all five screens:
+
+| Check | Result |
+|---|---|
+| Page scrolls sideways (horizontal overflow) | none at any width |
+| Content clipped outside the viewport | none at any width |
+| Tap targets under 42×44 | none, after the two fixes below |
+| Sideways rows flag their scroll-end correctly | Trips steps, Budget stats, Family members — all three |
+| Landscape (915×412) | switches to the sidebar layout, no overflow, rename/remove visible |
+| Console errors | none |
+
+**Two things the sweep found and this release fixes:**
+
+1. **Family rename/remove were invisible on phones** — a blanket `≤900px` rule hid them and
+   the member row, unlike every other card, had no ⋯ menu to fall back on. Desktop-only
+   since v1.5.0. Both review agents missed it because both tested Family at desktop width.
+2. **Budget expense actions were 40px tall, not 44** — a `≤600px` rule overrode the 44px
+   base for exactly the row where Delete sits last. These are `.btn--small`, not
+   `.icon-btn--small`, so v1.12.0's tap-target work skipped them.
+
+**What the sweep could *not* cover, and why:** real finger swipes. Every drag gesture I
+attempted timed out against a hidden browser pane, so the scroll rows were exercised by
+driving `scrollLeft` and firing the scroll event — which proves the app's fade logic but
+*not* that a swipe feels right. Same category as the Escape and Enter false alarms: the
+harness cannot produce genuine gestures. So step 2.3's "swipe the member row to reach
+Goni" is real coverage, not busywork.
