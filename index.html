@@ -6595,13 +6595,26 @@ function ensureDeviceName() {
       dlg.close();
       resolve(name);
     };
-    /* Cancel, Escape or Android Back: resolve with no name so the caller continues (changes are
-       stamped "" until the next ask) and nothing is persisted, so it asks again next time. */
-    dlg.addEventListener("close", () => {
+    /* Not now, Escape or Android Back: resolve with no name so the caller continues (changes are
+       stamped "" until the next ask) and nothing is persisted, so it asks again next time.
+       Three routes to one dismiss, because Chrome does not fire `close` while the tab is hidden
+       (verified in Chrome 148 and 152 — QA saw the Share flow's await hang on exactly that): the
+       button resolves directly, and `toggle`(→closed), which does fire hidden, backs up `close`
+       for the keyboard/gesture paths. One live callback on the element, not a listener per ask. */
+    const dismiss = () => {
       if (settled) return;
       settled = true;
+      dlg._onDismiss = null;
+      if (dlg.open) dlg.close();
       resolve("");
-    }, { once: true });
+    };
+    dlg._onDismiss = dismiss;
+    dlg.querySelector("[data-dialog-close]").onclick = dismiss;
+    if (!dlg._dismissWired) {
+      dlg._dismissWired = true;
+      dlg.addEventListener("close", () => dlg._onDismiss?.());
+      dlg.addEventListener("toggle", (e) => { if (e.newState === "closed") dlg._onDismiss?.(); });
+    }
     opts.querySelectorAll("[data-whoami]").forEach((b) =>
       b.addEventListener("click", () => done(b.getAttribute("data-whoami")))
     );
