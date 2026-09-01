@@ -126,6 +126,7 @@
       releaseV1113();
       releaseV1105();
       releaseV1120();
+      releaseV1130();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -1791,7 +1792,7 @@
     check("the step cards send Route to the map and Day by Day to the timeline", () => {
       renderTripsScreen();
       const byTitle = (t) => [...document.querySelectorAll("#steps .step-card")]
-        .find((c) => c.querySelector("h3").textContent === t);
+        .find((c) => c.querySelector(".step-card__title").textContent === t);
       const day = byTitle("Day by Day"), route = byTitle("Route");
       if (!day || !route) return "step cards missing";
       // "Explore attractions" was removed in v1.11.1 — it only reopened the timeline.
@@ -3437,6 +3438,167 @@
       field.value = original;
       if (dlg.open) closeDialog(dlg);
       return stayedOpen ? true : "dialog closed and discarded typed input";
+    });
+  }
+
+  /* ===== v1.13.0 — the adopted half of the September journey review =====
+     Each check is a bug the review found and we confirmed in code. Everything that touches
+     state (the checklist undo, the rename) puts things back before returning. */
+  function releaseV1130() {
+    group("v1.13.0");
+
+    check("a dated trip files under its start date's year, not the typed one", () => {
+      /* A Feb-2027 trip saved with Year 2026 sat in the 2026 budget showing 2027 dates. */
+      const r1 = eq(tripYearFor("2027-02-10", "2026"), 2027, "dated");
+      if (r1 !== true) return r1;
+      return eq(tripYearFor("", "2026"), 2026, "undated keeps the typed year");
+    });
+
+    check("picking a start date fills Year and locks the field", () => {
+      openTripDialog();
+      const form = document.getElementById("form-trip");
+      form.year.value = "2026";
+      form.startDate.value = "2027-02-10";
+      form.startDate.dispatchEvent(new Event("input", { bubbles: true }));
+      const out = [
+        eq(form.year.value, "2027", "year"),
+        eq(form.year.readOnly, true, "readOnly"),
+        eq(document.getElementById("trip-year-hint").hidden, false, "hint shown"),
+      ].filter((r) => r !== true);
+      form.startDate.value = "";
+      form.startDate.dispatchEvent(new Event("input", { bubbles: true }));
+      const unlocked = eq(form.year.readOnly, false, "unlocks when the date is cleared");
+      closeDialog(document.getElementById("dialog-trip"));
+      return out.length ? out.join("; ") : unlocked;
+    });
+
+    check("the reservation type picker is a radiogroup and Edit focuses the current type", () => {
+      /* The <select> is aria-hidden, so AT heard nine plain buttons; and showModal() put the
+         keyboard on Flight while Hotel was the one lit. */
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      const item = { id: "probe-item", type: "hotel", title: "Probe", flightNo: "", departAirport: "",
+        arrivalAirport: "", date: "2027-02-10", endDate: "2027-02-12", startTime: "", endTime: "",
+        location: { name: "" }, confirmation: "", notes: "" };
+      openItemDialog(tripId, item);
+      const grid = document.getElementById("type-grid");
+      const opts = [...grid.querySelectorAll("[data-type-opt]")];
+      const hotel = opts.find((b) => b.getAttribute("data-type-opt") === "hotel");
+      const problems = [];
+      if (grid.getAttribute("role") !== "radiogroup") problems.push("grid is not a radiogroup");
+      if (opts.some((b) => b.getAttribute("role") !== "radio")) problems.push("an option is not role=radio");
+      if (hotel.getAttribute("aria-checked") !== "true") problems.push("Hotel not aria-checked");
+      const others = opts.filter((b) => b !== hotel && b.getAttribute("aria-checked") !== "false");
+      if (others.length) problems.push(`${others.length} other option(s) not aria-checked=false`);
+      if (document.activeElement !== hotel) {
+        problems.push(`focus is on ${document.activeElement?.getAttribute?.("data-type-opt") || document.activeElement?.tagName}, not Hotel`);
+      }
+      closeDialog(document.getElementById("dialog-item"));
+      return problems.length ? problems.join("; ") : true;
+    });
+
+    check("Who-are-you has a way out and does not save a name when you take it", () => {
+      /* It was the one dialog without Cancel, and Escape left ensureDeviceName's promise
+         hanging inside the Share flow. The resolve-on-close is async, so this asserts the
+         visible half and the persistence half; the promise is covered by the manual plan. */
+      const dlg = document.getElementById("dialog-whoami");
+      if (!dlg.querySelector("[data-dialog-close]")) return "no Cancel/close control in the dialog";
+      const before = getDeviceName();
+      openDialog(dlg);
+      dlg.querySelector("[data-dialog-close]").click();
+      const stillClosed = eq(dlg.open, false, "closed by the button");
+      if (stillClosed !== true) { closeDialog(dlg); return stillClosed; }
+      return eq(getDeviceName(), before, "device name untouched");
+    });
+
+    check("Escape keeps a half-filled sheet open but lets an untouched one go", () => {
+      /* The backdrop path had this guard since v1.10; Escape and Android Back (both `cancel`)
+         still threw typed input away. */
+      const dlg = document.getElementById("dialog-trip");
+      openTripDialog();
+      const clean = new Event("cancel", { cancelable: true });
+      dlg.dispatchEvent(clean);
+      const r1 = eq(clean.defaultPrevented, false, "clean form: cancel allowed");
+      dlg.querySelector('[name="name"]').value = "probe";
+      const dirty = new Event("cancel", { cancelable: true });
+      dlg.dispatchEvent(dirty);
+      const r2 = eq(dirty.defaultPrevented, true, "dirty form: cancel blocked");
+      dlg.querySelector('[name="name"]').value = "";
+      closeDialog(dlg);
+      return [r1, r2].filter((r) => r !== true).join("; ") || true;
+    });
+
+    check("who-are-you is exempt from the Escape guard", () => {
+      const dlg = document.getElementById("dialog-whoami");
+      openDialog(dlg);
+      dlg.querySelector('[name="name"]').value = "probe";
+      const ev = new Event("cancel", { cancelable: true });
+      dlg.dispatchEvent(ev);
+      dlg.querySelector('[name="name"]').value = "";
+      closeDialog(dlg);
+      return eq(ev.defaultPrevented, false, "whoami cancel must never be blocked");
+    });
+
+    check("each Trips step card is exactly one control", () => {
+      /* role=button div wrapping a real button with the same data-go: two overlapping targets. */
+      renderTripsScreen();
+      const cards = [...document.querySelectorAll("#steps .step-card")];
+      if (!cards.length) return "no step cards rendered";
+      const bad = cards.filter((c) => c.tagName !== "BUTTON" || c.querySelector("button, [role=button], [tabindex]"));
+      if (bad.length) return `${bad.length} card(s) are not a single <button>`;
+      const targets = document.querySelectorAll("#steps [data-go]").length;
+      return eq(targets, cards.length, "navigation targets per card");
+    });
+
+    check("deleting a checklist item offers Undo and Undo puts it back where it was", () => {
+      const probe = { id: "probe-undo-" + Date.now(), text: "probe item", done: false };
+      const snapshot = state.checklist.slice();
+      try {
+        state.checklist.splice(Math.min(1, state.checklist.length), 0, probe);
+        const index = state.checklist.indexOf(probe);
+        renderFamily();
+        const del = document.querySelector(`[data-chk-del="${probe.id}"]`);
+        if (!del) return "no delete button rendered for the probe";
+        del.click();
+        if (state.checklist.some((c) => c.id === probe.id)) return "item not removed";
+        const toast = document.getElementById("toast");
+        const btn = document.getElementById("toast-view");
+        if (toast.hidden) return "no toast after delete";
+        if (btn.hidden || btn.textContent.trim() !== "Undo") return `toast action is "${btn.textContent.trim()}", not Undo`;
+        btn.click();
+        const back = state.checklist.findIndex((c) => c.id === probe.id);
+        if (back < 0) return "Undo did not restore the item";
+        return eq(back, index, "restored index");
+      } finally {
+        state.checklist = snapshot;
+        saveState();
+        renderFamily();
+        document.getElementById("toast").hidden = true;
+      }
+    });
+
+    check("renaming a member is inline, never a prompt()", () => {
+      const members = [...document.querySelectorAll("#family-body .member")];
+      renderFamily();
+      const btn = document.querySelector("#family-body [data-member-edit]");
+      if (!btn) return skip("no members to rename in this data set");
+      const name = btn.getAttribute("data-member-edit");
+      const realPrompt = window.prompt;
+      let prompted = false;
+      window.prompt = () => { prompted = true; return null; };
+      try {
+        btn.click();
+        const input = document.querySelector("#family-body .member__edit");
+        if (prompted) return "rename still calls prompt()";
+        if (!input) return "no inline input appeared";
+        const r1 = eq(input.value, name, "prefilled with the current name");
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+        const still = state.trips.every((t) => !(t.travelers || []).includes(name)) ? "name lost after Escape" : true;
+        const gone = document.querySelector("#family-body .member__edit") ? "input still present after Escape" : true;
+        return [r1, still, gone].filter((r) => r !== true).join("; ") || true;
+      } finally {
+        window.prompt = realPrompt;
+        renderFamily();
+      }
     });
   }
 

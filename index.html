@@ -409,6 +409,8 @@ h1, h2, h3, h4, .brand__name {
   margin-bottom: 1.8rem;
 }
 .step-card {
+  /* A <button>, so reset the UA button look before the card look. */
+  appearance: none; font: inherit; color: inherit; cursor: pointer;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -421,9 +423,9 @@ h1, h2, h3, h4, .brand__name {
 @media (hover: hover) { .step-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); } }
 .step-card__icon { color: var(--heading); }
 .step-card__icon svg { width: 34px; height: 34px; }
-.step-card h3 { margin: 0; font-size: 1rem; }
-.step-card p { margin: 0; color: var(--muted); font-size: 0.82rem; flex: 1; }
-.step-card .btn { margin-top: 0.4rem; }
+.step-card__title { margin: 0; font-size: 1rem; font-weight: 700; font-family: var(--font-heading, inherit); color: var(--heading); }
+.step-card__desc { margin: 0; color: var(--muted); font-size: 0.82rem; flex: 1; }
+.step-card .step-card__cta { margin-top: 0.4rem; }
 
 .trip-cards {
   display: grid;
@@ -663,6 +665,7 @@ h1, h2, h3, .hero h1, .hero p {
 .member { display: flex; align-items: center; gap: 0.8rem; padding: 1rem 1.1rem; }
 .member .avatar { width: 46px; height: 46px; font-size: 1rem; }
 .member__name { font-weight: 600; }
+.member__edit { font: inherit; font-weight: 600; width: 100%; min-width: 7ch; padding: 0.15rem 0.4rem; border: 1px solid var(--brand); border-radius: 6px; background: var(--surface); color: inherit; }
 .member__trips { color: var(--muted); font-size: 0.82rem; }
 
 .member-trip { display: flex; align-items: center; gap: 0.8rem; padding: 0.9rem 1.1rem; margin-bottom: 0.7rem; }
@@ -894,6 +897,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .dialog { border: none; border-radius: var(--radius); padding: 0; max-width: 420px; width: calc(100% - 2rem); box-shadow: var(--shadow-lg); }
 .dialog--wide { max-width: 480px; }
 .dialog__hint { margin: 0 0 1rem; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
+.field__hint { display: block; margin-top: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+.field input[readonly] { background: var(--cream); color: var(--muted); }
 .dialog::backdrop { background: rgba(60, 42, 30, 0.4); backdrop-filter: blur(2px); }
 .dialog form { padding: 1.4rem; }
 .dialog__title { margin: 0 0 1rem; font-size: 1.15rem; }
@@ -1432,8 +1437,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .steps { display: flex !important; grid-template-columns: none; overflow-x: auto; gap: 0.5rem; margin: 0 -1rem; padding: 0.15rem 1rem 0.5rem; scrollbar-width: none; }
         .steps::-webkit-scrollbar { display: none; }
         .step-card { flex: none; display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.95rem; border-radius: 999px; box-shadow: var(--shadow); cursor: pointer; }
-        .step-card h3 { margin: 0; font-size: 0.82rem; white-space: nowrap; }
-        .step-card p, .step-card .btn { display: none; }
+        .step-card__title { margin: 0; font-size: 0.82rem; white-space: nowrap; }
+        .step-card__desc, .step-card .step-card__cta { display: none; }
         .step-card .step-card__icon svg { width: 18px; height: 18px; }
 
         /* Budget: snap-scroll stats + full-width primary actions */
@@ -1687,6 +1692,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <input type="text" dir="auto" name="name" maxlength="40" placeholder="e.g. Grandma" />
         </label>
         <div class="dialog__actions">
+          <!-- The only dialog that had no Cancel. Escape closed it but left ensureDeviceName's
+               promise hanging, so the Share flow awaiting it never continued. -->
+          <button type="button" class="btn btn--ghost" data-dialog-close>Not now</button>
           <button type="submit" class="btn btn--primary">That's me</button>
         </div>
       </form>
@@ -1851,7 +1859,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </div>
         <label class="field">
           <span class="field__label">Year</span>
+          <!-- Read-only once a start date is set: a Feb-2027 trip saved with Year 2026 filed
+               itself under the 2026 budget while showing 2027 dates. The Budget year filter keys
+               off this field, so the date is the only sensible source once there is one. -->
           <input type="number" name="year" min="2000" max="2100" required />
+          <span class="field__hint" id="trip-year-hint" hidden>Taken from the start date</span>
         </label>
         <label class="field">
           <span class="field__label">Budget (₪)</span>
@@ -2000,8 +2012,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label" id="item-trip-label">Trip</span>
           <div class="trip-choice" id="item-trip-choice"></div>
         </div>
-        <span class="field__label" style="display:block;margin-bottom:0.4rem">Type</span>
-        <div class="type-grid" id="type-grid"></div>
+        <span class="field__label" id="item-type-label" style="display:block;margin-bottom:0.4rem">Type</span>
+        <div class="type-grid" id="type-grid" role="radiogroup" aria-labelledby="item-type-label"></div>
         <select name="type" required hidden aria-hidden="true" tabindex="-1">
           <option value="flight">Flight</option>
           <option value="hotel">Hotel</option>
@@ -2089,7 +2101,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.12.0";
+const APP_VERSION = "v1.13.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -3448,6 +3460,18 @@ function setupDialogCloseHandlers() {
     });
   });
 
+  /* Escape and the Android Back gesture both arrive as `cancel`. The backdrop path below refuses
+     to discard a half-filled form; this one silently did. Same guard: a dirty form stays open.
+     Browsers only honour one prevented cancel in a row, so a second Escape still closes — a
+     deliberate double-press, not a stray one, is what loses the input. Who-are-you is exempt:
+     it is the one dialog that must always be escapable (see ensureDeviceName). */
+  document.querySelectorAll("dialog:not(#dialog-whoami)").forEach((dialog) => {
+    dialog.addEventListener("cancel", (e) => {
+      const sig = formSignature(dialog);
+      if (sig !== null && sig !== dialog.dataset.openSignature) e.preventDefault();
+    });
+  });
+
   /* Tap outside to dismiss. With a native <dialog>, a click on the backdrop
      reports the dialog itself as the target — clicks on content hit a child. */
   document.querySelectorAll("dialog").forEach((dialog) => {
@@ -3541,6 +3565,7 @@ function openTripDialog(trip = null) {
     form.budget.value = "";
     renderDestRows([]);
   }
+  syncTripYearField(form);
 
   openDialog($("dialog-trip"));
 }
@@ -3634,7 +3659,9 @@ function buildTypeGrid() {
   const grid = $("type-grid");
   if (!grid || grid.childElementCount) return;
   grid.innerHTML = ITEM_TYPES
-    .map((t) => `<button type="button" class="type-grid__opt" data-type-opt="${t}">${itemTypeIcon(t)}<span>${TYPE_GRID_LABELS[t]}</span></button>`)
+    /* role=radio + aria-checked: the real <select> is aria-hidden, so without this a screen
+       reader heard nine buttons and no selection. The trip chooser below already did this. */
+    .map((t) => `<button type="button" class="type-grid__opt" role="radio" aria-checked="false" data-type-opt="${t}">${itemTypeIcon(t)}<span>${TYPE_GRID_LABELS[t]}</span></button>`)
     .join("");
   grid.querySelectorAll("[data-type-opt]").forEach((b) =>
     b.addEventListener("click", () => {
@@ -3659,9 +3686,11 @@ function syncItemTypeFields() {
   const conf2 = form.querySelector('[data-item-group2="notflight"]');
   if (conf2) conf2.hidden = type === "flight";
   form.querySelector('[data-item-field="endDate"]').hidden = !(type === "flight" || type === "hotel");
-  $("type-grid")?.querySelectorAll("[data-type-opt]").forEach((b) =>
-    b.classList.toggle("is-active", b.getAttribute("data-type-opt") === type)
-  );
+  $("type-grid")?.querySelectorAll("[data-type-opt]").forEach((b) => {
+    const on = b.getAttribute("data-type-opt") === type;
+    b.classList.toggle("is-active", on);
+    b.setAttribute("aria-checked", String(on));
+  });
 }
 
 function openItemDialog(tripId, item = null, defaults = {}) {
@@ -3701,6 +3730,9 @@ function openItemDialog(tripId, item = null, defaults = {}) {
   buildTripChoice(defaults.chooseTrip ? tripId : null);
   syncItemTypeFields();
   openDialog($("dialog-item"));
+  /* showModal() lands on the first focusable control — Flight — so editing a Hotel had the
+     keyboard on the wrong chip while Hotel was the one highlighted. */
+  $("type-grid").querySelector(".type-grid__opt.is-active")?.focus();
 }
 
 /* Shown only when the dialog is opened from a screen that spans every trip — Bookings. From the
@@ -4092,12 +4124,26 @@ function handleFundsSubmit(e) {
   closeDialog($("dialog-funds"));
 }
 
+/* The year a trip files under. With a start date that is the date's year, whatever the field
+   says; only an undated trip keeps the typed year (those exist — "Add dates in Budget"). */
+function tripYearFor(startDate, typedYear) {
+  const fromDate = /^\d{4}-/.test(startDate || "") ? Number(startDate.slice(0, 4)) : NaN;
+  return Number.isFinite(fromDate) ? fromDate : Number(typedYear);
+}
+
+/* Mirror the derivation in the form so the user sees the year change as they pick the date. */
+function syncTripYearField(form) {
+  const dated = /^\d{4}-/.test(form.startDate.value);
+  if (dated) form.year.value = tripYearFor(form.startDate.value, form.year.value);
+  form.year.readOnly = dated;
+  $("trip-year-hint").hidden = !dated;
+}
+
 function handleTripSubmit(e) {
   e.preventDefault();
   const form = e.target;
   const id = form.tripId.value;
   const name = form.name.value.trim();
-  const year = Number(form.year.value);
   const budget = Number(form.budget.value);
 
   if (!name || budget < 0) return;
@@ -4106,6 +4152,7 @@ function handleTripSubmit(e) {
   const destination = destinations[0] || "";
   const startDate = form.startDate.value;
   const endDate = form.endDate.value;
+  const year = tripYearFor(startDate, form.year.value);
   const travelers = form.travelers.value.split(",").map((s) => s.trim()).filter(Boolean);
   if (startDate && endDate && endDate < startDate) {
     alert("End date must be after the start date.");
@@ -4245,6 +4292,10 @@ function bindEvents() {
 
   $("form-funds").addEventListener("submit", handleFundsSubmit);
   $("form-trip").addEventListener("submit", handleTripSubmit);
+  // Both events: desktop date inputs fire `input` per keystroke, Android's picker fires `change`.
+  ["input", "change"].forEach((ev) =>
+    $("form-trip").startDate.addEventListener(ev, () => syncTripYearField($("form-trip")))
+  );
   $("dest-add").addEventListener("click", () => renderDestRows([...readDestRows(), ""]));
   $("form-expense").addEventListener("submit", handleExpenseSubmit);
   $("form-item").addEventListener("submit", handleItemSubmit);
@@ -4885,13 +4936,16 @@ function renderTripsScreen() {
     (s.subtab ? ` data-subtab-target="${s.subtab}"` : "");
   $("steps").innerHTML = steps
     .map(
+      /* One <button> per card. It used to be a role=button div wrapping a second real button
+         with the same data-go — two overlapping targets announcing twice. The CTA is now a
+         styled span inside the one control. */
       (s) => `
-      <div class="step-card" data-go="${s.go}"${goAttrs(s)} role="button" tabindex="0">
+      <button type="button" class="step-card" data-go="${s.go}"${goAttrs(s)}>
         <span class="step-card__icon">${s.icon}</span>
-        <h3>${s.title}</h3>
-        <p>${s.desc}</p>
-        <button type="button" class="btn btn--secondary" data-go="${s.go}"${goAttrs(s)}>${s.cta}</button>
-      </div>`
+        <span class="step-card__title">${s.title}</span>
+        <span class="step-card__desc">${s.desc}</span>
+        <span class="btn btn--secondary step-card__cta" aria-hidden="true">${s.cta}</span>
+      </button>`
     )
     .join("");
 
@@ -4966,15 +5020,6 @@ function bindGoButtons(scope) {
       location.hash = "#" + b.getAttribute("data-go");
     };
     b.addEventListener("click", go);
-    /* .step-card is role="button" tabindex="0" but only had a click listener, so Enter
-       and Space did nothing — a broken ARIA promise. Buttons get this from the UA. */
-    if (b.getAttribute("role") === "button" && b.tagName !== "BUTTON") {
-      b.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter" && e.key !== " ") return;
-        e.preventDefault();
-        go();
-      });
-    }
   });
 }
 
@@ -6235,16 +6280,46 @@ function renderFamily() {
   bindSharedListActions(body, renderFamily);
 
   // Members are derived from trip travelers: rename/remove applies across all trips.
+  /* Inline, like the checklist edit — a prompt() on a phone hides the row you are renaming and
+     was the one system dialog left in the app. Enter/blur commits, Escape puts the name back. */
   body.querySelectorAll("[data-member-edit]").forEach((btn) =>
     btn.addEventListener("click", () => {
       const oldName = btn.getAttribute("data-member-edit");
-      const newName = (prompt(`Rename "${oldName}" to:`, oldName) || "").trim();
-      if (!newName || newName === oldName) return;
-      state.trips.forEach((t) => {
-        t.travelers = (t.travelers || []).map((n) => (n === oldName ? newName : n));
+      const card = btn.closest(".member");
+      const nameEl = card?.querySelector(".member__name");
+      if (!nameEl || card.querySelector(".member__edit")) return;
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "member__edit";
+      input.dir = "auto";
+      input.maxLength = 40;
+      input.value = oldName;
+      input.setAttribute("aria-label", `New name for ${oldName}`);
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+
+      let settled = false;
+      const commit = (save) => {
+        if (settled) return;         // blur fires again as the re-render tears the input out
+        settled = true;
+        const newName = input.value.trim();
+        if (save && newName && newName !== oldName) {
+          state.trips.forEach((t) => {
+            t.travelers = (t.travelers || []).map((n) => (n === oldName ? newName : n));
+          });
+          saveState();
+          render();
+        } else {
+          renderFamily();
+        }
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); commit(true); }
+        else if (e.key === "Escape") { e.preventDefault(); commit(false); }
       });
-      saveState();
-      render();
+      input.addEventListener("blur", () => commit(true));
     })
   );
   body.querySelectorAll("[data-member-del]").forEach((btn) =>
@@ -6321,14 +6396,28 @@ function bindSharedListActions(scope, rerender) {
     })
   );
 
+  /* The only delete in the app with no confirm — and it sits next to Edit in a 48px row. An
+     Undo toast is lighter than a confirm for something this cheap to put back. The item goes
+     back at its old index, with the same id, so a synced device sees a plain edit. */
   scope.querySelectorAll("[data-chk-del]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      state.checklist = state.checklist.filter((c) => c.id !== btn.getAttribute("data-chk-del"));
+      const id = btn.getAttribute("data-chk-del");
+      const index = state.checklist.findIndex((c) => c.id === id);
+      if (index < 0) return;
+      const [item] = state.checklist.splice(index, 1);
       saveState();
       rerender();
+      undoAction = () => {
+        const at = Math.min(index, state.checklist.length);
+        if (!state.checklist.some((c) => c.id === item.id)) state.checklist.splice(at, 0, item);
+        saveState();
+        rerender();
+      };
+      showToast(`Removed “${item.text}”`, "undo");
     })
   );
 }
+let undoAction = null;
 
 /* ---------- Appbar contextual actions ---------- */
 function bindShellEvents() {
@@ -6385,6 +6474,7 @@ function bindShellEvents() {
   $("toast-view").addEventListener("click", () => {
     $("toast").hidden = true;
     if (toastAction === "sync") window.VacationShare?.syncNow?.();
+    else if (toastAction === "undo") { undoAction?.(); undoAction = null; }
     else openChangesDialog();
   });
   $("toast-close").addEventListener("click", () => { $("toast").hidden = true; });
@@ -6497,11 +6587,21 @@ function ensureDeviceName() {
       .map((n) => `<button type="button" class="btn btn--outline" data-whoami="${escapeHtml(n)}">${escapeHtml(n)}</button>`)
       .join("");
     $("whoami-name-label").textContent = presets.length ? "Or type a name" : "Your name";
+    let settled = false;
     const done = (name) => {
+      if (settled) return;
+      settled = true;
       try { localStorage.setItem(DEVICE_NAME_KEY, name); } catch { /* private mode */ }
       dlg.close();
       resolve(name);
     };
+    /* Cancel, Escape or Android Back: resolve with no name so the caller continues (changes are
+       stamped "" until the next ask) and nothing is persisted, so it asks again next time. */
+    dlg.addEventListener("close", () => {
+      if (settled) return;
+      settled = true;
+      resolve("");
+    }, { once: true });
     opts.querySelectorAll("[data-whoami]").forEach((b) =>
       b.addEventListener("click", () => done(b.getAttribute("data-whoami")))
     );
@@ -6616,7 +6716,7 @@ function showToast(text, action) {
   announce(text);
   // An error toast has nothing to act on — only the dismiss button applies.
   $("toast-view").hidden = toastAction === "error";
-  $("toast-view").textContent = toastAction === "sync" ? "Sync" : "View";
+  $("toast-view").textContent = { sync: "Sync", undo: "Undo" }[toastAction] || "View";
   t.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, 8000);
