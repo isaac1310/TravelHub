@@ -1,7 +1,27 @@
 # TravelHub — review, blind spots, and open questions
 
-Written against v1.6.0. Everything in "Fixed" is verified in a browser; everything
-in "Open" is deliberately *not* done yet, with a recommendation.
+Written against v1.6.0; the status table below was added at v1.14.0. Everything in "Fixed"
+is verified in a browser; everything in "Open" was deliberately *not* done at the time, with
+a recommendation. The sections after the table are left as written — they are the record of
+what the app looked like then.
+
+---
+
+## 0. Status as of v1.14.0
+
+| Item (from §3 / §4 below) | Where it stands |
+|---|---|
+| Documents base64 in `localStorage` and every sync payload | **Removed in v1.11.0.** Attachments are gone; the 8 MB payload cap remains as a guard, not a wall |
+| No offline support | **Open.** Sync degrades cleanly and the itinerary is readable from `localStorage` while the tab is alive, but there is no service worker. Still the biggest product gap for use *while travelling* |
+| Conflict handling best-effort | **Open by decision** (Sept 2026 review): three-way merge (v1.11.0) plus the fetch-first check covers a family that does not edit simultaneously. The compare-and-swap save was considered and pushed back — it touches the only data path for a case that does not occur |
+| No way to revoke a share link | **Open.** `leaveRoom` exists; no `rotate_secret`. Family-only audience, so not scheduled |
+| Project-wide room-creation rate limit | **Open**, accepted for a family-only tool |
+| No tests | **Done.** In-browser self-test suite (`?selftest=1`, 257 checks at v1.14.0, groups per release), every new check mutation-tested; a per-release manual test plan under `tests/` for the phone |
+| RTL/Hebrew untested | **Partly.** Inputs are `dir="auto"` and the suite covers RTL text handling; the full interface is still LTR-first |
+| Q1 — phone dies mid-trip | Shared rooms are the backup; local-only devices have Export. No automatic backup |
+| Q2 — what happens when a trip ends | **Answered in v1.14.0:** finished trips fold under *Past trips*, a trip can be marked *cancelled*, Budget deliberately keeps every trip for the year filter and the year-end roll |
+| Q3 — who is this for | **Answered:** the family. Auth, roles and a record-level data model are out of scope by decision |
+| Q4 — is 8 MB real | Moot since attachments left the payload |
 
 ---
 

@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.11.2**.
+Every user-reachable action in the app, as of **v1.14.0**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -36,14 +36,17 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Delete a trip | inside the trip dialog (cascades to its reservations) |
 | Step cards | Day by Day · Route · Checklist · Reservations. **"Explore attractions" was removed in v1.11.1** — it only reopened the timeline, a third door to a room you were already in; real discovery moves to v2 as a Google Maps import. **Route opens the Maps sub-tab** — *fixed v1.11.0*; the itinerary cards previously all landed on the timeline, so "see the trip in route mode" described a view it did not open. The itinerary ones carry `data-trip-id` for the **featured** trip — *fixed v1.10.3*; they previously only set the hash, so once the switcher tabs had been used they opened whichever trip was last viewed. Enter and Space activate them (they are `role="button"`) |
 | **Trip timing badge** | Every card shows `in 43 days` / `Travelling now · day 2 of 4` / `Ended Dec 2026` — *added v1.11.0*, from one shared `tripTiming()` the hero also uses. Compared against a **local** date; `todayISO()` is UTC and names yesterday between midnight and 03:00 in Israel |
-| **Trip order** | One order on every screen — travelling, then soonest, then finished (most recent first), then undated — *v1.11.0*, replacing five sorts that disagreed. `featuredTrip()` follows it, so it is no longer the first dated trip in array order |
+| **Trip order** | One order on every screen — travelling, then soonest, then finished (most recent first), then undated — *v1.11.0*, replacing five sorts that disagreed. `featuredTrip()` follows it, so it is no longer the first dated trip in array order. Since *v1.14.0* a **cancelled** trip sorts with the finished ones whatever its dates, and `featuredTrip()` never picks one |
+| **Past trips fold** | *v1.14.0*. Trips that are finished (`tripTiming` past) **or cancelled** — one predicate, `tripArchived()` — render inside `#past-trips`, a static `<details class="past-fold">` under the live cards, closed by default at every width. Only its inner div is re-rendered, so the open state survives. Hidden when nothing is archived; when everything is, the live area says "No upcoming trips — your finished trips are below". Budget and Family are deliberately **not** folded: the year filter is how you look back, and the year-end roll must keep seeing every trip |
+| **Cancelled trip** | *v1.14.0*. A checkbox in `dialog-trip`, **edit only** (`#trip-cancelled-field`), stored as `trip.cancelled` (strict boolean in `normalizeTripMeta`). The card badge reads `Cancelled` instead of a countdown (`tag--cancelled`); the Bookings picker leaves it out; its budget and expenses stay in Budget. Sync reports `cancelled trip X` / `reinstated trip X` |
+| **Today card** | *v1.14.0*. While the featured trip is travelling the hero carries `#hero-today` (`renderTodayCard(trip, todayIso, nowMin)`, pure): **Now** = the timed entry in progress (an entry without an end time lasts until the next one starts), **Next** = the first one still to come, **Tonight** = the hotel whose stay covers tonight (`tonightHotel`, not `tripHotelForDay` — that would name the hotel you left this morning), "Also today" lists untimed entries (two, then `+n more`). Empty day → "Nothing planned today" + `data-today-add` (opens the reservation sheet on today); after the last item → "Done for today" and tomorrow's first entry, or "Last day of the trip". **Full day** is a `data-go` button with `data-day-target`, landing on today's day of the timeline. Refreshed every 60 s and on `visibilitychange`. Local clock only (`todayLocalISO`, `nowMinutes`) |
 | Year filter | all years / a specific year |
 
 ## Itinerary
 
 | Action | Wiring |
 |---|---|
-| Switch trip | Underline **tabs**, `data-trip` — restyled *v1.11.0*. Both switchers now honour the tab contract they had only declared: `aria-selected`, one focusable tab per list, ←/→/Home/End, `aria-controls` → a real `role="tabpanel"`. Focus follows an activation and is not stolen by the ~11 unrelated callers of `renderItinerary()` |
+| Switch trip | Underline **tabs**, `data-trip` — restyled *v1.11.0*. Since *v1.14.0* finished and cancelled trips sit behind a **`Past trips (N)`** toggle (`data-switcher-past`, a plain button — not `role=tab`, so it stays out of the arrow-key roving; `itinerarySwitcherShowPast`), forced open when the selected trip is itself archived. Both switchers now honour the tab contract they had only declared: `aria-selected`, one focusable tab per list, ←/→/Home/End, `aria-controls` → a real `role="tabpanel"`. Focus follows an activation and is not stolen by the ~11 unrelated callers of `renderItinerary()` |
 | Timeline ↔ Maps | `data-subtab`, in the **sticky header** alongside the day strip — *v1.11.0*. Both the app bar's and the header's heights are measured and published (`--appbar-h`, `--itin-sticky-h`), so `.day`'s scroll-margin and the drag auto-scroll edge derive from them instead of hardcoded numbers that drift. The header sticks at `top: var(--appbar-h)`: the app bar is **also** `position: sticky; top: 0`, so at `top: 0` this slid underneath it and hid the toggle — which on the map tab read as the map covering the header. Switching view also resets the scroll to the top of the header |
 | Jump to a day | date strip, `data-strip-day` → selects + scrolls. Deliberately does NOT unfold (v1.10.1) |
 | **The strip follows the scroll** | *v1.11.0*. The active chip tracks the day under the sticky header and scrolls itself into view; `timelineDayIso` follows, so the FAB pre-fills the day you are looking at. Suppressed during a tap-to-jump and during a v1.10.2 drag, and it **never** calls `renderItinerary`. A rAF-throttled scroll listener, not an `IntersectionObserver` — the observer never fires in this project's browser harness, and shipping the one thing that could not be verified is how two earlier bugs happened |
@@ -57,6 +60,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Delete a reservation | `data-delete-item`, and ⋯ → Delete |
 | ⋯ action sheet | `dialog-item-actions`: Edit · Move up · Move down · **Open in Google Maps** · Delete |
 | Geocode a place | `data-locate-item` ("Locate") |
+| **Import a place from Google Maps** | *v1.14.0*. Paste a Maps link into **either** the name field or Location; `parseMapsPaste()` → `applyMapsPaste()` fills the location name and the pin, and the title too when it is empty or is the pasted URL (a typed title is kept). Shapes: `/place/<name>/@lat,lng`, `/search/<name>/`, `?q=<name>,lat,lng`, `!3d!4d`, bare `lat, lng`, DMS. A **short link** (`maps.app.goo.gl`, `goo.gl/maps`, `g.co`) carries no coordinates and cannot be expanded (CSP `connect-src`, CORS) — the sheet says so and asks for the full URL, and Photon is **not** asked to search the URL text. Save skips geocoding when a pin is present |
 | Filter the map by day | day chips in the same format as the timeline's — day-of-week over the date, same tile, one scrolling line — plus `All`. `mapDayFilter`. The day travels with you between Timeline and Maps: scroll or tap a day, switch tabs, and the other view opens on it. Only a day you *chose* carries — the scroll spy sets one on arrival, and carrying that would stop Maps ever opening on the whole route |
 | **Tap a stop to focus it** | `data-focus-stop` on the row body — *v1.10.1*. Centres the map and opens that pin; the Locate and Maps buttons sit outside it. The v1.10.0 carousel was removed (it never rendered) |
 | Collapse/expand the stops sheet | tap `.map-list__title` (≤900px, and only while the filter is "All" — a selected day lists in full) |
@@ -85,7 +89,8 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 
 | Action | Wiring |
 |---|---|
-| Appbar **+** | Adds what the screen is made of: a trip on Trips, a reservation on Bookings and Itinerary, funds on Budget, a checklist item on Family. On Bookings it asks which trip — a one-line scrolling row of buttons, not a select, upcoming and in-progress trips only — you do not book a holiday you have already taken; seeing past bookings is a v2 item — and prefills the type from the active filter |
+| Appbar **+** | Adds what the screen is made of: a trip on Trips, a reservation on Bookings and Itinerary, funds on Budget, a checklist item on Family. On Bookings it asks which trip — a one-line scrolling row of buttons, not a select, upcoming and in-progress trips only (`tripArchived()` — since *v1.14.0* that excludes **cancelled** trips too) — you do not book a holiday you have already taken — and prefills the type from the active filter |
+| **Past trips fold** | *v1.14.0*. Reservations of finished and cancelled trips render inside `#bookings-past` (`.past-fold`) after the live groups; `bookingsPastOpen` remembers the open state across the wholesale re-render. The type chips still count folded reservations, so a filter that only matches old bookings shows the fold, not a dead end |
 | Filter by type | One chip per type actually present, each with a count, single-select. "Other" means the literal `other` type — it used to sweep up six of the eight |
 | Open a reservation | **Tap the card** — *fixed v1.11.0*. `data-item` + `openItemDialog`, the same gesture the timeline learned in v1.10.2. This row previously claimed the cards routed into the itinerary; in fact nothing was bound at all |
 
@@ -110,18 +115,19 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.11.2 · <sha>` — selectable |
+| Build version | `TravelHub v1.14.0 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
-missing-room recovery · storage-quota warning.
+missing-room recovery · storage-quota warning. The What's-new list names `cancelled trip X` /
+`reinstated trip X` alongside the other trip edits — *v1.14.0*.
 
 ## Dialogs, and what opens each
 
 | Dialog | Opened by |
 |---|---|
-| `dialog-trip` | Add trip · Edit trip (hero, cards, **itinerary**) |
-| `dialog-item` | Add/edit reservation |
+| `dialog-trip` | Add trip · Edit trip (hero, cards, **itinerary**). Edit also offers the **Trip cancelled** checkbox — *v1.14.0* |
+| `dialog-item` | Add/edit reservation · **Add to today** on the Today card. Accepts a pasted Google Maps link in the name or Location field — *v1.14.0* |
 | `dialog-item-actions` | ⋯ on a reservation |
 | `dialog-expense` | Add/edit expense |
 | `dialog-funds` | Add funds |
@@ -188,7 +194,7 @@ Since *v1.11.0*:
 
 ## Diagnostics
 
-`?selftest=1` runs 209 checks and prints a pass/skip/fail panel. **A skip is reported
+`?selftest=1` runs 257 checks (groups up to `v1.14.0`) and prints a pass/skip/fail panel. **A skip is reported
 separately and never counted as a pass** — *v1.11.0*. Two checks used to `return true` early at
 desktop width, so a desktop run showed them green without exercising anything. Run the suite at
 **412px** for full coverage. It refuses to run while joined to

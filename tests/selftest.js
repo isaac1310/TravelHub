@@ -127,6 +127,7 @@
       releaseV1105();
       releaseV1120();
       releaseV1130();
+      releaseV1140();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -3599,6 +3600,364 @@
         window.prompt = realPrompt;
         renderFamily();
       }
+    });
+  }
+
+  /* ===== v1.14.0 — Past trips, Import place, Today card =====
+     Everything that touches state backs it up and puts it back. Time-dependent checks pass a
+     fixed clock (REF / nowMin) rather than reading the real one. */
+  function releaseV1140() {
+    group("v1.14.0");
+
+    const REF = "2026-06-15";
+    const shift = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return isoOf(d); };
+    const mk = (name, s, e, over) => makeTrip({ id: "t-" + name, name, startDate: s, endDate: e, ...(over || {}) });
+    const item = (over) => normalizeItem({ id: "it-" + Math.random().toString(36).slice(2, 8), tripId: "t-now", type: "attraction",
+      title: "x", date: "", endDate: "", startTime: "", endTime: "", location: { name: "", lat: null, lng: null }, ...over });
+    const withTrips = (trips, items, fn) => {
+      const bt = state.trips, bi = state.items, bId = itineraryTripId, bPast = itinerarySwitcherShowPast;
+      state.trips = trips; state.items = items || [];
+      try { return fn(); }
+      finally { state.trips = bt; state.items = bi; itineraryTripId = bId; itinerarySwitcherShowPast = bPast; render(); }
+    };
+
+    /* ---- foundation: the cancelled flag ---- */
+
+    check("normalizeTripMeta coerces cancelled to a strict boolean, idempotently", () => {
+      const cases = [[undefined, false], [true, true], ["true", false], [1, false], [false, false]];
+      for (const [input, want] of cases) {
+        const t = makeTrip({ cancelled: input });
+        normalizeTripMeta(t);
+        if (t.cancelled !== want) return `cancelled=${JSON.stringify(input)} became ${t.cancelled}, wanted ${want}`;
+        normalizeTripMeta(t);
+        if (t.cancelled !== want) return "a second normalize changed the flag";
+      }
+      return true;
+    });
+
+    check("tripArchived: finished by dates, cancelled by flag, upcoming and undated stay live", () => {
+      const r = [
+        eq(tripArchived(mk("a", "2026-06-01", "2026-06-10"), REF), true, "ended trip"),
+        eq(tripArchived(mk("b", "2026-07-01", "2026-07-05", { cancelled: true }), REF), true, "cancelled future trip"),
+        eq(tripArchived(mk("c", "2026-07-01", "2026-07-05"), REF), false, "upcoming trip"),
+        eq(tripArchived(mk("d", "2026-06-14", "2026-06-16"), REF), false, "travelling trip"),
+        eq(tripArchived(mk("e", "", ""), REF), false, "undated trip"),
+        eq(tripArchived(mk("f", "", "", { cancelled: true }), REF), true, "undated but cancelled"),
+      ].filter((x) => x !== true);
+      return r.length ? r.join("; ") : true;
+    });
+
+    check("a cancelled future trip sorts with the finished ones", () => {
+      const today = todayLocalISO();
+      const trips = [
+        mk("past", shift(today, -10), shift(today, -8)),
+        // Starts BEFORE "soon": by dates alone it would sort second, so this only passes if
+        // the flag is what moves it into the finished block.
+        mk("cancelled", shift(today, 2), shift(today, 4), { cancelled: true }),
+        mk("soon", shift(today, 5), shift(today, 9)),
+        mk("now", shift(today, -1), shift(today, 1)),
+      ];
+      return eq(sortTripsByUpcoming(trips).map((t) => t.name).join(","), "now,soon,cancelled,past", "order");
+    });
+
+    check("featuredTrip never features a cancelled trip, even one travelling today", () => {
+      const today = todayLocalISO();
+      return withTrips([
+        mk("cancelled", shift(today, -1), shift(today, 1), { cancelled: true }),
+        mk("soon", shift(today, 5), shift(today, 9)),
+      ], [], () => eq(featuredTrip()?.name, "soon", "featured"));
+    });
+
+    check("the trip dialog shows the Cancelled box only when editing, and saving round-trips it", () => {
+      const today = todayLocalISO();
+      const trip = mk("edit-me", shift(today, 5), shift(today, 9));
+      return withTrips([trip], [], () => {
+        openTripDialog();
+        const field = document.getElementById("trip-cancelled-field");
+        const hiddenOnNew = field.hidden;
+        closeDialog(document.getElementById("dialog-trip"));
+        if (!hiddenOnNew) return "the Cancelled box is offered on a new trip";
+        openTripDialog(trip);
+        if (field.hidden) return "the Cancelled box is hidden when editing";
+        const form = document.getElementById("form-trip");
+        form.cancelled.checked = true;
+        form.requestSubmit();
+        if (state.trips[0].cancelled !== true) return "ticking the box did not save cancelled=true";
+        openTripDialog(state.trips[0]);
+        if (!form.cancelled.checked) return "the box did not reflect the saved flag";
+        form.cancelled.checked = false;
+        form.requestSubmit();
+        return eq(state.trips[0].cancelled, false, "unticked and saved");
+      });
+    });
+
+    check("diffStates reports cancelling and reinstating a trip", () => {
+      const base = { ...state, trips: [mk("Rome", "2026-07-01", "2026-07-05")], items: [], checklist: [] };
+      const after = { ...base, trips: [mk("Rome", "2026-07-01", "2026-07-05", { cancelled: true })] };
+      const texts = (a, b) => diffStates(a, b).map((c) => c.text).join(" | ");
+      const r1 = /cancelled trip Rome/.test(texts(base, after)) ? true : `cancel not reported: ${texts(base, after)}`;
+      const r2 = /reinstated trip Rome/.test(texts(after, base)) ? true : `reinstate not reported: ${texts(after, base)}`;
+      return [r1, r2].filter((x) => x !== true).join("; ") || true;
+    });
+
+    check("a cancelled card says Cancelled instead of counting down", () => {
+      const html = renderTripOverviewCard(mk("c", shift(todayLocalISO(), 5), shift(todayLocalISO(), 9), { cancelled: true }));
+      if (!/tag--cancelled/.test(html)) return "no Cancelled badge";
+      return /in \d+ days/.test(html) ? "the countdown is still shown" : true;
+    });
+
+    /* ---- A: the fold ---- */
+
+    check("Trips files finished and cancelled trips under Past trips, live ones above", () => {
+      const today = todayLocalISO();
+      return withTrips([
+        mk("past", shift(today, -10), shift(today, -8)),
+        mk("soon", shift(today, 5), shift(today, 9)),
+        mk("cancelled", shift(today, 20), shift(today, 24), { cancelled: true }),
+      ], [], () => window.__withScreenVisible("screen-trips", renderTripsScreen, () => {
+        const names = (sel) => [...document.querySelectorAll(`${sel} .tripcard h3`)].map((h) => h.textContent).join(",");
+        const fold = document.getElementById("past-trips");
+        return [
+          eq(names("#trip-cards"), "soon", "live cards"),
+          eq(names("#trip-cards-past"), "cancelled,past", "past cards"),
+          eq(fold.hidden, false, "fold shown"),
+          eq(document.getElementById("past-trips-count").textContent, "2", "count"),
+        ].filter((x) => x !== true).join("; ") || true;
+      }));
+    });
+
+    check("the Past trips fold is hidden when nothing is archived, and stays open across a re-render", () => {
+      const today = todayLocalISO();
+      const fold = document.getElementById("past-trips");
+      const r1 = withTrips([mk("soon", shift(today, 5), shift(today, 9))], [], () => {
+        renderTripsScreen();
+        return eq(fold.hidden, true, "hidden with nothing archived");
+      });
+      if (r1 !== true) return r1;
+      return withTrips([mk("past", shift(today, -10), shift(today, -8)), mk("soon", shift(today, 5), shift(today, 9))], [], () => {
+        renderTripsScreen();
+        if (fold.hidden) return "fold hidden although a past trip exists";
+        fold.open = true;
+        renderTripsScreen();
+        const r = eq(fold.open, true, "open survives re-render");
+        fold.open = false;
+        return r;
+      });
+    });
+
+    check("the Bookings picker leaves cancelled trips out", () => {
+      const today = todayLocalISO();
+      return withTrips([
+        mk("soon", shift(today, 5), shift(today, 9)),
+        mk("cancelled", shift(today, 20), shift(today, 24), { cancelled: true }),
+      ], [], () => {
+        buildTripChoice("t-soon");
+        const names = [...document.querySelectorAll("[data-trip-choice]")].map((b) => b.getAttribute("data-trip-choice"));
+        return names.includes("t-cancelled") ? `picker offers the cancelled trip: ${names.join(",")}` : eq(names.join(","), "t-soon", "offered");
+      });
+    });
+
+    check("Bookings folds a past trip's reservations and still counts them in the chips", () => {
+      const today = todayLocalISO();
+      const trips = [mk("past", shift(today, -10), shift(today, -8)), mk("soon", shift(today, 5), shift(today, 9))];
+      const items = [
+        item({ tripId: "t-past", type: "hotel", title: "Old hotel", date: shift(today, -10), endDate: shift(today, -8) }),
+        item({ tripId: "t-soon", type: "hotel", title: "New hotel", date: shift(today, 5), endDate: shift(today, 9) }),
+      ];
+      const bf = bookingsFilter;
+      return withTrips(trips, items, () => {
+        try {
+          bookingsFilter = "all";
+          renderBookings();
+          const fold = document.getElementById("bookings-past");
+          if (!fold) return "no Past trips fold on Bookings";
+          if (!fold.querySelector(".booking-group__title")?.textContent.includes("past")) return "the past trip is not inside the fold";
+          if (document.querySelector("#bookings-body > .booking-group")?.textContent.includes("past")) return "the past trip is also listed live";
+          const all = document.querySelector('[data-bookings-filter="all"] .filter-chip__count')?.textContent;
+          return eq(all, "2", "All chip counts folded bookings too");
+        } finally { bookingsFilter = bf; }
+      });
+    });
+
+    check("the Itinerary switcher hides past trips behind Past trips (N) and opens it for a selected past trip", () => {
+      const today = todayLocalISO();
+      const trips = [mk("past", shift(today, -10), shift(today, -8)), mk("soon", shift(today, 5), shift(today, 9))];
+      return withTrips(trips, [], () => {
+        itinerarySwitcherShowPast = false;
+        itineraryTripId = "t-soon";
+        renderItinerary();
+        const sw = document.getElementById("itinerary-switcher");
+        const tabs = () => [...sw.querySelectorAll("[data-trip]")].map((b) => b.getAttribute("data-trip")).join(",");
+        const toggle = sw.querySelector("[data-switcher-past]");
+        if (!toggle) return "no Past trips toggle";
+        if (tabs() !== "t-soon") return `tabs while folded: ${tabs()}`;
+        if (toggle.getAttribute("role") === "tab") return "the toggle is a tab and would join the arrow-key roving";
+        itineraryTripId = "t-past";
+        renderItinerary();
+        return eq(tabs(), "t-soon,t-past", "tabs when the selected trip is past");
+      });
+    });
+
+    /* ---- B: Import place from a Google Maps paste ---- */
+
+    check("parseMapsPaste reads a full Maps URL into a name and a pin", () => {
+      const a = parseMapsPaste("https://www.google.com/maps/place/Eiffel+Tower/@48.8583,2.2944,17z/data=!3m1");
+      const b = parseMapsPaste("https://www.google.com/maps/search/Le+Comptoir+du+Relais/@48.8531,2.3387,17z");
+      const c = parseMapsPaste("https://maps.google.com/?q=Sacr%C3%A9-C%C5%93ur,48.8867,2.3431");
+      const r = [
+        eq(a && a.kind, "place", "a.kind"), eq(a && a.name, "Eiffel Tower", "a.name"), eq(a && a.lat, 48.8583, "a.lat"),
+        eq(b && b.name, "Le Comptoir du Relais", "b.name (search)"),
+        eq(c && c.kind, "place", "c.kind (q=)"), eq(c && c.name, "Sacré-Cœur", "c.name"),
+      ].filter((x) => x !== true);
+      return r.length ? r.join("; ") : true;
+    });
+
+    check("parseMapsPaste flags a short link, gives bare coordinates no name, and ignores plain text", () => {
+      const r = [
+        eq(parseMapsPaste("https://maps.app.goo.gl/AbC12dEf")?.kind, "short", "maps.app.goo.gl"),
+        eq(parseMapsPaste("https://goo.gl/maps/xyz")?.kind, "short", "goo.gl/maps"),
+        eq(parseMapsPaste("48.8583, 2.2944")?.kind, "coords", "bare coords"),
+        eq(parseMapsPaste("London Eye"), null, "plain text"),
+      ].filter((x) => x !== true);
+      return r.length ? r.join("; ") : true;
+    });
+
+    check("pasting a Maps link into the name field fills name, location and pin; a typed name is kept", () => {
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      const url = "https://www.google.com/maps/place/Eiffel+Tower/@48.8583,2.2944,17z";
+      openItemDialog(tripId);
+      const form = document.getElementById("form-item");
+      try {
+        form.title.value = url;
+        form.title.dispatchEvent(new Event("input", { bubbles: true }));
+        const r1 = [
+          eq(form.title.value, "Eiffel Tower", "title"),
+          eq(form.locationName.value, "Eiffel Tower", "location"),
+          eq(form.locLat.value, "48.8583", "lat"),
+        ].filter((x) => x !== true);
+        if (r1.length) return r1.join("; ");
+        form.title.value = "Dinner";
+        form.locationName.value = url;
+        form.locationName.dispatchEvent(new Event("input", { bubbles: true }));
+        return [
+          eq(form.title.value, "Dinner", "typed title kept"),
+          eq(form.locationName.value, "Eiffel Tower", "location from paste"),
+        ].filter((x) => x !== true).join("; ") || true;
+      } finally { closeDialog(document.getElementById("dialog-item")); }
+    });
+
+    check("a short Maps link shows the open-and-copy guidance and does not search Photon", () => {
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      openItemDialog(tripId);
+      const form = document.getElementById("form-item");
+      try {
+        const timerBefore = locSuggestTimer;
+        form.locationName.value = "https://maps.app.goo.gl/AbC12dEf";
+        form.locationName.dispatchEvent(new Event("input", { bubbles: true }));
+        const el = document.getElementById("loc-suggest");
+        if (el.hidden || !/short/i.test(el.textContent)) return `no guidance shown: "${el.textContent.trim().slice(0, 60)}"`;
+        if (form.locLat.value) return "a short link produced a pin";
+        // The paste branch returns before the Photon timer is (re)armed, so the handle is unchanged.
+        return locSuggestTimer === timerBefore ? true : "a Photon search was scheduled for the URL";
+      } finally { closeDialog(document.getElementById("dialog-item")); }
+    });
+
+    /* ---- C: the Today card ---- */
+
+    const dayTrip = () => mk("now", "2026-06-14", "2026-06-16");
+    const timed = (title, s, e, over) => item({ title, date: "2026-06-15", startTime: s, endTime: e || "", ...(over || {}) });
+    const card = (items, nowMin, trip) => withTrips([trip || dayTrip()], items, () => renderTodayCard(trip || dayTrip(), "2026-06-15", nowMin));
+    const rowOf = (html, label) => { const m = html.match(new RegExp(`data-today-row="${label}"[\\s\\S]*?today__title">([^<]*)`)); return m ? m[1].trim() : ""; };
+
+    check("Today: the item in progress is Now and the following one is Next", () => {
+      const html = card([timed("Louvre", "09:00", "11:00"), timed("Lunch", "12:30", "14:00")], 10 * 60);
+      return [eq(rowOf(html, "now"), "Louvre", "Now"), eq(rowOf(html, "next"), "Lunch", "Next")].filter((x) => x !== true).join("; ") || true;
+    });
+
+    check("Today: an item without an end time stays Now until the next one starts; in a gap nothing is Now", () => {
+      const a = card([timed("Walk", "09:00"), timed("Lunch", "12:30")], 11 * 60);
+      const b = card([timed("Walk", "09:00"), timed("Lunch", "12:30")], 12 * 60 + 45);
+      const c = card([timed("Museum", "09:00", "10:00"), timed("Lunch", "12:00")], 11 * 60);
+      return [
+        eq(rowOf(a, "now"), "Walk", "open-ended Now"),
+        eq(rowOf(b, "now"), "Lunch", "Now after the next start"), eq(rowOf(b, "next"), "", "no Next after the last"),
+        eq(rowOf(c, "now"), "", "gap: no Now"), eq(rowOf(c, "next"), "Lunch", "gap: Next"),
+      ].filter((x) => x !== true).join("; ") || true;
+    });
+
+    check("Today: after the last item it says done, shows tomorrow's first item, or the last day", () => {
+      const items = [timed("Museum", "09:00", "10:00"), item({ title: "Boat", date: "2026-06-16", startTime: "10:00" })];
+      const a = card(items, 23 * 60);
+      const last = mk("now", "2026-06-13", "2026-06-15");
+      const b = withTrips([last], [timed("Museum", "09:00", "10:00")], () => renderTodayCard(last, "2026-06-15", 23 * 60));
+      return [
+        /Done for today/.test(a) ? true : "no Done for today",
+        eq(rowOf(a, "tomorrow"), "Boat", "Tomorrow row"),
+        /Last day of the trip/.test(b) ? true : "no Last day text",
+        rowOf(b, "tomorrow") ? "a Tomorrow row on the last day" : true,
+      ].filter((x) => x !== true).join("; ") || true;
+    });
+
+    check("Today: an empty day offers Add to today, prefilled with the date", () => {
+      const html = card([], 10 * 60);
+      if (!/Nothing planned today/.test(html) || !/data-today-add/.test(html)) return "no empty-day prompt";
+      // Now the real thing: a trip spanning the real today, rendered in the hero, and the button tapped.
+      const today = todayLocalISO();
+      const trip = mk("live", shift(today, -1), shift(today, 1));
+      return withTrips([trip], [], () => {
+        renderTripsScreen();
+        const btn = document.querySelector("#trips-hero [data-today-add]");
+        if (!btn) return "no Add to today button in the hero";
+        btn.click();
+        const form = document.getElementById("form-item");
+        try {
+          return [eq(form.date.value, today, "date"), eq(form.tripId.value, "t-live", "trip")].filter((x) => x !== true).join("; ") || true;
+        } finally { closeDialog(document.getElementById("dialog-item")); }
+      });
+    });
+
+    check("Today: Tonight is the hotel whose stay covers tonight, not the one you check out of", () => {
+      const h1 = item({ type: "hotel", title: "Old hotel", date: "2026-06-13", endDate: "2026-06-15", endTime: "11:00" });
+      const h2 = item({ type: "hotel", title: "New hotel", date: "2026-06-15", endDate: "2026-06-17", startTime: "15:00" });
+      const a = card([h1, h2], 9 * 60);
+      const b = card([h1], 9 * 60);
+      return [
+        eq(rowOf(a, "tonight"), "New hotel", "Tonight"),
+        eq(rowOf(a, "next"), "Check-out · Old hotel", "check-out is Next before 11:00"),
+        eq(rowOf(b, "tonight"), "", "no Tonight after checking out"),
+      ].filter((x) => x !== true).join("; ") || true;
+    });
+
+    check("Today: untimed items are listed as also today, capped at two", () => {
+      const html = card([timed("Louvre", "09:00", "11:00"), item({ id: "u-1", title: "A", date: "2026-06-15" }), item({ id: "u-2", title: "B", date: "2026-06-15" }), item({ id: "u-3", title: "C", date: "2026-06-15" })], 10 * 60);
+      const m = html.match(/Also today: ([^<]*)/);
+      return m ? eq(m[1].trim(), "A, B +1 more", "also today") : "no Also today line";
+    });
+
+    check("the hero carries the Today card only while travelling, and Full day opens today's timeline", () => {
+      const today = todayLocalISO();
+      const r1 = withTrips([mk("later", shift(today, 5), shift(today, 9))], [], () => {
+        renderTripsScreen();
+        return document.getElementById("hero-today") ? "Today card shown for an upcoming trip" : true;
+      });
+      if (r1 !== true) return r1;
+      const hash = location.hash, sub = itinerarySubTab, day = timelineDayIso;
+      try {
+        return withTrips([mk("live", shift(today, -1), shift(today, 1))], [], () => {
+          renderTripsScreen();
+          const full = document.querySelector("#hero-today [data-go=itinerary]");
+          if (!full) return "no Today card / Full day button while travelling";
+          if (full.getAttribute("data-day-target") !== today) return "Full day does not target today";
+          full.click();
+          return [eq(itineraryTripId, "t-live", "trip"), eq(itinerarySubTab, "timeline", "sub-tab"), eq(timelineDayIso, today, "day")]
+            .filter((x) => x !== true).join("; ") || true;
+        });
+      } finally { location.hash = hash; itinerarySubTab = sub; timelineDayIso = day; }
+    });
+
+    check("Today rows link to Google Maps by coordinates", () => {
+      const html = card([timed("Louvre", "09:00", "11:00", { location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } })], 10 * 60);
+      return /query=48\.8606,2\.3376/.test(html) ? true : "no coordinate Maps link in the Now row";
     });
   }
 

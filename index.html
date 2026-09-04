@@ -400,6 +400,20 @@ h1, h2, h3, h4, .brand__name {
 .hero .pill { background: rgba(255,255,255,0.9); color: var(--brand-text); }
 @media (hover: hover) { .hero .pill:hover { background: #fff; } }
 .hero__travellers { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+/* Today card (v1.14.0), inside the hero while travelling. A white panel on the salmon so the
+   text can be the normal charcoal-on-white and Maps links stay legible. */
+.hero__today { margin-top: 1.1rem; background: rgba(255,255,255,0.93); color: var(--text); border-radius: var(--radius); padding: 0.85rem 0.95rem; display: grid; gap: 0.5rem; }
+.today__head { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--muted); }
+.today__row { display: grid; grid-template-columns: 3.4rem 22px 1fr auto; gap: 0.5rem; align-items: center; min-height: 44px; }
+.today__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--brand-text); }
+.today__icon svg { width: 20px; height: 20px; color: var(--heading); display: block; }
+.today__body { min-width: 0; }
+.today__title { font-weight: 700; color: var(--heading); overflow-wrap: anywhere; }
+.today__time { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 0.25rem; }
+.today__sub { font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
+.today__maps { font-weight: 700; color: var(--brand-text); text-decoration: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; padding: 0 0.3rem; }
+.today__empty, .today__also { margin: 0; font-size: 0.9rem; color: var(--muted); }
+.today__full { justify-self: start; }
 .hero__travellers .avatar { box-shadow: 0 0 0 2px rgba(255,255,255,0.6); }
 
 .steps {
@@ -455,6 +469,25 @@ h1, h2, h3, h4, .brand__name {
    gradient's light end, which fails for 11px text. Measured, not eyeballed — the release's
    contrast check only covered the opaque surface tokens, so these badges slipped past it. */
 .tripcard__cover .tag--past { background: rgba(44,42,40,0.58); }
+/* Solid like travelling — "this is not happening" is the other state worth interrupting for.
+   #8a3b3b measures 6.9:1 for white. */
+.tripcard__cover .tag--cancelled { background: #8a3b3b; }
+
+/* Past trips fold (Trips and Bookings). A native <details>, styled after .expenses-fold. */
+.past-fold { margin-top: 1.4rem; }
+.past-fold > summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; gap: 0.5rem;
+  min-height: 44px; font-weight: 700; font-size: 1.05rem; color: var(--heading);
+}
+.past-fold > summary::-webkit-details-marker { display: none; }
+.past-fold > summary::after { content: "›"; font-size: 1.3rem; color: var(--muted); transition: transform 0.15s; margin-left: auto; }
+.past-fold[open] > summary::after { transform: rotate(90deg); }
+.past-fold__count { background: var(--cream); color: var(--muted); border-radius: var(--radius-pill); padding: 0.1rem 0.6rem; font-size: 0.8rem; font-weight: 600; }
+.past-fold > .trip-cards, .past-fold > .past-fold__body { margin-top: 0.9rem; }
+
+/* Checkbox row in the trip dialog: 44px tall, the whole label is the target. */
+.field--check { flex-direction: row; align-items: center; gap: 0.7rem; min-height: 44px; cursor: pointer; }
+.field--check input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--brand); flex: none; margin: 0; }
 .tripcard__cover h3 { margin: 0; color: var(--heading); font-size: 1.25rem; }
 .tripcard__body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; }
 .tripcard__row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.86rem; }
@@ -482,6 +515,9 @@ h1, h2, h3, h4, .brand__name {
 }
 .switcher button:focus-visible { outline: none; box-shadow: var(--ring); }
 .switcher button.is-active { background: var(--surface); color: var(--brand-text); box-shadow: var(--shadow); }
+/* The "Past trips (N)" toggle: quieter than a tab, and never the active one. */
+.switcher button.switcher__more { color: var(--muted); font-weight: 600; }
+.switcher button.switcher__more[aria-expanded="true"] { color: var(--text); }
 
 /* Segmented control — three tap targets in place of a <select>. See the note by the Payment
    status field: a native option list on Android delivers its dismissal in a way that closed the
@@ -1582,6 +1618,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <div class="steps" id="steps"></div>
             <div class="section-head"><h2>Your trips</h2></div>
             <div class="trip-cards" id="trip-cards"></div>
+            <!-- Static, not rendered: the render only fills the inner div, so the fold's open
+                 state survives every re-render for free. Closed by default at every width —
+                 the point is to get finished and cancelled trips out of the way. -->
+            <details class="past-fold" id="past-trips" hidden>
+              <summary>Past trips <span class="past-fold__count" id="past-trips-count"></span></summary>
+              <div class="trip-cards" id="trip-cards-past"></div>
+            </details>
           </section>
 
           <!-- ===== ITINERARY ===== -->
@@ -1883,6 +1926,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label">Travelers (comma separated)</span>
           <input type="text" dir="auto" name="travelers" maxlength="200" placeholder="e.g. Itzik, Moran" />
         </label>
+        <!-- Edit only (openTripDialog toggles it): a trip that is not happening drops into Past
+             trips whatever its dates say. Its budget and expenses stay in Budget — a deposit
+             lost on a cancelled hotel is still money spent that year. -->
+        <label class="field field--check" id="trip-cancelled-field" hidden>
+          <input type="checkbox" name="cancelled" />
+          <span>Trip cancelled — file it under Past trips</span>
+        </label>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
           <button type="submit" class="btn btn--primary">Save</button>
@@ -2077,6 +2127,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <input type="hidden" name="locLat" />
             <input type="hidden" name="locLng" />
             <div class="loc-suggest" id="loc-suggest" hidden></div>
+            <span class="field__hint">Or paste a Google Maps link here or in the name field — the place and pin fill in.</span>
           </label>
         </div>
         <details class="disclosure" id="item-more">
@@ -2101,7 +2152,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.13.0";
+const APP_VERSION = "v1.14.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -2280,6 +2331,9 @@ function normalizeTripMeta(trip) {
   trip.endDate = trip.endDate || "";
   trip.travelers = Array.isArray(trip.travelers) ? trip.travelers.map((t) => String(t ?? "")) : [];
   trip.cover = trip.cover || "";
+  /* v1.14.0. Strict — shared payloads are the trust boundary, and !!"false" is true. The flag
+     names the fact (the trip is not happening); "archived" is derived from it and the dates. */
+  trip.cancelled = trip.cancelled === true;
 }
 
 /* v2: promote hardcoded trip meta + booking refs into persisted state */
@@ -3558,12 +3612,15 @@ function openTripDialog(trip = null) {
     form.startDate.value = trip.startDate || "";
     form.endDate.value = trip.endDate || "";
     form.travelers.value = (trip.travelers || []).join(", ");
+    form.cancelled.checked = trip.cancelled === true;
+    $("trip-cancelled-field").hidden = false;
   } else {
     title.textContent = "New trip";
     form.tripId.value = "";
     form.year.value = selectedYear === "all" ? new Date().getFullYear() : Number(selectedYear);
     form.budget.value = "";
     renderDestRows([]);
+    $("trip-cancelled-field").hidden = true; // you do not create a trip already cancelled
   }
   syncTripYearField(form);
 
@@ -3748,7 +3805,7 @@ function buildTripChoice(selectedId) {
      and you do not book a holiday you have already taken. Seeing past bookings on the Bookings
      screen is the real need behind it, and that is a v2 item (design/V2-PLAN.md), not this. */
   const ordered = sortTripsByUpcoming(state.trips);
-  const live = ordered.filter((t) => tripTiming(t).state !== "past");
+  const live = ordered.filter((t) => !tripArchived(t));
   /* Two escape hatches, both reachable. If nothing is upcoming, offer everything — an empty
      picker leaves you nothing to pick. And if the trip already selected is a finished one, which
      happens when you were just viewing it on the Itinerary, keep its chip so the form is not
@@ -3762,10 +3819,10 @@ function buildTripChoice(selectedId) {
     .map((t) => {
       /* A past trip can still appear if it is the one already selected — hiding the chip the
          form points at would leave no way to see which trip you were adding to. */
-      const past = tripTiming(t).state === "past";
+      const when = t.cancelled ? "cancelled" : tripTiming(t).state === "past" ? "past" : "";
       return `<button type="button" data-trip-choice="${escapeHtml(t.id)}"
         aria-pressed="${t.id === selectedId ? "true" : "false"}"
-      >${escapeHtml(nameWithCity(t))}${past ? '<span class="trip-choice__when">past</span>' : ""}</button>`;
+      >${escapeHtml(nameWithCity(t))}${when ? `<span class="trip-choice__when">${when}</span>` : ""}</button>`;
     })
     .join("");
   box.querySelectorAll("[data-trip-choice]").forEach((btn) =>
@@ -3863,7 +3920,8 @@ function parseCoordsFromText(text) {
   if (at) return ok(Number(at[1]), Number(at[2]));
   const d3d4 = t.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/);
   if (d3d4) return ok(Number(d3d4[1]), Number(d3d4[2]));
-  const q = t.match(/[?&]q=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/) || t.match(/query=(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+  // ?q=lat,lng, query=lat,lng, and the "?q=Name,lat,lng" shape some apps share.
+  const q = t.match(/[?&](?:q|query)=(?:[^&#]*?,)?(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
   if (q) return ok(Number(q[1]), Number(q[2]));
   // Plain "lat, lng" (only when the whole field is just that — avoids false hits)
   const plain = t.match(/^(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/);
@@ -3886,15 +3944,66 @@ function parseCoordsFromText(text) {
   return null;
 }
 
-/* Pull a human place name out of a Google Maps URL (/place/Eiffel+Tower/…). */
+/* Pull a human place name out of a Google Maps URL: /place/Eiffel+Tower/…, /search/Le+Comptoir/…,
+   or a non-numeric ?q= / query= (a trailing ",lat,lng" is dropped). */
 function placeNameFromMapsUrl(text) {
-  const m = (text || "").match(/\/place\/([^/@]+)/);
+  const t = text || "";
+  const m = t.match(/\/place\/([^/@?]+)/) || t.match(/\/search\/([^/@?]+)/) ||
+    t.match(/[?&](?:q|query)=([^&#]*[^\d.,\-&#][^&#]*)/);
   if (!m) return "";
+  const raw = m[1].replace(/\+/g, " ").replace(/,\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/, "");
   try {
-    return decodeURIComponent(m[1].replace(/\+/g, " ")).trim();
+    return decodeURIComponent(raw).trim();
   } catch {
-    return m[1].replace(/\+/g, " ").trim();
+    return raw.trim();
   }
+}
+
+/* v1.14.0 — one verdict on a paste, used by both the Title and the Location field:
+     null                      plain text, let Photon search it
+     { kind: "short" }         a maps.app.goo.gl / goo.gl/maps / g.co link — carries no coordinates
+                               and cannot be expanded here (CSP connect-src, and Google's CORS)
+     { kind: "place", name, lat, lng }   full Maps URL with a name
+     { kind: "coords", lat, lng }        coordinates only (bare "lat, lng", DMS, or a nameless URL) */
+function parseMapsPaste(text) {
+  const t = (text || "").trim();
+  if (/^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co)\//i.test(t)) return { kind: "short" };
+  const coords = parseCoordsFromText(t);
+  if (!coords) return null;
+  const name = placeNameFromMapsUrl(t);
+  return name ? { kind: "place", name, ...coords } : { kind: "coords", ...coords };
+}
+
+/* Apply a parseMapsPaste verdict to the reservation form. Returns true when the paste was
+   handled (so the caller must not start a Photon search on the URL text). `pasted` is the raw
+   text, so a URL sitting in Title can be swapped for the clean name without clobbering a title
+   the user typed themselves. */
+function applyMapsPaste(form, parsed, pasted) {
+  if (!parsed) return false;
+  const el = $("loc-suggest");
+  const show = (html) => { el.innerHTML = `<div class="loc-suggest__empty">${html}</div>`; el.hidden = false; };
+  if (parsed.kind === "short") {
+    // No coordinates in a short link; do not hand the URL to Photon either.
+    if (form.locationName.value.trim() === pasted) form.locationName.value = "";
+    if (form.title.value.trim() === pasted) form.title.value = "";
+    show("That's a short Maps link, which carries no location. Open it in Google Maps, copy the full link from the address bar (it contains <code>@lat,lng</code>), and paste that instead.");
+    return true;
+  }
+  form.locLat.value = parsed.lat;
+  form.locLng.value = parsed.lng;
+  const name = parsed.kind === "place" ? parsed.name : "";
+  if (name) {
+    form.locationName.value = name;
+    const title = form.title.value.trim();
+    if (!title || title === pasted) form.title.value = name;
+  } else if (form.locationName.value.trim() === pasted && form.title.value.trim() === pasted) {
+    form.title.value = ""; // bare coordinates make no title
+  } else if (form.title.value.trim() === pasted) {
+    form.title.value = "";
+  }
+  if (!form.locationName.value.trim()) form.locationName.value = pasted;
+  show(`📍 Location set from your paste (${parsed.lat.toFixed(4)}, ${parsed.lng.toFixed(4)})${name ? ` — “${escapeHtml(name)}”` : ""}. Just Save.`);
+  return true;
 }
 
 function photonLabel(f) {
@@ -4154,6 +4263,7 @@ function handleTripSubmit(e) {
   const endDate = form.endDate.value;
   const year = tripYearFor(startDate, form.year.value);
   const travelers = form.travelers.value.split(",").map((s) => s.trim()).filter(Boolean);
+  const cancelled = form.cancelled.checked;
   if (startDate && endDate && endDate < startDate) {
     alert("End date must be after the start date.");
     return;
@@ -4161,9 +4271,10 @@ function handleTripSubmit(e) {
 
   if (id) {
     const trip = state.trips.find((t) => t.id === id);
-    if (trip) Object.assign(trip, { name, year, budget, destination, destinations, startDate, endDate, travelers });
+    if (trip) Object.assign(trip, { name, year, budget, destination, destinations, startDate, endDate, travelers, cancelled });
   } else {
-    const trip = { id: uid("trip"), name, year, budget, expenses: [], destination, destinations, startDate, endDate, travelers };
+    // The literal enumerates fields, so a new one has to be added here too or it is undefined.
+    const trip = { id: uid("trip"), name, year, budget, expenses: [], destination, destinations, startDate, endDate, travelers, cancelled };
     normalizeTripMeta(trip);
     state.trips.push(trip);
   }
@@ -4308,20 +4419,19 @@ function bindEvents() {
     form.locLng.value = "";
     clearTimeout(locSuggestTimer);
     const q = locInput.value.trim();
-    // Pasted a Google Maps link or "lat, lng"? Use the coords directly.
-    const coords = parseCoordsFromText(q);
-    if (coords) {
-      form.locLat.value = coords.lat;
-      form.locLng.value = coords.lng;
-      const name = placeNameFromMapsUrl(q);
-      if (name) locInput.value = name; // replace the pasted URL with a clean name
-      const el = $("loc-suggest");
-      el.innerHTML = `<div class="loc-suggest__empty">📍 Location set from your paste (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})${name ? ` — “${escapeHtml(name)}”` : ""}. Just Save.</div>`;
-      el.hidden = false;
-      return;
-    }
+    // Pasted a Google Maps link or "lat, lng"? Use it directly instead of searching.
+    if (applyMapsPaste(form, parseMapsPaste(q), q)) return;
     if (q.length < 3) { hideLocSuggestions(); return; }
     locSuggestTimer = setTimeout(() => showLocSuggestions(q), 400);
+  });
+  /* The Title field takes the same paste. It is the field the sheet opens on, and Isaac pastes
+     into the field he is in (see the destinations comment on the trip dialog) — a Maps link
+     typed there used to become the literal title. */
+  $("form-item").title.addEventListener("input", () => {
+    const form = $("form-item");
+    const q = form.title.value.trim();
+    if (!/^https?:\/\//i.test(q)) return;
+    applyMapsPaste(form, parseMapsPaste(q), q);
   });
   $("dialog-item").addEventListener("close", () => {
     clearTimeout(locSuggestTimer);
@@ -4419,6 +4529,8 @@ let itineraryTripId = null;
 let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let bookingsFilter = "all"; // all | flight | hotel | other
+let bookingsPastOpen = false;         // Bookings re-renders wholesale, so the fold's state lives here
+let itinerarySwitcherShowPast = false; // the "Past trips (N)" toggle in the itinerary switcher
 /* ISO dates whose timeline day is folded shut. Deliberately NOT in `state`:
    saveState() calls notifyLocalChange(), so a collapse would sync to everyone
    else's device as an edit. Per-device, per-session, and reset when the trip
@@ -4855,14 +4967,23 @@ function tripTiming(trip, todayOverride) {
   };
 }
 
+/* Filed under Past trips: finished by its dates, or cancelled by hand. The one predicate every
+   fold and the Bookings picker use. Not a fifth tripTiming state — `state` is the CSS hook and
+   the sort rank, and a cancelled trip's dates still say truthfully when it was meant to be. */
+function tripArchived(trip, todayOverride) {
+  return trip.cancelled === true || tripTiming(trip, todayOverride).state === "past";
+}
+
 /* One order for every screen: the trip you are on, then soonest, then finished (most recent
    first), then undated. Five sites used to disagree — Trips ascending by year, Budget
    descending, Bookings ascending, the itinerary unsorted, and the hero taking whichever dated
    trip happened to sit first in the array. */
 function sortTripsByUpcoming(trips) {
   const rank = { travelling: 0, upcoming: 1, past: 2, undated: 3 };
+  // A cancelled trip sorts with the finished ones whatever its dates say.
+  const stateOf = (t) => (t.cancelled === true ? "past" : tripTiming(t).state);
   return [...trips].sort((a, b) => {
-    const sa = tripTiming(a).state, sb = tripTiming(b).state;
+    const sa = stateOf(a), sb = stateOf(b);
     if (rank[sa] !== rank[sb]) return rank[sa] - rank[sb];
     const da = getMeta(a).startDate || "", db = getMeta(b).startDate || "";
     if (sa === "past") return db.localeCompare(da); // most recently finished first
@@ -4873,8 +4994,10 @@ function sortTripsByUpcoming(trips) {
 
 /* ---------- TRIPS screen ---------- */
 function featuredTrip() {
-  const dated = sortTripsByUpcoming(state.trips.filter((t) => getMeta(t).startDate));
-  return dated[0] || state.trips[0] || null;
+  // Never a cancelled trip — even one whose dates are today would otherwise drive the hero.
+  const live = state.trips.filter((t) => t.cancelled !== true);
+  const dated = sortTripsByUpcoming(live.filter((t) => getMeta(t).startDate));
+  return dated[0] || live[0] || null;
 }
 
 function renderTripsScreen() {
@@ -4906,8 +5029,11 @@ function renderTripsScreen() {
           <button type="button" class="pill" data-edit-trip="${trip.id}">Edit</button>
         </div>
         <div class="hero__travellers">${travellers}<span style="font-weight:600">${escapeHtml((meta.travelers || []).join(", "))}</span></div>
+        ${timing.state === "travelling" ? renderTodayCard(trip, todayLocalISO(), nowMinutes()) : ""}
       </div>`;
     hero.querySelector("[data-edit-trip]")?.addEventListener("click", () => openTripDialog(trip));
+    hero.querySelector("[data-today-add]")?.addEventListener("click", () =>
+      openItemDialog(trip.id, null, { date: todayLocalISO() }));
   } else {
     hero.innerHTML = "";
   }
@@ -4949,15 +5075,25 @@ function renderTripsScreen() {
     )
     .join("");
 
+  /* v1.14.0: finished and cancelled trips fold away under "Past trips". The sort already puts
+     them last, so splitting keeps each half in order. */
   const cards = sortTripsByUpcoming(state.trips);
-  $("trip-cards").innerHTML = cards.map(renderTripOverviewCard).join("") ||
-    `<div class="empty-card"><h3>No trips yet</h3><p>Create your first trip to start planning.</p><button type="button" class="btn btn--primary" data-new-trip>New trip</button></div>`;
+  const live = cards.filter((t) => !tripArchived(t));
+  const past = cards.filter((t) => tripArchived(t));
+  const newTripBtn = `<button type="button" class="btn btn--primary" data-new-trip>New trip</button>`;
+  $("trip-cards").innerHTML = live.map(renderTripOverviewCard).join("") ||
+    (past.length
+      ? `<div class="empty-card"><h3>No upcoming trips</h3><p>Your finished trips are below.</p>${newTripBtn}</div>`
+      : `<div class="empty-card"><h3>No trips yet</h3><p>Create your first trip to start planning.</p>${newTripBtn}</div>`);
+  $("trip-cards-past").innerHTML = past.map(renderTripOverviewCard).join("");
+  $("past-trips").hidden = past.length === 0;
+  $("past-trips-count").textContent = String(past.length);
 
   bindGoButtons($("screen-trips"));
   /* Editing used to mean the hero (featured trip only), the Budget screen, or the Itinerary
      header — never the screen you are looking at the trip on. The hero's own Edit is bound
-     above, so scope this to the cards to avoid binding it twice. */
-  $("trip-cards").querySelectorAll("[data-edit-trip]").forEach((b) =>
+     above, so scope this to the cards (both halves) to avoid binding it twice. */
+  $("screen-trips").querySelectorAll(".trip-cards [data-edit-trip]").forEach((b) =>
     b.addEventListener("click", () => {
       const t = state.trips.find((x) => x.id === b.getAttribute("data-edit-trip"));
       if (t) openTripDialog(t);
@@ -4967,6 +5103,114 @@ function renderTripsScreen() {
     b.addEventListener("click", () => { location.hash = "#budget"; })
   );
   $("screen-trips").querySelector("[data-new-trip]")?.addEventListener("click", () => openTripDialog());
+}
+
+/* ---------- Today card (v1.14.0) ----------
+   Rendered inside the Trips hero only while the featured trip is travelling: what is happening
+   now, what comes next, where you sleep tonight, and a door into today's timeline. Pure —
+   `todayIso` and `nowMin` are parameters so the self-test can fix the clock. Local time
+   throughout (todayLocalISO / nowMinutes), never the UTC todayISO(). */
+function nowMinutes(when) {
+  const d = when || new Date();
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+function shiftIso(iso, days) {
+  const d = parseISO(iso);
+  if (!d) return iso;
+  d.setDate(d.getDate() + days);
+  return isoOf(d);
+}
+
+/* The hotel whose stay covers tonight: checked in on or before today, checking out after it.
+   Not tripHotelForDay — its `iso <= endDate` and `|| hotels[0]` fallbacks would name the hotel
+   you left this morning. Latest check-in wins. Null on the last day (no night left). */
+function tonightHotel(trip, todayIso) {
+  return tripItems(trip)
+    .filter((i) => i.type === "hotel" && i.date && i.date <= todayIso && todayIso < (i.endDate || i.date))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .pop() || null;
+}
+
+/* Now / Next over today's timed entries. Check-out rows start (and end) at their time, default
+   11:00 like the timeline. An entry with no end time lasts until the next one starts; the last
+   one lasts to the end of the day. Re-sorted by the clock — a hand-moved sortIndex orders the
+   list, but "now" is about the time. */
+function todayNowNext(entries, nowMin) {
+  const timed = entries
+    .map((e) => {
+      const start = e.checkout ? minutesOf(e.item.endTime, 11 * 60) : minutesOf(e.item.startTime, null);
+      let end = e.checkout ? start : minutesOf(e.item.endTime, null);
+      if (end !== null && end < start) end += 24 * 60; // 22:30–00:30 runs past midnight, not backwards
+      return start === null ? null : { ...e, start, end };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.start - b.start);
+  let now = null, next = null;
+  for (let i = 0; i < timed.length; i++) {
+    const t = timed[i];
+    if (t.start > nowMin) { next = t; break; }
+    const until = t.end ?? timed[i + 1]?.start ?? 24 * 60;
+    if (until >= nowMin) now = t;
+  }
+  return { timed, now, next, untimed: entries.filter((e) => !e.checkout && minutesOf(e.item.startTime, null) === null) };
+}
+
+function renderTodayCard(trip, todayIso, nowMin) {
+  const meta = getMeta(trip);
+  const entries = itemsForDay(trip, todayIso);
+  const { timed, now, next, untimed } = todayNowNext(entries, nowMin);
+  const lastDay = todayIso >= (meta.endDate || meta.startDate);
+
+  const row = (label, e) => {
+    const it = e.item;
+    const title = e.checkout ? `Check-out · ${it.title}` : itemCardTitle(it);
+    const time = e.checkout ? (it.endTime || "11:00") : fmtTimeRange(it);
+    const sub = it.type === "flight"
+      ? [it.departAirport && it.arrivalAirport ? `${it.departAirport} → ${it.arrivalAirport}` : "", it.flightNo].filter(Boolean).join(" · ")
+      : it.location?.name || "";
+    const conf = it.confirmation ? `Conf: ${it.confirmation}` : "";
+    const maps = it.type !== "flight" && (it.location?.lat != null || it.location?.name)
+      ? `<a class="today__maps" href="${gmapsLink(it, trip)}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(it.title)} in Google Maps">Maps ↗</a>`
+      : "";
+    return `
+      <div class="today__row" data-today-row="${escapeHtml(label.toLowerCase())}">
+        <span class="today__label">${label}</span>
+        <span class="today__icon">${itemTypeIcon(it.type)}</span>
+        <div class="today__body">
+          <div class="today__title">${escapeHtml(title)}${time ? ` <span class="today__time">${escapeHtml(time)}</span>` : ""}</div>
+          ${sub || conf ? `<div class="today__sub ltr">${[sub, conf].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
+        </div>
+        ${maps}
+      </div>`;
+  };
+
+  let main;
+  if (!entries.length) {
+    main = `<p class="today__empty">Nothing planned today.</p>
+      <button type="button" class="btn btn--secondary btn--small" data-today-add>Add to today</button>`;
+  } else if (!now && !next && timed.length) {
+    const tomorrow = lastDay ? [] : itemsForDay(trip, shiftIso(todayIso, 1));
+    main = `<p class="today__empty">${lastDay ? "Last day of the trip — done for today." : "Done for today."}</p>` +
+      (tomorrow.length ? row("Tomorrow", tomorrow[0]) : "");
+  } else {
+    main = (now ? row("Now", now) : "") + (next ? row("Next", next) : "");
+  }
+
+  const also = untimed.length && (now || next || !timed.length)
+    ? `<p class="today__also">Also today: ${untimed.slice(0, 2).map((e) => escapeHtml(e.item.title)).join(", ")}${untimed.length > 2 ? ` +${untimed.length - 2} more` : ""}</p>`
+    : "";
+  const hotel = lastDay ? null : tonightHotel(trip, todayIso);
+  const tonight = hotel ? row("Tonight", { item: hotel, checkout: false }).replace("Check-in · ", "") : "";
+
+  return `
+    <div class="hero__today" id="hero-today">
+      <div class="today__head">Today · ${escapeHtml(fmtDow(parseISO(todayIso)))} ${escapeHtml(fmtDay(parseISO(todayIso)))}</div>
+      ${main}
+      ${also}
+      ${tonight}
+      <button type="button" class="btn btn--primary btn--small today__full" data-go="itinerary" data-trip-id="${escapeHtml(trip.id)}" data-subtab-target="timeline" data-day-target="${escapeHtml(todayIso)}">Full day</button>
+    </div>`;
 }
 
 function renderTripOverviewCard(trip) {
@@ -4986,7 +5230,9 @@ function renderTripOverviewCard(trip) {
       <div class="tripcard__cover">
         ${coverArt(trip)}
         <span class="tag">${trip.year}</span>
-        ${timing.text ? `<span class="tag tag--timing tag--${timing.state}">${escapeHtml(timing.text)}</span>` : ""}
+        ${trip.cancelled
+          ? `<span class="tag tag--timing tag--cancelled">Cancelled</span>`
+          : timing.text ? `<span class="tag tag--timing tag--${timing.state}">${escapeHtml(timing.text)}</span>` : ""}
         <h3>${escapeHtml(trip.name)}</h3>
       </div>
       <div class="tripcard__body">
@@ -5017,7 +5263,11 @@ function bindGoButtons(scope) {
       // …and the view, so a card labelled "Route" lands on the map rather than the timeline.
       const subtab = b.getAttribute("data-subtab-target");
       if (subtab === "timeline" || subtab === "maps") itinerarySubTab = subtab;
+      // The Today card's "Full day" lands on today's day, not the top of the trip.
+      const day = b.getAttribute("data-day-target");
+      if (day) { timelineDayIso = day; dayChosen = true; }
       location.hash = "#" + b.getAttribute("data-go");
+      if (day) setTimeout(() => scrollToDay(day), 50); // after the router has rendered the timeline
     };
     b.addEventListener("click", go);
   });
@@ -5134,9 +5384,19 @@ function renderItinerary() {
     setItineraryTrip(tripsWithDates[0].id);
   }
 
-  sw.innerHTML = tripsWithDates
-    .map((t) => tabButton("data-trip", t.id, t.name, t.id === itineraryTripId))
-    .join("");
+  /* v1.14.0: finished and cancelled trips sit behind a "Past trips (N)" toggle. A plain button,
+     not role=tab and not a <details> — either would break the arrow-key roving over the tabs.
+     Forced open when the selected trip is itself archived (you arrived from a past card). */
+  const liveTrips = tripsWithDates.filter((t) => !tripArchived(t));
+  const pastTrips = tripsWithDates.filter((t) => tripArchived(t));
+  if (pastTrips.some((t) => t.id === itineraryTripId)) itinerarySwitcherShowPast = true;
+  const showPast = itinerarySwitcherShowPast && pastTrips.length > 0;
+  const tab = (t) => tabButton("data-trip", t.id, t.name, t.id === itineraryTripId);
+  sw.innerHTML = liveTrips.map(tab).join("") +
+    (pastTrips.length
+      ? `<button type="button" class="switcher__more" data-switcher-past aria-expanded="${showPast ? "true" : "false"}">Past trips (${pastTrips.length})</button>`
+      : "") +
+    (showPast ? pastTrips.map(tab).join("") : "");
   const activateTripTab = (b) => {
     setItineraryTrip(b.getAttribute("data-trip"));
     pendingTabFocus = "trips";
@@ -5145,6 +5405,10 @@ function renderItinerary() {
   sw.querySelectorAll("[data-trip]").forEach((b) =>
     b.addEventListener("click", () => activateTripTab(b))
   );
+  sw.querySelector("[data-switcher-past]")?.addEventListener("click", () => {
+    itinerarySwitcherShowPast = !showPast;
+    renderItinerary();
+  });
   bindTablistKeys(sw, activateTripTab);
 
   const trip = state.trips.find((t) => t.id === itineraryTripId);
@@ -6105,8 +6369,7 @@ function renderBookings() {
 
   const matchesFilter = (it) => bookingsFilter === "all" || it.type === bookingsFilter;
 
-  const groups = sortTripsByUpcoming(state.trips)
-    .map((trip) => {
+  const groupFor = (trip) => {
       const items = tripItems(trip).filter(matchesFilter).sort((a, b) =>
         (a.date || "").localeCompare(b.date || "") || (a.startTime || "").localeCompare(b.startTime || "")
       );
@@ -6148,8 +6411,20 @@ function renderBookings() {
           <h2 class="booking-group__title">${nameWithCity(trip)} <span class="badge">${items.length} reservation${items.length === 1 ? "" : "s"}</span></h2>
           <div class="booking-list">${cards}</div>
         </section>`;
-    })
-    .join("");
+    };
+  /* v1.14.0: past and cancelled trips' bookings fold away. The chips above still count them —
+     a filter that only matches folded bookings shows the fold rather than a dead end. */
+  const ordered = sortTripsByUpcoming(state.trips);
+  const liveGroups = ordered.filter((t) => !tripArchived(t)).map(groupFor).join("");
+  const pastTripsWithItems = ordered.filter((t) => tripArchived(t) && tripItems(t).some(matchesFilter));
+  const pastCount = pastTripsWithItems.reduce((n, t) => n + tripItems(t).filter(matchesFilter).length, 0);
+  const pastGroups = pastTripsWithItems.length
+    ? `<details class="past-fold" id="bookings-past" ${bookingsPastOpen ? "open" : ""}>
+         <summary>Past trips <span class="past-fold__count">${pastCount} reservation${pastCount === 1 ? "" : "s"}</span></summary>
+         <div class="past-fold__body">${pastTripsWithItems.map(groupFor).join("")}</div>
+       </details>`
+    : "";
+  const groups = liveGroups + pastGroups;
 
   const chip = (value, label, count) =>
     `<button type="button" class="filter-chip ${bookingsFilter === value ? "is-active" : ""}"
@@ -6175,6 +6450,7 @@ function renderBookings() {
       renderBookings();
     })
   );
+  $("bookings-past")?.addEventListener("toggle", (e) => { bookingsPastOpen = e.target.open; });
 
   /* Same guard as the timeline card: every control inside a card is a <button>, so one
      bail covers the lot and any future in-card action keeps working. */
@@ -6559,6 +6835,14 @@ function bindShellEvents() {
     closeDialog($("dialog-changes"));
   });
   window.addEventListener("hashchange", router);
+  /* The Today card is static HTML with a clock in it. Refresh it once a minute while it is on
+     screen, and when the phone comes back from the background at a different time. */
+  const refreshToday = () => {
+    if (document.visibilityState === "hidden") return;
+    if ($("hero-today") && currentScreenId() === "trips") renderTripsScreen();
+  };
+  setInterval(refreshToday, 60_000);
+  document.addEventListener("visibilitychange", refreshToday);
 }
 
 /* ============================================================
@@ -6679,6 +6963,9 @@ function diffStates(prevRaw, nextRaw) {
     }
     if (JSON.stringify(p.travelers) !== JSON.stringify(t.travelers)) {
       out.push({ screens: ["family"], text: `changed travellers on ${t.name}` });
+    }
+    if ((p.cancelled === true) !== (t.cancelled === true)) {
+      out.push({ screens: ["trips"], text: t.cancelled ? `cancelled trip ${t.name}` : `reinstated trip ${t.name}` });
     }
     if (Number(p.budget) !== Number(t.budget)) out.push({ screens: ["budget"], text: `changed budget of ${t.name}` });
     diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "status", "amountPaid"],
