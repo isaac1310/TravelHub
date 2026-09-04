@@ -5267,9 +5267,17 @@ function bindGoButtons(scope) {
       if (subtab === "timeline" || subtab === "maps") itinerarySubTab = subtab;
       // The Today card's "Full day" lands on today's day, not the top of the trip.
       const day = b.getAttribute("data-day-target");
-      if (day) { timelineDayIso = day; dayChosen = true; }
       location.hash = "#" + b.getAttribute("data-go");
-      if (day) setTimeout(() => scrollToDay(day), 50); // after the router has rendered the timeline
+      /* After the router has rendered, never before (hashchange is async): rendering the timeline
+         arms the scroll spy, which sets timelineDayIso to the day under the header — day 1 — and
+         would overwrite the day we chose. Same order the Maps→Timeline switch uses. QA caught
+         the chip strip still highlighting yesterday. */
+      if (day) setTimeout(() => {
+        timelineDayIso = day;
+        dayChosen = true;
+        markActiveDayChip(day);
+        scrollToDay(day);
+      }, 50);
     };
     b.addEventListener("click", go);
   });

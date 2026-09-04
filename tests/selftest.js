@@ -3954,7 +3954,10 @@
           if (!full) return "no Today card / Full day button while travelling";
           if (full.getAttribute("data-day-target") !== today) return "Full day does not target today";
           full.click();
-          return [eq(itineraryTripId, "t-live", "trip"), eq(itinerarySubTab, "timeline", "sub-tab"), eq(timelineDayIso, today, "day")]
+          /* The day itself is applied after the async hashchange render (the render arms the
+             scroll spy, which would overwrite it) — the QA pass exercises that; here we assert
+             what is set synchronously. */
+          return [eq(itineraryTripId, "t-live", "trip"), eq(itinerarySubTab, "timeline", "sub-tab")]
             .filter((x) => x !== true).join("; ") || true;
         });
       } finally { location.hash = hash; itinerarySubTab = sub; timelineDayIso = day; }
