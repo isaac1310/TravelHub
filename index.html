@@ -485,9 +485,10 @@ h1, h2, h3, h4, .brand__name {
 .past-fold__count { background: var(--cream); color: var(--muted); border-radius: var(--radius-pill); padding: 0.1rem 0.6rem; font-size: 0.8rem; font-weight: 600; }
 .past-fold > .trip-cards, .past-fold > .past-fold__body { margin-top: 0.9rem; }
 
-/* Checkbox row in the trip dialog: 44px tall, the whole label is the target. */
-.field--check { flex-direction: row; align-items: center; gap: 0.7rem; min-height: 44px; cursor: pointer; }
-.field--check input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--brand); flex: none; margin: 0; }
+/* Checkbox row in the trip dialog: 44px tall, the whole label is the target. Doubled class so
+   it outranks the later `.field { flex-direction: column }` rule (same specificity would lose). */
+.field.field--check { flex-direction: row; align-items: center; gap: 0.7rem; min-height: 44px; cursor: pointer; }
+.field.field--check input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--brand); flex: none; margin: 0; }
 .tripcard__cover h3 { margin: 0; color: var(--heading); font-size: 1.25rem; }
 .tripcard__body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; }
 .tripcard__row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.86rem; }
