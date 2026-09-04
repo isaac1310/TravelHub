@@ -3931,7 +3931,12 @@
     check("Today: untimed items are listed as also today, capped at two", () => {
       const html = card([timed("Louvre", "09:00", "11:00"), item({ id: "u-1", title: "A", date: "2026-06-15" }), item({ id: "u-2", title: "B", date: "2026-06-15" }), item({ id: "u-3", title: "C", date: "2026-06-15" })], 10 * 60);
       const m = html.match(/Also today: ([^<]*)/);
-      return m ? eq(m[1].trim(), "A, B +1 more", "also today") : "no Also today line";
+      if (!m) return "no Also today line";
+      const r = eq(m[1].trim(), "A, B +1 more", "also today");
+      if (r !== true) return r;
+      // Still listed once the timed items are over — untimed plans do not expire at the last timed one.
+      const late = card([timed("Louvre", "09:00", "11:00"), item({ id: "u-1", title: "A", date: "2026-06-15" })], 23 * 60);
+      return /Also today: A/.test(late) ? true : "untimed items vanish after the last timed one";
     });
 
     check("the hero carries the Today card only while travelling, and Full day opens today's timeline", () => {

@@ -5198,7 +5198,8 @@ function renderTodayCard(trip, todayIso, nowMin) {
     main = (now ? row("Now", now) : "") + (next ? row("Next", next) : "");
   }
 
-  const also = untimed.length && (now || next || !timed.length)
+  // Untimed plans are still today's plans, including after the last timed one has passed.
+  const also = untimed.length
     ? `<p class="today__also">Also today: ${untimed.slice(0, 2).map((e) => escapeHtml(e.item.title)).join(", ")}${untimed.length > 2 ? ` +${untimed.length - 2} more` : ""}</p>`
     : "";
   const hotel = lastDay ? null : tonightHotel(trip, todayIso);
