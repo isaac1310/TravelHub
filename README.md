@@ -13,13 +13,21 @@ Open `index.html` in a browser — no build step. Data is saved in
 ## Features
 
 - **Trips** — trip cards with destination, dates, and travelers (edit via the trip dialog).
+  Finished trips fold away under **Past trips**; a trip that is not happening can be marked
+  **cancelled** in its dialog and files there too (its budget stays in Budget). While you are
+  on a trip, the hero shows a **Today** card: what is happening now, what comes next, where
+  you sleep tonight, with confirmation numbers and Maps links, and a **Full day** button
+  into today's timeline.
 - **Itinerary → Timeline** — day-by-day reservations. "Add reservation" opens a
   modal supporting flight / hotel / attraction / transport / other, with dates,
   times, location, and confirmation number. Edit/delete on each card.
 - **Itinerary → Maps** — Leaflet + OpenStreetMap view with lettered pins per
   day (day chips 16 | 17 | … | All). Locations autocomplete via **Photon**
-  (OpenStreetMap) and are geocoded on save; you can also paste a Google Maps
-  link or `lat, lng` (decimal or DMS) to set an exact pin. Every stop has an
+  (OpenStreetMap) and are geocoded on save. **Import a place from Google Maps:**
+  paste a Maps link into the reservation's name or Location field and the place
+  name and pin fill in (bare `lat, lng`, decimal or DMS, works too). Short
+  `maps.app.goo.gl` links carry no location and cannot be expanded by the app —
+  open the link once and paste the full URL from the address bar. Every stop has an
   "open in Google Maps" link, which doubles as the fallback when the map
   library or coordinates are unavailable. Flights are not pinned on the map.
 - **Budget** — funds, per-trip budgets, expenses, rollovers, JSON export/import.
