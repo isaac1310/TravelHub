@@ -696,6 +696,9 @@ h1, h2, h3, .hero h1, .hero p {
 }
 /* The whole card opens its reservation (v1.11.0) — same affordance as a timeline card. */
 .booking[data-item] { cursor: pointer; }
+/* ⋯ on the card (v1.15.0): 44px target, excluded from the card tap by the button guard. */
+.booking__more { flex: none; margin: -0.35rem -0.5rem 0 0; }
+.booking__more svg { width: 20px; height: 20px; }
 @media (hover: hover) { .booking[data-item]:hover { border-color: var(--border-strong); } }
 .booking[data-item]:focus-visible { outline: none; box-shadow: var(--ring); }
 .booking__when { color: var(--muted); font-weight: 500; }
@@ -5986,7 +5989,7 @@ function bindItemActions(scope, trip) {
 }
 
 /* Mobile ⋯ action sheet: Edit / Move up / Move down / Delete for one item */
-function openItemActionsSheet(trip, itemId) {
+function openItemActionsSheet(trip, itemId, opts = {}) {
   const item = state.items.find((i) => i.id === itemId);
   if (!item) return;
   const dlg = $("dialog-item-actions");
@@ -5994,6 +5997,10 @@ function openItemActionsSheet(trip, itemId) {
   // Only offer Maps for somewhere you could actually go.
   const hasPlace = Boolean(item.location?.name || item.location?.lat != null);
   dlg.querySelector('[data-item-action="maps"]').hidden = !hasPlace;
+  // Move up/down order a day on the timeline; from Bookings there is no day to move within.
+  const reorder = opts.reorder !== false;
+  dlg.querySelector('[data-item-action="move-up"]').hidden = !reorder;
+  dlg.querySelector('[data-item-action="move-down"]').hidden = !reorder;
   // "Add expense" until one is linked, then "Open expense" — the same row, never two.
   dlg.querySelector("[data-item-action-label]").textContent = linkedExpense(item) ? "Open expense" : "Add expense";
   dlg.querySelectorAll("[data-item-action]").forEach((b) => {
@@ -6552,6 +6559,8 @@ function renderBookings() {
           /* data-item makes the whole card open its reservation, the same gesture the
              timeline learned in v1.10.2. The parity doc claimed this worked for several
              releases while the cards carried no id and no handler at all. */
+          /* v1.15.0: a ⋯ on the card opens the same action sheet the timeline has (Edit · Maps ·
+             Add/Open expense · Delete) — deleting a booking from Bookings was not possible. */
           return `
             <div class="booking" data-item="${escapeHtml(it.id)}" role="button" tabindex="0">
               <span class="booking__icon booking__icon--${it.type}">${icon}</span>
@@ -6561,6 +6570,7 @@ function renderBookings() {
                 ${notes}
                 ${foot}
               </div>
+              <button type="button" class="icon-btn booking__more" data-booking-more="${escapeHtml(it.id)}" aria-label="More actions for ${escapeHtml(it.title)}" title="More"><svg viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg></button>
             </div>`;
         })
         .join("");
@@ -6581,13 +6591,9 @@ function renderBookings() {
   if (bookingsFocusTrip) {
     liveTrips.forEach((t) => bookingsGroupOpen.set(t.id, t.id === bookingsFocusTrip));
   } else {
-    const unseeded = liveTrips.filter((t) => !bookingsGroupOpen.has(t.id));
-    if (unseeded.length === liveTrips.length && liveTrips.length) {
-      const live = liveTrips.find((t) => tripTiming(t).state === "travelling") || liveTrips[0];
-      liveTrips.forEach((t) => bookingsGroupOpen.set(t.id, t === live));
-    } else {
-      unseeded.forEach((t) => bookingsGroupOpen.set(t.id, false)); // a trip added later starts closed
-    }
+    /* Isaac (v1.15.0 local test): from the tab, every group starts closed — a page of trip
+       names you open yourself. The Trips step card is the way to land on one trip open. */
+    liveTrips.filter((t) => !bookingsGroupOpen.has(t.id)).forEach((t) => bookingsGroupOpen.set(t.id, false));
   }
   const liveGroups = liveTrips.map(groupFor).join("");
   const pastTripsWithItems = ordered.filter((t) => tripArchived(t) && tripItems(t).some(matchesFilter));
@@ -6640,6 +6646,13 @@ function renderBookings() {
     b.addEventListener("click", () => {
       const item = state.items.find((i) => i.id === b.getAttribute("data-add-expense"));
       if (item) openExpenseForItem(item);
+    })
+  );
+  body.querySelectorAll("[data-booking-more]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const item = state.items.find((i) => i.id === b.getAttribute("data-booking-more"));
+      const trip = item && state.trips.find((t) => t.id === item.tripId);
+      if (trip) openItemActionsSheet(trip, item.id, { reorder: false }); // no day order to move within here
     })
   );
   if (bookingsFocusTrip) {

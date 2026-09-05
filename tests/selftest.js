@@ -4088,19 +4088,32 @@
     ];
     const openGroups = () => [...document.querySelectorAll("#bookings-body [data-trip-group]")].filter((d) => d.open).map((d) => d.getAttribute("data-trip-group")).join(",");
 
-    check("Bookings: only the trip you are on is open; without one, the next upcoming", () => {
-      const r1 = withTrips(threeTrips(), threeItems(), () => {
+    check("Bookings: from the tab every trip group starts closed, and each is a real <details>", () =>
+      withTrips(threeTrips(), threeItems(), () => {
         bookingsGroupOpen = new Map(); bookingsFocusTrip = null; bookingsFilter = "all";
         renderBookings();
-        return eq(openGroups(), "t-now", "travelling trip open");
-      });
-      if (r1 !== true) return r1;
-      return withTrips(threeTrips().filter((t) => t.id !== "t-now"), threeItems().filter((i) => i.tripId !== "t-now"), () => {
+        const groups = [...document.querySelectorAll("#bookings-body > [data-trip-group]")];
+        if (groups.length !== 2) return `${groups.length} live groups, expected 2`;
+        if (groups.some((d) => d.tagName !== "DETAILS")) return "a group is not a <details>";
+        return eq(openGroups(), "", "all closed by default");
+      }));
+
+    check("Bookings: each card has a ⋯ that opens the action sheet without the reorder rows", () =>
+      withTrips(threeTrips(), threeItems(), () => {
         bookingsGroupOpen = new Map(); bookingsFocusTrip = null; bookingsFilter = "all";
         renderBookings();
-        return eq(openGroups(), "t-soon", "next upcoming open when nothing is live");
-      });
-    });
+        const more = document.querySelector("#bookings-body [data-booking-more]");
+        if (!more) return "no ⋯ on the booking cards";
+        more.click();
+        const dlg = document.getElementById("dialog-item-actions");
+        try {
+          return [
+            eq(dlg.open, true, "sheet opened"),
+            eq(dlg.querySelector('[data-item-action="move-up"]').hidden, true, "Move up hidden on Bookings"),
+            eq(dlg.querySelector('[data-item-action="delete"]').hidden, false, "Delete offered"),
+          ].filter((x) => x !== true).join("; ") || true;
+        } finally { closeDialog(dlg); }
+      }));
 
     check("Bookings: a group you closed stays closed across a filter re-render", () =>
       withTrips(threeTrips(), threeItems(), () => {
