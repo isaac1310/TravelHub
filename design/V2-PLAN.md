@@ -8,6 +8,19 @@ Nothing here is scheduled. The full design spec is `design/handoff/TRAVELHUB-RED
 
 ---
 
+## Shipped since this list was written (refreshed 5 Sept 2026, v1.15.1)
+
+- **Today mode** — v1.14.0, as a card inside the Trips hero while a trip is travelling.
+- **Past bookings on the Bookings screen** — v1.14.0, the "Past trips" fold (first option below).
+- **Trip lifecycle / archive** — v1.14.0: automatic by end date plus a *cancelled* flag.
+- **Import from Google Maps** — single place: v1.14.0 (full URL), v1.15.0 (short links via
+  `/api/expand`). A whole saved list is still parked.
+- **Undo instead of `confirm()`** — partly: Undo toasts for checklist items (v1.13.0) and bookings
+  (v1.15.0); every delete now confirms through an in-app dialog (v1.15.0), which the harness can
+  drive, so the testability half is done too.
+
+The sections below are kept as written; the items above are no longer open.
+
 ## Wanted
 
 ### Past bookings on the Bookings screen

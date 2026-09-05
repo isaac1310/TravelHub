@@ -129,6 +129,7 @@
       releaseV1130();
       releaseV1140();
       releaseV1150();
+      releaseV1151();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -4367,6 +4368,66 @@
           ].filter((x) => x !== true).join("; ") || true;
         } finally { selectedYear = sy; }
       });
+    });
+  }
+
+  /* ===== v1.15.1 — reliability: visible save failures, local dates, import snapshot ===== */
+  function releaseV1151() {
+    group("v1.15.1");
+
+    check("a failed save shows the warning bar until a save succeeds", () => {
+      const bar = document.getElementById("save-warning");
+      if (!bar) return "no #save-warning";
+      const realSet = Storage.prototype.setItem, realAlert = window.alert;
+      window.alert = () => {};
+      try {
+        Storage.prototype.setItem = function () { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; };
+        const ok1 = saveState();
+        const shown = !bar.hidden && /full/i.test(bar.textContent);
+        const ok2 = saveState(); // a second failure: bar still up (the alert is once-only, the bar is not)
+        const stillShown = !bar.hidden;
+        Storage.prototype.setItem = realSet;
+        const ok3 = saveState();
+        return [
+          eq(ok1, false, "first save reports failure"), shown ? true : `bar hidden or wrong text: "${bar.textContent.trim().slice(0, 50)}"`,
+          eq(ok2, false, "second save reports failure"), stillShown ? true : "bar hid after the second failure",
+          eq(ok3, true, "save succeeds again"), eq(bar.hidden, true, "bar clears on success"),
+        ].filter((x) => x !== true).join("; ") || true;
+      } finally { Storage.prototype.setItem = realSet; window.alert = realAlert; saveState(); }
+    });
+
+    check("payment and fund dates use the local calendar day, not UTC", () => {
+      // The two disagree between midnight and 03:00 in Israel; the assertion is structural so it
+      // holds at any hour: both must be the same function of the same local clock.
+      const r1 = eq(todayISO(), todayLocalISO(), "todayISO equals todayLocalISO");
+      if (r1 !== true) return r1;
+      // Outside 00:00–03:00 the two dates agree even when one is UTC, so also refuse the UTC source.
+      if (/toISOString/.test(String(todayISO))) return "todayISO() still derives from toISOString() (UTC)";
+      const trip = makeTrip({ id: "t-date", expenses: [makeExpense({ id: "e-d", label: "x", amount: 10, status: "booked", amountPaid: 0 })] });
+      const bt = state.trips; state.trips = [trip];
+      try {
+        markExpensePaid("t-date", "e-d");
+        return eq(trip.expenses[0].paidDate, todayLocalISO(), "paidDate is the local date");
+      } finally { state.trips = bt; saveState(); render(); }
+    });
+
+    check("an import keeps a snapshot the Restore menu item can bring back", () => {
+      const before = localStorage.getItem(PRE_IMPORT_BACKUP_KEY);
+      try {
+        localStorage.removeItem(PRE_IMPORT_BACKUP_KEY);
+        if (pendingBackup() && pendingBackup().kind === "import") return "an import backup is reported when none exists";
+        localStorage.setItem(PRE_IMPORT_BACKUP_KEY, JSON.stringify({ trips: [], items: [], checklist: [] }));
+        const pb = pendingBackup();
+        const r = [];
+        if (!pb) r.push("pendingBackup() misses the import snapshot");
+        else if (localStorage.getItem(PRE_JOIN_BACKUP_KEY) == null && pb.kind !== "import") r.push(`kind is ${pb.kind}`);
+        render();
+        if (document.getElementById("btn-restore-backup").hidden) r.push("Restore button hidden although a snapshot exists");
+        return r.length ? r.join("; ") : true;
+      } finally {
+        if (before == null) localStorage.removeItem(PRE_IMPORT_BACKUP_KEY); else localStorage.setItem(PRE_IMPORT_BACKUP_KEY, before);
+        render();
+      }
     });
   }
 

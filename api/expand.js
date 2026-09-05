@@ -28,6 +28,10 @@ async function expandShortLink(short) {
       const location = res.headers.get("location");
       if (res.status >= 300 && res.status < 400 && location) {
         url = new URL(location, url).toString();
+        // Every hop must stay on Google — never follow a redirect to an arbitrary host.
+        if (!/^https:\/\/([a-z0-9-]+\.)*(google\.[a-z.]+|goo\.gl|g\.co)\//i.test(url)) {
+          return { status: 502, body: { error: "The link left Google" } };
+        }
         // Google's EU consent interstitial wraps the real target in ?continue=…; unwrap it rather
         // than hand the client a consent page it cannot parse.
         const cont = /^https:\/\/consent\.google\./i.test(url) ? new URL(url).searchParams.get("continue") : null;

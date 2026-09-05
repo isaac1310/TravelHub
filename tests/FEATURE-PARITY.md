@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.15.0**.
+Every user-reachable action in the app, as of **v1.15.1**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -123,11 +123,20 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.15.0 · <sha>` — selectable |
+| Build version | `TravelHub v1.15.1 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
-missing-room recovery · storage-quota warning. The What's-new list names `cancelled trip X` /
+missing-room recovery · storage-quota warning.
+
+**Local save failures** — *v1.15.1*: a failed `saveState()` shows the red `#save-warning` bar under
+the app bar ("…wasn't saved on this device" + **Export a copy**) and keeps it up through further
+failures until a save succeeds; the alert still fires once. **Import snapshot** — *v1.15.1*: an
+import writes the previous data to `PRE_IMPORT_BACKUP_KEY`; the Menu's restore item then reads
+"Restore data from before the import" (`pendingBackup()`, a pre-join backup takes precedence), and
+the import reports if it could not be saved. **Dates** — *v1.15.1*: `todayISO()` is the local
+calendar day (`todayLocalISO`), so paid dates and fund dates stamped after midnight are today's.
+**Short-link expander** — *v1.15.1*: every redirect hop must stay on a Google host, else 502. The What's-new list names `cancelled trip X` /
 `reinstated trip X` alongside the other trip edits — *v1.14.0*.
 
 ## Dialogs, and what opens each
