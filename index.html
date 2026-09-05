@@ -148,6 +148,9 @@ h1, h2, h3, h4, .brand__name {
 
 .btn--danger { background: transparent; color: var(--danger-text); }
 .btn--danger-solid { background: var(--danger-text); color: #fff; }
+/* Save-failure bar (v1.15.1): sits under the app bar on every screen until a save lands. */
+.save-warning { position: sticky; top: var(--appbar-h, 56px); z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; padding: 0.55rem 1rem; background: var(--danger-bg); color: var(--danger-text); font-size: 0.88rem; font-weight: 600; border-bottom: 1px solid #f0b6b2; }
+.save-warning .btn { min-height: 36px; }
 @media (hover: hover) { .btn--danger-solid:hover { filter: brightness(0.92); } }
 @media (hover: hover) { .btn--danger:hover { background: var(--danger-bg); } }
 
@@ -1621,6 +1624,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             </button>
           </div>
         </header>
+        <!-- v1.15.1: a failed local save used to alert once and then go quiet while the screen
+             kept showing the unsaved change. This bar stays up until a save succeeds. -->
+        <div class="save-warning" id="save-warning" hidden>
+          <span id="save-warning-text">Your latest change wasn't saved on this device.</span>
+          <button type="button" class="btn btn--small btn--outline" id="save-warning-export">Export a copy</button>
+        </div>
 
         <main class="content">
           <!-- ===== TRIPS ===== -->
@@ -2207,10 +2216,19 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.15.0";
+const APP_VERSION = "v1.15.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
+/* Snapshot taken just before an import replaced this device's data (v1.15.1). */
+const PRE_IMPORT_BACKUP_KEY = "vacation-budget-backup-before-import";
+/* Whichever snapshot exists — a join takes precedence because restoring it also leaves the room. */
+function pendingBackup() {
+  const join = localStorage.getItem(PRE_JOIN_BACKUP_KEY);
+  if (join) return { kind: "join", data: join };
+  const imp = localStorage.getItem(PRE_IMPORT_BACKUP_KEY);
+  return imp ? { kind: "import", data: imp } : null;
+}
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Shopping", "Other"];
 
@@ -2801,6 +2819,13 @@ function loadState() {
 
 /* Warn once per session — a full quota fires on every keystroke otherwise. */
 let saveFailureWarned = false;
+/* The persistent bar under the app bar. Every later edit retries the save, so success clears it. */
+function setSaveWarning(on, text) {
+  const bar = document.getElementById("save-warning");
+  if (!bar) return;
+  if (on && text) document.getElementById("save-warning-text").textContent = text;
+  bar.hidden = !on;
+}
 
 /* Returns whether the write actually landed. It used to return nothing while swallowing its
    own error, which made every caller's `try { saveState() } catch { rollback }` unreachable
@@ -2811,12 +2836,17 @@ function saveState() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     saveFailureWarned = false;
+    setSaveWarning(false);
   } catch (err) {
     ok = false;
     console.error("saveState failed", err);
+    const quota = err?.name === "QuotaExceededError" || err?.name === "NS_ERROR_DOM_QUOTA_REACHED";
+    // The bar stays up for every failure; the alert explains the first one only.
+    setSaveWarning(true, quota
+      ? "Storage is full — your latest change wasn't saved on this device. Delete a trip or some bookings, then edit again."
+      : "Your latest change wasn't saved on this device (private window, or storage blocked).");
     if (!saveFailureWarned) {
       saveFailureWarned = true;
-      const quota = err?.name === "QuotaExceededError" || err?.name === "NS_ERROR_DOM_QUOTA_REACHED";
       alert(quota
         ? "This device's storage is full, so your latest change wasn't saved on this device. Delete a trip or some bookings you no longer need, then try again."
         : "Your latest change couldn't be saved on this device. If you're in a private browsing window, storage may be blocked.");
@@ -3167,7 +3197,10 @@ function handleRollSubmit(e) {
   closeDialog($("dialog-roll"));
 }
 
-function todayISO() { return new Date().toISOString().slice(0, 10); }
+/* v1.15.1: local calendar date. This used to be toISOString() — UTC — so between midnight and
+   03:00 in Israel a payment marked "today" was stamped with yesterday's date. Kept as a name
+   because five call sites use it; todayLocalISO() is the same thing. */
+function todayISO() { return todayLocalISO(); }
 
 /* Safe in attribute values as well as element content — quotes must be escaped
    or `attr="${escapeHtml(x)}"` can be broken out of with a `"` in the data.
@@ -3547,7 +3580,7 @@ function renderFundHistory() {
 function render() {
   // Backup may be written by share.js after init — re-check on every render.
   const restoreBtn = $("btn-restore-backup");
-  if (restoreBtn) restoreBtn.hidden = !localStorage.getItem(PRE_JOIN_BACKUP_KEY);
+  if (restoreBtn) restoreBtn.hidden = !pendingBackup();
   renderYearFilter();
   renderGlobal();
   renderTrips();
@@ -4358,9 +4391,13 @@ function handleImportFile(e) {
       const parsed = JSON.parse(reader.result);
       if (!parsed || !Array.isArray(parsed.trips)) throw new Error("bad format");
       if (!confirm("Replace all data on this device with the imported file?")) return;
+      /* v1.15.1: keep what was here. The same key the "Restore my old data" menu item reads, so
+         the existing restore path covers a bad import too. */
+      try { localStorage.setItem(PRE_IMPORT_BACKUP_KEY, JSON.stringify(state)); } catch { /* full — the import itself will say so */ }
       state = normalizeState(parsed);
-      saveState();
+      const saved = saveState();
       render();
+      if (!saved) alert("The imported data is on screen but could not be saved on this device. Export a copy now, or free some storage and edit again.");
     } catch {
       alert("Invalid file — expected a JSON export from this app.");
     }
@@ -4565,12 +4602,20 @@ function bindEvents() {
   });
 
   $("btn-export-data").addEventListener("click", exportData);
+  $("save-warning-export").addEventListener("click", exportData);
   const restoreBtn = $("btn-restore-backup");
   restoreBtn.addEventListener("click", () => {
-    const backup = localStorage.getItem(PRE_JOIN_BACKUP_KEY);
+    const backup = pendingBackup();
     if (!backup) return;
+    if (backup.kind === "import") {
+      if (!confirm("Restore the data this device had before the import? The imported data will be replaced.")) return;
+      localStorage.setItem(STORAGE_KEY, backup.data);
+      localStorage.removeItem(PRE_IMPORT_BACKUP_KEY);
+      location.reload();
+      return;
+    }
     if (!confirm("Restore the data this device had before joining the shared trip? This disconnects from the shared trip and brings back your old local data.")) return;
-    localStorage.setItem(STORAGE_KEY, backup);
+    localStorage.setItem(STORAGE_KEY, backup.data);
     localStorage.removeItem(PRE_JOIN_BACKUP_KEY);
     localStorage.removeItem("travelhub-room");
     const url = new URL(window.location.href);
@@ -7055,7 +7100,10 @@ function bindShellEvents() {
     dlg.querySelector('[data-overflow="sync"]').hidden = !shared;
     dlg.querySelector('[data-overflow="leave"]').hidden = !shared;
     window.VacationShare?.refreshChrome?.();
-    dlg.querySelector('[data-overflow="restore"]').hidden = !localStorage.getItem(PRE_JOIN_BACKUP_KEY);
+    const backup = pendingBackup();
+    const restoreRow = dlg.querySelector('[data-overflow="restore"]');
+    restoreRow.hidden = !backup;
+    if (backup) restoreRow.lastChild.textContent = backup.kind === "import" ? " Restore data from before the import" : " Restore my old data";
     openDialog(dlg);
   });
   $("dialog-overflow").querySelectorAll("[data-overflow]").forEach((b) =>
