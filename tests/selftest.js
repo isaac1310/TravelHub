@@ -130,6 +130,7 @@
       releaseV1140();
       releaseV1150();
       releaseV1151();
+      releaseV1152();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -637,11 +638,14 @@
   function polishV19() {
     group("v1.9.0");
 
-    check("gmapsLink uses coordinates when the stop is geocoded", () => {
+    check("gmapsLink opens the place at its coordinates when the stop is geocoded", () => {
+      /* v1.15.2: a /maps/place/<name>/@lat,lng URL, not a bare coordinate search — the pin alone
+         opened lat/lng with no card. The coordinates still anchor it so the right branch opens. */
       const item = { title: "Hotel Ibis", location: { name: "Hotel Ibis", lat: 48.8629, lng: 2.3364 } };
       const url = gmapsLink(item, { destination: "Paris, France" });
-      if (!url.includes("48.8629,2.3364")) return "did not use coordinates: " + url;
-      return url.includes("Ibis") ? "still searching by name: " + url : true;
+      if (!url.includes("@48.8629,2.3364")) return "did not anchor at the coordinates: " + url;
+      if (!/\/maps\/place\/Hotel%20Ibis\//.test(url)) return "not a place URL with the name: " + url;
+      return url.includes("/search/") ? "still a bare coordinate search: " + url : true;
     });
 
     check("gmapsLink falls back to a name search without coordinates", () => {
@@ -3978,7 +3982,8 @@
 
     check("Today rows link to Google Maps by coordinates", () => {
       const html = card([timed("Louvre", "09:00", "11:00", { location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } })], 10 * 60);
-      return /query=48\.8606,2\.3376/.test(html) ? true : "no coordinate Maps link in the Now row";
+      // v1.15.2: the link is the place anchored at its coordinates, not a bare coordinate search.
+      return /@48\.8606,2\.3376/.test(html) ? true : "no coordinate-anchored Maps link in the Now row";
     });
   }
 
@@ -4428,6 +4433,61 @@
         if (before == null) localStorage.removeItem(PRE_IMPORT_BACKUP_KEY); else localStorage.setItem(PRE_IMPORT_BACKUP_KEY, before);
         render();
       }
+    });
+  }
+
+  /* ===== v1.15.2 — "open in Maps" opens the place, not a pin ===== */
+  function releaseV1152() {
+    group("v1.15.2");
+    const FULL = "https://www.google.com/maps/place/Mus%C3%A9e+d%27Orsay/@48.86,2.3266,17z/data=!3m1";
+
+    check("a pasted Maps URL is kept on the booking and is what Open in Maps opens", () => {
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      openItemDialog(tripId);
+      const form = document.getElementById("form-item");
+      try {
+        form.locationName.value = FULL;
+        form.locationName.dispatchEvent(new Event("input", { bubbles: true }));
+        const r = [eq(form.locUrl.value, FULL, "locUrl after paste"), eq(form.locationName.value, "Musée d'Orsay", "name")].filter((x) => x !== true);
+        if (r.length) return r.join("; ");
+        // Typing over the location drops the URL (and the pin) — it no longer describes the place.
+        form.locationName.value = "Somewhere else";
+        form.locationName.dispatchEvent(new Event("input", { bubbles: true }));
+        return eq(form.locUrl.value, "", "locUrl cleared by typing");
+      } finally { closeDialog(document.getElementById("dialog-item")); }
+    });
+
+    check("normalizeItem keeps only a Google Maps URL, and gmapsLink prefers it", () => {
+      const good = normalizeItem({ id: "g", tripId: "t", type: "attraction", title: "x", date: "2026-01-01", location: { name: "x", lat: 1, lng: 2, url: FULL } });
+      const bad = normalizeItem({ id: "b", tripId: "t", type: "attraction", title: "x", date: "2026-01-01", location: { name: "x", lat: 1, lng: 2, url: "https://evil.example.com/x" } });
+      return [
+        eq(good.location.url, FULL, "kept"),
+        eq(bad.location.url, "", "foreign URL dropped"),
+        eq(gmapsLink(good, { destination: "Paris" }), FULL, "gmapsLink returns the pasted URL"),
+        /\/maps\/place\/x\/@1,2,17z/.test(gmapsLink(bad, { destination: "Paris" })) ? true : "without a URL it should be place@coords: " + gmapsLink(bad, {}),
+      ].filter((x) => x !== true).join("; ") || true;
+    });
+
+    check("saving a pasted booking stores the URL; editing without touching the location keeps it", () => {
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      const bi = state.items;
+      try {
+        state.items = [];
+        openItemDialog(tripId, null, { date: "2026-01-02" });
+        const form = document.getElementById("form-item");
+        form.title.value = FULL;
+        form.title.dispatchEvent(new Event("input", { bubbles: true }));
+        form.date.value = "2026-01-02";
+        form.requestSubmit();
+        const saved = state.items[0];
+        if (!saved) return "nothing saved";
+        const r1 = eq(saved.location.url, FULL, "url saved");
+        if (r1 !== true) return r1;
+        openItemDialog(tripId, saved);
+        form.notes.value = "edited";
+        form.requestSubmit();
+        return eq(state.items[0].location.url, FULL, "url survives an unrelated edit");
+      } finally { if (document.getElementById("dialog-item").open) closeDialog(document.getElementById("dialog-item")); state.items = bi; saveState(); render(); }
     });
   }
 
