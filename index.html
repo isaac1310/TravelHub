@@ -2190,6 +2190,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <input type="text" dir="auto" name="locationName" maxlength="160" placeholder="Start typing, e.g. London Eye" autocomplete="off" />
             <input type="hidden" name="locLat" />
             <input type="hidden" name="locLng" />
+            <input type="hidden" name="locUrl" />
             <div class="loc-suggest" id="loc-suggest" hidden></div>
             <span class="field__hint">Or paste a Google Maps link here or in the name field — the place and pin fill in.</span>
           </label>
@@ -2216,7 +2217,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.15.1";
+const APP_VERSION = "v1.15.2";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -2372,6 +2373,9 @@ function normalizeItem(it) {
       name: loc.name || "",
       lat: typeof loc.lat === "number" ? loc.lat : null,
       lng: typeof loc.lng === "number" ? loc.lng : null,
+      // v1.15.2: the Google Maps URL the place was pasted from, so "open in Maps" opens the
+      // place itself and not a bare pin at its coordinates. Only ever a google.com/maps URL.
+      url: typeof loc.url === "string" && /^https:\/\/(www\.)?google\.[a-z.]+\/maps/i.test(loc.url) ? loc.url : "",
     },
     confirmation: it.confirmation || "",
     notes: it.notes || "",
@@ -3934,6 +3938,7 @@ function openItemDialog(tripId, item = null, defaults = {}) {
     form.locationName.value = item.location.name;
     form.locLat.value = item.location.lat ?? "";
     form.locLng.value = item.location.lng ?? "";
+    form.locUrl.value = item.location.url || "";
     form.confirmation.value = item.confirmation;
     form.confirmationF.value = item.confirmation;
     form.notes.value = item.notes;
@@ -4027,6 +4032,7 @@ function handleItemSubmit(e) {
       name: locationName,
       lat: pickedLat !== null ? pickedLat : keepCoords ? existing.location.lat : null,
       lng: pickedLng !== null ? pickedLng : keepCoords ? existing.location.lng : null,
+      url: !isFlight && form.locUrl.value ? form.locUrl.value : keepCoords ? existing.location.url || "" : "",
     },
     confirmation: (isFlight ? form.confirmationF.value : form.confirmation.value).trim(),
     notes: form.notes.value.trim(),
@@ -4152,7 +4158,9 @@ function parseMapsPaste(text) {
   const coords = parseCoordsFromText(t);
   if (!coords) return null;
   const name = placeNameFromMapsUrl(t);
-  return name ? { kind: "place", name, ...coords } : { kind: "coords", ...coords };
+  // Keep the full Maps URL (never bare coordinates or a short link) so "open in Maps" can reuse it.
+  const url = /^https:\/\/(www\.)?google\.[a-z.]+\/maps/i.test(t) ? t : "";
+  return name ? { kind: "place", name, url, ...coords } : { kind: "coords", url, ...coords };
 }
 
 /* fetch with a hard deadline. The Photon calls abort-on-supersede; this one is for a single
@@ -4197,6 +4205,7 @@ function applyMapsPaste(form, parsed, pasted) {
   }
   form.locLat.value = parsed.lat;
   form.locLng.value = parsed.lng;
+  form.locUrl.value = parsed.url || "";
   const name = parsed.kind === "place" ? parsed.name : "";
   if (name) {
     form.locationName.value = name;
@@ -4340,6 +4349,7 @@ async function showLocSuggestions(query) {
         form.locationName.value = b.getAttribute("data-name");
         form.locLat.value = b.getAttribute("data-lat");
         form.locLng.value = b.getAttribute("data-lng");
+        form.locUrl.value = ""; // a Photon pick has no Maps URL
         hideLocSuggestions();
       })
     );
@@ -4648,6 +4658,7 @@ function bindEvents() {
     const form = $("form-item");
     form.locLat.value = "";
     form.locLng.value = "";
+    form.locUrl.value = "";
     clearTimeout(locSuggestTimer);
     const q = locInput.value.trim();
     // Pasted a Google Maps link or "lat, lng"? Use it directly instead of searching.
@@ -6393,12 +6404,20 @@ function tripHotelForDay(trip, iso) {
   return hotels.find((h) => h.date && h.date <= iso && (!h.endDate || iso <= h.endDate)) || hotels[0] || null;
 }
 
-/* Prefer coordinates when we have them. Searching by name sends Google looking for
-   "Hotel Ibis, Paris" and it can land on a different branch entirely; the pin we
-   already geocoded is the place the user actually meant. */
+/* Open the PLACE, not a pin. In order: the Maps URL the booking was pasted from (v1.15.2 —
+   Isaac: a copied link used to open bare lat/lng instead of the item); else the place by name
+   anchored at its coordinates, which Google resolves to the card of the business at that spot;
+   else coordinates alone; else a name search biased by the trip's destination. Searching by
+   name alone is last because "Hotel Ibis, Paris" can land on a different branch. */
 function gmapsLink(item, trip) {
   const loc = item.location || {};
-  if (loc.lat != null && loc.lng != null) {
+  if (loc.url) return loc.url;
+  const hasCoords = loc.lat != null && loc.lng != null;
+  const name = (loc.name || item.title || "").trim();
+  if (hasCoords && name) {
+    return `https://www.google.com/maps/place/${encodeURIComponent(name)}/@${loc.lat},${loc.lng},17z`;
+  }
+  if (hasCoords) {
     return `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`;
   }
   const q = `${loc.name || item.title || ""}, ${trip?.destination || ""}`.replace(/,\s*$/, "").replace(/^,\s*/, "");

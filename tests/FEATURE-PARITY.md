@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.15.1**.
+Every user-reachable action in the app, as of **v1.15.2**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -65,7 +65,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Filter the map by day | day chips in the same format as the timeline's — day-of-week over the date, same tile, one scrolling line — plus `All`. `mapDayFilter`. The day travels with you between Timeline and Maps: scroll or tap a day, switch tabs, and the other view opens on it. Only a day you *chose* carries — the scroll spy sets one on arrival, and carrying that would stop Maps ever opening on the whole route |
 | **Tap a stop to focus it** | `data-focus-stop` on the row body — *v1.10.1*. Centres the map and opens that pin; the Locate and Maps buttons sit outside it. The v1.10.0 carousel was removed (it never rendered) |
 | Collapse/expand the stops sheet | tap `.map-list__title` (≤900px, and only while the filter is "All" — a selected day lists in full) |
-| Open a stop in Google Maps | "Maps ↗" per stop, **the hotel row**, and **both marker popups** — *coords since v1.9.0* |
+| Open a stop in Google Maps | "Maps ↗" per stop, **the hotel row**, **both marker popups**, the ⋯ sheet and the Today card. **Opens the place, not a pin** — *v1.15.2*: `gmapsLink()` returns the Maps URL the booking was pasted from (`location.url`, kept only for `google.*/maps` URLs, cleared when the location is retyped or picked from Photon), else `/maps/place/<name>/@lat,lng,17z`, else the bare coordinates, else a name search. Before, any geocoded stop opened lat/lng with no place card |
 | Retry the map | `btn-map-retry` when Leaflet fails to load |
 | **Map layering** | `.map-canvas` carries `z-index: 0` — *v1.11.0*. `position: relative` alone is not a stacking context, so Leaflet's own panes (200–700) competed directly with the sticky header and painted over it |
 
@@ -123,7 +123,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.15.1 · <sha>` — selectable |
+| Build version | `TravelHub v1.15.2 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·
