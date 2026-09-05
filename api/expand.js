@@ -28,6 +28,10 @@ async function expandShortLink(short) {
       const location = res.headers.get("location");
       if (res.status >= 300 && res.status < 400 && location) {
         url = new URL(location, url).toString();
+        // Google's EU consent interstitial wraps the real target in ?continue=…; unwrap it rather
+        // than hand the client a consent page it cannot parse.
+        const cont = /^https:\/\/consent\.google\./i.test(url) ? new URL(url).searchParams.get("continue") : null;
+        if (cont && /^https:\/\/(www\.)?google\.[a-z.]+\/maps/i.test(cont)) return { status: 200, body: { url: cont } };
         // Stop as soon as we are on a full Maps URL — that is what the client can parse.
         if (/^https:\/\/(www\.)?google\.[a-z.]+\/maps\//i.test(url)) return { status: 200, body: { url } };
         continue;

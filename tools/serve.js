@@ -41,10 +41,14 @@ http
        Same module, so local and production cannot drift. */
     if (url === "/api/expand") {
       const q = new URL(req.url, "http://localhost").searchParams.get("url");
-      require("../api/expand.js").handleExpand(q).then(({ status, body }) => {
+      const reply = (status, body) => {
         res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
         res.end(JSON.stringify(body));
-      });
+      };
+      Promise.resolve()
+        .then(() => require("../api/expand.js").handleExpand(q))
+        .then(({ status, body }) => reply(status, body))
+        .catch((err) => reply(500, { error: String(err && err.message || err) })); // never leave the request hanging
       return;
     }
 
