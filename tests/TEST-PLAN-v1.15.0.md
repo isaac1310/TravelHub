@@ -70,6 +70,9 @@ undoable or confirmable).
 2. Overview card. **Expect:** "Funds vs committed" with "₪X to spare" or "₪X short"; the tiles
    below include "Still to pay" and no longer "Funds vs committed". ☐
 3. Add expense → Category list has **Shopping**. ☐
+4. Above the trip cards: **All · Unpaid · Paid** chips with counts. Tap Unpaid → every card shows
+   only its unpaid (and partly paid) rows, folds open, summary reads "N unpaid of M expenses".
+   Paid → only fully paid rows. All → back. ☐
 
 ### 6. Words
 Nav tab, step chip, dialog titles, empty states, the ⋯ sheet: everything says **booking(s)**;

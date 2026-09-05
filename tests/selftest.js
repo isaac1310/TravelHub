@@ -4309,6 +4309,36 @@
       } finally { closeDialog(document.getElementById("dialog-item")); }
     });
 
+    /* ---- L: Budget expense filter ---- */
+
+    check("Budget: Unpaid / Paid chips filter the expense rows in every trip card", () => {
+      const y = Number(today.slice(0, 4));
+      const trip = mk("soon", shift(today, 5), shift(today, 9), { year: y, expenses: [
+        makeExpense({ id: "e-p", label: "Paid hotel", amount: 500, status: "paid", amountPaid: 500 }),
+        makeExpense({ id: "e-u", label: "Unpaid flight", amount: 300, status: "booked", amountPaid: 0 }),
+        makeExpense({ id: "e-h", label: "Half paid", amount: 200, status: "booked", amountPaid: 100 }),
+      ] });
+      const ef = expenseFilter;
+      return withTrips([trip], [], () => {
+        try {
+          expenseFilter = "all"; renderTrips();
+          const rows = () => [...document.querySelectorAll('[data-trip-fold="t-soon"] .expense-list li:not(.empty-state)')].length;
+          const chip = (v) => document.querySelector(`[data-expense-filter="${v}"]`);
+          const r = [];
+          if (rows() !== 3) r.push(`all shows ${rows()} rows`);
+          if (!chip("unpaid") || chip("unpaid").querySelector(".filter-chip__count").textContent !== "2") r.push("Unpaid chip count is not 2 (partly paid counts as unpaid)");
+          if (!chip("paid") || chip("paid").querySelector(".filter-chip__count").textContent !== "1") r.push("Paid chip count is not 1");
+          chip("unpaid").click();
+          if (rows() !== 2) r.push(`unpaid shows ${rows()} rows`);
+          if (!/2 unpaid of 3 expenses/.test(document.querySelector('[data-trip-fold="t-soon"] summary').textContent)) r.push("fold summary does not say 2 unpaid of 3");
+          if (!document.querySelector('[data-trip-fold="t-soon"]').open) r.push("filtering did not open the fold");
+          document.querySelector('[data-expense-filter="paid"]').click();
+          if (rows() !== 1) r.push(`paid shows ${rows()} rows`);
+          return r.length ? r.join("; ") : true;
+        } finally { expenseFilter = ef; }
+      });
+    });
+
     /* ---- K: the overview card ---- */
 
     check("Budget overview leads with Funds vs committed, in words", () => {

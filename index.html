@@ -1701,6 +1701,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
                 <h2 id="trips-heading" class="panel__heading">Trips</h2>
                 <button type="button" id="btn-add-trip" class="btn btn--outline">New trip</button>
               </div>
+              <!-- v1.15.0: filter the expense rows inside every trip card by payment state. -->
+              <div class="filter-chips" id="expense-filter" role="group" aria-label="Filter expenses"></div>
               <div id="trips-list" class="trips-grid"></div>
               <p id="trips-empty" class="empty-state" hidden>
                 No trips for this year. Create one to start tracking.
@@ -3299,10 +3301,16 @@ function renderTripCard(trip) {
   const remaining = budget - committed;
   const over = committed > budget;
   const pct = budget > 0 ? Math.min(100, (committed / budget) * 100) : committed > 0 ? 100 : 0;
+  const shown = trip.expenses.filter(expenseMatchesFilter);
   const expensesHtml =
     trip.expenses.length === 0
       ? `<li class="empty-state">Nothing booked yet — add an expense to start tracking this budget.</li>`
-      : trip.expenses.map((e) => renderExpenseItem(trip, e)).join("");
+      : shown.length === 0
+        ? `<li class="empty-state">No ${expenseFilter} expenses on this trip.</li>`
+        : shown.map((e) => renderExpenseItem(trip, e)).join("");
+  const foldLabel = expenseFilter === "all"
+    ? `${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`
+    : `${shown.length} ${expenseFilter} of ${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`;
 
   return `
     <article class="trip-card ${over ? "trip-card--over" : ""}" data-trip-id="${trip.id}">
@@ -3328,7 +3336,7 @@ function renderTripCard(trip) {
         <div><dt>Left in budget</dt><dd class="${remaining < 0 ? "over-badge" : ""}">${formatMoney(remaining)}</dd></div>
       </dl>
       <details class="expenses-fold" data-trip-fold="${trip.id}" ${window.innerWidth > 900 || trip.expenses.length === 0 || expensesFoldOpen.has(trip.id) ? "open" : ""}>
-        <summary>${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}</summary>
+        <summary>${foldLabel}</summary>
         <ul class="expense-list">${expensesHtml}</ul>
       </details>
       <button type="button" class="btn btn--secondary btn-add-expense btn-add-expense--card" data-trip-id="${trip.id}">Add expense</button>
@@ -3346,10 +3354,12 @@ function renderTrips() {
   if (trips.length === 0) {
     list.innerHTML = "";
     empty.hidden = false;
+    $("expense-filter").hidden = true;
     return;
   }
 
   empty.hidden = true;
+  renderExpenseFilter(trips);
   list.innerHTML = trips.map(renderTripCard).join("");
   bindExpenseRowActions();
   /* v1.15.0: remember which folds are open. Marking an expense paid re-renders the whole list,
@@ -3363,6 +3373,33 @@ function renderTrips() {
 }
 /* Outside `state` on purpose, like collapsedDays: a fold is not an edit and must never sync. */
 const expensesFoldOpen = new Set();
+
+/* All · Unpaid · Paid chips over the year's trips, same chip as Bookings. Counts are per expense
+   across the trips in view, so the chip tells you how many rows you will see. A filter with
+   nothing behind it is hidden rather than left as a dead end. */
+function renderExpenseFilter(trips) {
+  const row = $("expense-filter");
+  if (!row) return;
+  const all = trips.flatMap((t) => t.expenses);
+  const paid = all.filter((e) => expenseDisplayStatus(e) === "paid").length;
+  const counts = { all: all.length, unpaid: all.length - paid, paid };
+  if (expenseFilter !== "all" && !counts[expenseFilter]) expenseFilter = "all";
+  row.hidden = all.length === 0;
+  const chip = (value, label) => counts[value] === 0 && value !== "all" ? "" :
+    `<button type="button" class="filter-chip ${expenseFilter === value ? "is-active" : ""}"
+       data-expense-filter="${value}" aria-pressed="${expenseFilter === value ? "true" : "false"}"
+       aria-label="${label}, ${counts[value]} expense${counts[value] === 1 ? "" : "s"}"
+     >${label} <span class="filter-chip__count">${counts[value]}</span></button>`;
+  row.innerHTML = chip("all", "All") + chip("unpaid", "Unpaid") + chip("paid", "Paid");
+  row.querySelectorAll("[data-expense-filter]").forEach((b) =>
+    b.addEventListener("click", () => {
+      expenseFilter = b.getAttribute("data-expense-filter");
+      // Filtering is a reason to look inside — open the folds so the rows are actually visible.
+      if (expenseFilter !== "all") trips.forEach((t) => expensesFoldOpen.add(t.id));
+      renderTrips();
+    })
+  );
+}
 
 function bindExpenseRowActions() {
   const tripsList = $("trips-list");
@@ -4678,6 +4715,13 @@ let itineraryTripId = null;
 let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let bookingsFilter = "all"; // all | flight | hotel | other
+let expenseFilter = "all";  // all | unpaid | paid — Budget expense rows (v1.15.0)
+/* "Paid" is fully paid; everything else — planned, booked, partly paid — still needs money. */
+function expenseMatchesFilter(e) {
+  if (expenseFilter === "all") return true;
+  const paid = expenseDisplayStatus(e) === "paid";
+  return expenseFilter === "paid" ? paid : !paid;
+}
 let bookingsPastOpen = false;         // Bookings re-renders wholesale, so the fold's state lives here
 let bookingsGroupOpen = new Map();    // v1.15.0: per-trip group open/closed, remembered for the session
 let bookingsFocusTrip = null;         // set by the Trips step card: open only this trip's group, once
