@@ -136,6 +136,7 @@ missing-room recovery · storage-quota warning. The What's-new list names `cance
 | `dialog-trip` | Add trip · Edit trip (hero, cards, **itinerary**). Edit also offers the **Trip cancelled** checkbox — *v1.14.0* — and **Delete trip…** — *v1.15.0* |
 | `dialog-item` | Add/edit booking · **Add to today** on the Today card. Accepts a pasted Google Maps link in the name or Location field — *v1.14.0*; short links expand via `/api/expand` — *v1.15.0* |
 | `dialog-expense` | Add/edit expense · **Add expense** from a booking (⋯ sheet, Bookings card) prefilled and linked — *v1.15.0*. Categories now include **Shopping** |
+| `dialog-confirm` | **In-app confirm for deletes** — *v1.15.0*: trip, expense, booking, member removal go through `appConfirm(message, cb, {title, okLabel})` instead of the native `confirm()`. Isaac's local test had three deletes "do nothing" in Chrome: a suppressed native prompt returns false silently, and the browser harness auto-dismisses it too. Cancel / Escape / Back / backdrop → `cb(false)`; the red button → `cb(true)`. Fund removal, year-end roll, import and restore still use the native prompt (rare, desktop-side) |
 | `dialog-item-actions` | ⋯ on a reservation |
 | `dialog-expense` | Add/edit expense |
 | `dialog-funds` | Add funds |
@@ -145,8 +146,8 @@ missing-room recovery · storage-quota warning. The What's-new list names `cance
 | `dialog-changes` | After a sync that brought changes |
 | `dialog-overflow` | ⋯ in the app bar |
 
-All ten close on Escape, the close button, **and a tap outside** — with a confirm if a form
-has unsaved edits.
+All of them close on Escape, the close button, **and a tap outside** — a half-filled form stays
+open on the first Escape/Back (v1.13.0) and on a backdrop tap.
 
 A backdrop tap while a `<select>` inside the dialog holds focus blurs the select instead of
 closing the sheet — *v1.10.5*. Android draws a select's option list over the upper part of the

@@ -147,6 +147,8 @@ h1, h2, h3, h4, .brand__name {
 @media (hover: hover) { .btn--ghost:hover { background: var(--cream); color: var(--text); } }
 
 .btn--danger { background: transparent; color: var(--danger-text); }
+.btn--danger-solid { background: var(--danger-text); color: #fff; }
+@media (hover: hover) { .btn--danger-solid:hover { filter: brightness(0.92); } }
 @media (hover: hover) { .btn--danger:hover { background: var(--danger-bg); } }
 
 .btn--small { padding: 0.32rem 0.7rem; font-size: 0.8rem; min-height: 44px; }
@@ -1745,6 +1747,22 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <svg viewBox="0 0 24 24" fill="none"><path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
     </div>
+
+    <!-- ===== In-app confirm (v1.15.0) =====
+         Deletes used the native confirm(). Isaac's local test: three deletes "did nothing" in
+         Chrome — a suppressed native prompt (Chrome's "don't show more dialogs" tick, or the
+         browser harness auto-dismissing it) silently returns false. A <dialog> of our own cannot
+         be suppressed and matches the rest of the sheets. -->
+    <dialog id="dialog-confirm" class="dialog" aria-labelledby="confirm-title">
+      <div style="padding: 1.2rem 1.4rem 1rem">
+        <h3 class="dialog__title" id="confirm-title">Are you sure?</h3>
+        <p class="dialog__hint" id="confirm-text"></p>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
+          <button type="button" class="btn btn--danger-solid" id="confirm-ok">Delete</button>
+        </div>
+      </div>
+    </dialog>
 
     <!-- ===== Who-are-you (device identity for shared trips) ===== -->
     <dialog id="dialog-whoami" class="dialog" aria-labelledby="whoami-title">
@@ -3978,21 +3996,23 @@ function deleteItem(itemId) {
   const msg = exp
     ? `Delete "${item.title}"? Its ${formatMoney(exp.amount)} expense will be deleted too.`
     : `Delete "${item.title}"?`;
-  if (!confirm(msg)) return;
-  const itemIndex = state.items.indexOf(item);
-  const expIndex = exp && trip ? trip.expenses.indexOf(exp) : -1;
-  state.items = state.items.filter((i) => i.id !== itemId);
-  if (exp && trip) trip.expenses = trip.expenses.filter((e) => e.id !== exp.id);
-  saveState();
-  render();
-  undoAction = () => {
-    if (!state.items.some((i) => i.id === item.id)) state.items.splice(Math.min(itemIndex, state.items.length), 0, item);
-    const t = trip && state.trips.find((x) => x.id === trip.id);
-    if (exp && t && !t.expenses.some((e) => e.id === exp.id)) t.expenses.splice(Math.min(expIndex, t.expenses.length), 0, exp);
+  appConfirm(msg, (ok) => {
+    if (!ok) return;
+    const itemIndex = state.items.indexOf(item);
+    const expIndex = exp && trip ? trip.expenses.indexOf(exp) : -1;
+    state.items = state.items.filter((i) => i.id !== itemId);
+    if (exp && trip) trip.expenses = trip.expenses.filter((e) => e.id !== exp.id);
     saveState();
     render();
-  };
-  showToast(exp ? `Removed “${item.title}” and its expense` : `Removed “${item.title}”`, "undo");
+    undoAction = () => {
+      if (!state.items.some((i) => i.id === item.id)) state.items.splice(Math.min(itemIndex, state.items.length), 0, item);
+      const t = trip && state.trips.find((x) => x.id === trip.id);
+      if (exp && t && !t.expenses.some((e) => e.id === exp.id)) t.expenses.splice(Math.min(expIndex, t.expenses.length), 0, exp);
+      saveState();
+      render();
+    };
+    showToast(exp ? `Removed “${item.title}” and its expense` : `Removed “${item.title}”`, "undo");
+  }, { title: "Delete booking" });
 }
 
 /* Try to read coordinates directly out of pasted text — a Google Maps link
@@ -4424,32 +4444,38 @@ function handleExpenseSubmit(e) {
   closeDialog($("dialog-expense"));
 }
 
-/* Returns true when the trip was deleted, false when the confirm was declined — the Edit
-   dialog stays open on a decline. */
-function deleteTrip(tripId) {
+/* `onDeleted` runs only after a confirmed delete — the Edit dialog closes itself from it, and
+   stays open on a decline. */
+function deleteTrip(tripId, onDeleted) {
   const trip = state.trips.find((t) => t.id === tripId);
-  if (!trip) return false;
+  if (!trip) return;
   const itemCount = state.items.filter((i) => i.tripId === tripId).length;
   const bits = [];
   if (trip.expenses.length) bits.push(`${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`);
   if (itemCount) bits.push(`${itemCount} booking${itemCount === 1 ? "" : "s"}`);
   const msg = bits.length ? `Delete "${trip.name}" and its ${bits.join(" & ")}?` : `Delete "${trip.name}"?`;
-  if (!confirm(msg)) return false;
-  state.trips = state.trips.filter((t) => t.id !== tripId);
-  state.items = state.items.filter((i) => i.tripId !== tripId);
-  saveState();
-  render();
-  return true;
+  appConfirm(msg, (ok) => {
+    if (!ok) return;
+    state.trips = state.trips.filter((t) => t.id !== tripId);
+    state.items = state.items.filter((i) => i.tripId !== tripId);
+    saveState();
+    render();
+    if (onDeleted) onDeleted();
+  }, { title: "Delete trip", okLabel: "Delete trip" });
 }
 
 function deleteExpense(tripId, expenseId) {
   const trip = state.trips.find((t) => t.id === tripId);
   if (!trip) return;
   const exp = trip.expenses.find((x) => x.id === expenseId);
-  if (!exp || !confirm(`Delete expense "${exp.label}"?`)) return;
-  trip.expenses = trip.expenses.filter((x) => x.id !== expenseId);
-  saveState();
-  render();
+  if (!exp) return;
+  // One way: an expense can go without touching the booking it paid for.
+  appConfirm(`Delete expense "${exp.label}"?`, (ok) => {
+    if (!ok) return;
+    trip.expenses = trip.expenses.filter((x) => x.id !== expenseId);
+    saveState();
+    render();
+  }, { title: "Delete expense" });
 }
 
 function bindRollEvents() {
@@ -4524,7 +4550,7 @@ function bindEvents() {
   $("form-funds").addEventListener("submit", handleFundsSubmit);
   $("form-trip").addEventListener("submit", handleTripSubmit);
   $("trip-delete").addEventListener("click", () => {
-    if (deleteTrip($("form-trip").tripId.value)) closeDialog($("dialog-trip"));
+    deleteTrip($("form-trip").tripId.value, () => closeDialog($("dialog-trip")));
   });
   // Both events: desktop date inputs fire `input` per keystroke, Android's picker fires `change`.
   ["input", "change"].forEach((ev) =>
@@ -6811,12 +6837,14 @@ function renderFamily() {
     btn.addEventListener("click", () => {
       const name = btn.getAttribute("data-member-del");
       const count = state.trips.filter((t) => (t.travelers || []).includes(name)).length;
-      if (!confirm(`Remove "${name}" from ${count} trip${count === 1 ? "" : "s"}?`)) return;
-      state.trips.forEach((t) => {
-        t.travelers = (t.travelers || []).filter((n) => n !== name);
-      });
-      saveState();
-      render();
+      appConfirm(`Remove "${name}" from ${count} trip${count === 1 ? "" : "s"}?`, (ok) => {
+        if (!ok) return;
+        state.trips.forEach((t) => {
+          t.travelers = (t.travelers || []).filter((n) => n !== name);
+        });
+        saveState();
+        render();
+      }, { title: "Remove member", okLabel: "Remove" });
     })
   );
 }
@@ -7215,6 +7243,35 @@ function announce(text) {
      repeated "Saved" is still spoken. */
   el.textContent = "";
   el.textContent = text;
+}
+
+/* In-app confirm. `cb(true)` on the red button, `cb(false)` on Cancel / Escape / Back / backdrop —
+   once, whichever comes first. Callback rather than a Promise so the self-test can stub it
+   synchronously (`appConfirm = (m, cb) => cb(true)`). Dismissal is wired through `close` AND
+   `toggle`, because Chrome does not fire `close` on a hidden tab (see ensureDeviceName). */
+function appConfirm(message, cb, opts = {}) {
+  const dlg = $("dialog-confirm");
+  $("confirm-title").textContent = opts.title || "Are you sure?";
+  $("confirm-text").textContent = message;
+  $("confirm-ok").textContent = opts.okLabel || "Delete";
+  let settled = false;
+  const settle = (answer) => {
+    if (settled) return;
+    settled = true;
+    dlg._onDismiss = null;
+    if (dlg.open) dlg.close();
+    cb(answer);
+  };
+  dlg._onDismiss = () => settle(false);
+  $("confirm-ok").onclick = () => settle(true);
+  // The Cancel button settles directly too — `close`/`toggle` are async, and absent on a hidden tab.
+  dlg.querySelector("[data-dialog-close]").onclick = () => settle(false);
+  if (!dlg._dismissWired) {
+    dlg._dismissWired = true;
+    dlg.addEventListener("close", () => dlg._onDismiss?.());
+    dlg.addEventListener("toggle", (e) => { if (e.newState === "closed") dlg._onDismiss?.(); });
+  }
+  openDialog(dlg);
 }
 
 function showToast(text, action) {

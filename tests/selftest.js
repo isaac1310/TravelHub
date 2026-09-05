@@ -4003,11 +4003,29 @@
         render();
       }
     };
+    /* Deletes go through the in-app appConfirm (v1.15.0), stubbed synchronously here. */
     const withConfirm = (answer, fn) => {
-      const real = window.confirm; let asked = "";
-      window.confirm = (msg) => { asked = String(msg); return answer; };
-      try { return fn(() => asked); } finally { window.confirm = real; }
+      const real = appConfirm; let asked = "";
+      appConfirm = (msg, cb) => { asked = String(msg); cb(answer); };
+      try { return fn(() => asked); } finally { appConfirm = real; }
     };
+
+    check("deletes ask through the in-app confirm dialog, not the native prompt", () => {
+      const dlg = document.getElementById("dialog-confirm");
+      if (!dlg) return "no #dialog-confirm";
+      let answer = null;
+      appConfirm("Probe?", (ok) => { answer = ok; }, { okLabel: "Zap" });
+      try {
+        if (!dlg.open) return "the confirm dialog did not open";
+        if (document.getElementById("confirm-text").textContent !== "Probe?") return "message not shown";
+        if (document.getElementById("confirm-ok").textContent !== "Zap") return "ok label not applied";
+        document.getElementById("confirm-ok").click();
+        if (answer !== true) return `OK gave ${answer}`;
+        appConfirm("Again?", (ok) => { answer = ok; });
+        dlg.querySelector("[data-dialog-close]").click();
+        return eq(answer, false, "Cancel gives false");
+      } finally { if (dlg.open) closeDialog(dlg); }
+    });
 
     /* ---- B: Delete trip from the Edit dialog ---- */
 
