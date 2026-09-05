@@ -489,6 +489,22 @@ h1, h2, h3, h4, .brand__name {
    it outranks the later `.field { flex-direction: column }` rule (same specificity would lose). */
 .field.field--check { flex-direction: row; align-items: center; gap: 0.7rem; min-height: 44px; cursor: pointer; }
 .field.field--check input[type="checkbox"] { width: 24px; height: 24px; accent-color: var(--brand); flex: none; margin: 0; }
+/* The Delete-trip row in the Edit dialog: full-width quiet red button, a clear gap above the
+   sticky Cancel/Save bar. */
+.dialog__danger { margin: 0.4rem 0 1.4rem; padding-top: 0.9rem; border-top: 1px solid var(--border); }
+.dialog__danger .btn { width: 100%; justify-content: center; min-height: 44px; }
+
+/* Booking preview card: notes, two lines then an ellipsis; the full text is in the sheet. */
+.booking__notes { margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* Per-trip groups on Bookings are <details> since v1.15.0; the title keeps its chrome as the summary. */
+.booking-group > summary { list-style: none; cursor: pointer; }
+.booking-group > summary::-webkit-details-marker { display: none; }
+.booking-group > summary .booking-group__title { margin: 0; }
+.booking-group > summary .booking-group__title::after { content: "›"; margin-left: auto; color: var(--muted); font-size: 1.3rem; line-height: 1; transition: transform 0.15s; }
+.booking-group[open] > summary .booking-group__title::after { transform: rotate(90deg); }
+.booking-group[open] > summary { margin-bottom: 0.9rem; }
+.booking-group .booking-group__title .booking__add-expense { margin-left: 0; }
+.booking__foot .btn--small { min-height: 36px; padding: 0.3rem 0.7rem; }
 .tripcard__cover h3 { margin: 0; color: var(--heading); font-size: 1.25rem; }
 .tripcard__body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; }
 .tripcard__row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.86rem; }
@@ -802,6 +818,8 @@ h1, h2, h3, .hero h1, .hero p {
 .answer-card__label { font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.72; font-weight: 700; }
 .answer-card__value { font-family: "Poppins", sans-serif; font-size: 2.1rem; font-weight: 700; line-height: 1.05; }
 .answer-card--clear .answer-card__value { color: #9fe0bf; }
+.answer-card--short .answer-card__value { color: #f6b3a8; }
+.answer-card__word { font-size: 1.05rem; font-weight: 600; opacity: 0.85; margin-left: 0.2rem; }
 .answer-card__sub { font-size: 0.82rem; opacity: 0.75; }
 .answer-card__bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: rgba(255,255,255,0.2); margin-top: 0.7rem; }
 .answer-card__bar > span { background: #6bb3a8; }
@@ -871,6 +889,7 @@ h1, h2, h3, .hero h1, .hero p {
 .category-tag[data-category="Food"]       { --cat-bg: #fce8d8; --cat-fg: #c26a33; }
 .category-tag[data-category="Transport"]  { --cat-bg: #dff0e6; --cat-fg: #3f8a63; }
 .category-tag[data-category="Activities"] { --cat-bg: #fbeecf; --cat-fg: #b9852f; }
+.category-tag[data-category="Shopping"]   { --cat-bg: #fbe3ea; --cat-fg: #b0456a; }
 .category-tag[data-category="Other"]      { --cat-bg: #efe9e3; --cat-fg: #8a7f74; }
 
 .category-breakdown { padding: 0.7rem 0; border-top: 1px solid var(--border); }
@@ -882,6 +901,7 @@ h1, h2, h3, .hero h1, .hero p {
 .category-breakdown__segment[data-category="Food"]       { --cat-bar: #eb9160; }
 .category-breakdown__segment[data-category="Transport"]  { --cat-bar: #63b585; }
 .category-breakdown__segment[data-category="Activities"] { --cat-bar: #e0b552; }
+.category-breakdown__segment[data-category="Shopping"]   { --cat-bar: #e08aa6; }
 .category-breakdown__segment[data-category="Other"]      { --cat-bar: #b7a99a; }
 .category-breakdown__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .category-breakdown__row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem; align-items: center; font-size: 0.8rem; }
@@ -1821,7 +1841,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
     <!-- ===== Item ⋯ action sheet ===== -->
     <dialog id="dialog-item-actions" class="dialog" aria-labelledby="item-actions-title">
       <div style="padding: 0.9rem 1.2rem 0.4rem">
-        <h3 class="dialog__title" id="item-actions-title" style="margin-bottom:0.6rem">Reservation</h3>
+        <h3 class="dialog__title" id="item-actions-title" style="margin-bottom:0.6rem">Booking</h3>
         <button type="button" class="sheet-item" data-item-action="edit">
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 20h4L19 9l-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
           Edit
@@ -1837,6 +1857,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <button type="button" class="sheet-item" data-item-action="maps" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg>
           Open in Google Maps
+        </button>
+        <button type="button" class="sheet-item" data-item-action="expense">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="6" width="17" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 10h17M8 14.5h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span data-item-action-label>Add expense</span>
         </button>
         <button type="button" class="sheet-item sheet-item--danger" data-item-action="delete">
           <svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14M9 7V5h6v2m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1934,6 +1958,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <input type="checkbox" name="cancelled" />
           <span>Trip cancelled — file it under Past trips</span>
         </label>
+        <!-- v1.15.0: Delete used to live only on the Budget cards. Its own row, well above the
+             Cancel/Save bar, so a thumb cannot slide from Save onto it. Edit only. -->
+        <div class="dialog__danger" id="trip-delete-row" hidden>
+          <button type="button" class="btn btn--danger" id="trip-delete">Delete trip…</button>
+        </div>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
           <button type="submit" class="btn btn--primary">Save</button>
@@ -2008,9 +2037,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <option value="Food">Food</option>
             <option value="Transport">Transport</option>
             <option value="Activities">Activities</option>
+            <option value="Shopping">Shopping</option>
             <option value="Other">Other</option>
           </select>
         </label>
+        <input type="hidden" name="itemId" />
         <label class="field">
           <span class="field__label">Amount (₪)</span>
           <input type="number" name="amount" id="expense-amount" min="0.01" step="0.01" required />
@@ -2053,7 +2084,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
     <!-- ===== Itinerary reservation dialog ===== -->
     <dialog id="dialog-item" class="dialog dialog--wide" aria-labelledby="item-dialog-title">
       <form id="form-item" method="dialog">
-        <h3 class="dialog__title" id="item-dialog-title">Add reservation</h3>
+        <h3 class="dialog__title" id="item-dialog-title">Add booking</h3>
         <input type="hidden" name="itemId" />
         <input type="hidden" name="tripId" />
         <!-- Buttons, not a select: opened from Bookings there is no trip context to inherit, and
@@ -2153,12 +2184,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.14.0";
+const APP_VERSION = "v1.15.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
 
-const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Other"];
+const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Shopping", "Other"];
 
 const PAYMENT_STATUSES = ["planned", "booked", "paid"];
 
@@ -2412,6 +2443,7 @@ function normalizeExpense(exp) {
     status,
     amountPaid,
     paidDate,
+    itemId: exp.itemId ? String(exp.itemId) : "", // v1.15.0: the booking this expense pays for
   };
 }
 
@@ -2763,7 +2795,7 @@ function saveState() {
       saveFailureWarned = true;
       const quota = err?.name === "QuotaExceededError" || err?.name === "NS_ERROR_DOM_QUOTA_REACHED";
       alert(quota
-        ? "This device's storage is full, so your latest change wasn't saved on this device. Delete a trip or some reservations you no longer need, then try again."
+        ? "This device's storage is full, so your latest change wasn't saved on this device. Delete a trip or some bookings you no longer need, then try again."
         : "Your latest change couldn't be saved on this device. If you're in a private browsing window, storage may be blocked.");
     }
   }
@@ -2824,6 +2856,7 @@ function buildExpenseFromForm(form) {
   const label = expenseFormField(form, "label").value.trim();
   const category = expenseFormField(form, "category").value;
   const date = expenseFormField(form, "date").value;
+  const itemId = expenseFormField(form, "itemId").value; // the booking this pays for, if any
   let status = expenseFormField(form, "status").value;
   let amountPaid = Math.min(
     amount,
@@ -2852,7 +2885,7 @@ function buildExpenseFromForm(form) {
      An expense with an empty id is unreachable: every row action carries data-expense-id=""
      and bails. Drop the id here; both call sites own it. */
   const { id: _noId, ...fields } = normalizeExpense({
-    label, category, amount, date, status, amountPaid, paidDate,
+    label, category, amount, date, status, amountPaid, paidDate, itemId,
   });
   return fields;
 }
@@ -3146,17 +3179,19 @@ function renderGlobal() {
 
   const yearNote = selectedYear === "all" ? "all trips" : `trips in ${selectedYear}`;
 
-  /* Lead with the one number you actually came for. It used to be the fifth of
-     seven equal tiles, which made you read the whole grid to find it. Removed
-     from the grid rather than repeated. */
+  /* Lead with the one question you actually came for. v1.15.0 (Isaac): that question is "do we
+     have the money for what we've committed to" — funds vs committed, in words, not a signed
+     number. Still-to-pay moved down to a tile rather than being dropped. */
+  const short = vsCommitted < 0;
+  const fundsShare = state.currentFunds > 0 ? Math.min(100, (totalCommitted / state.currentFunds) * 100) : totalCommitted > 0 ? 100 : 0;
   $("global-answer").innerHTML = `
-    <div class="answer-card ${totalDue > 0 ? "" : "answer-card--clear"}">
-      <span class="answer-card__label">Still to pay · ${yearNote}</span>
-      <span class="answer-card__value money">${formatMoney(totalDue)}</span>
-      <span class="answer-card__sub">of ${formatMoney(totalBudget)} planned · ${formatMoney(state.currentFunds)} in the pot</span>
+    <div class="answer-card ${short ? "answer-card--short" : "answer-card--clear"}">
+      <span class="answer-card__label">Funds vs committed · ${yearNote}</span>
+      <span class="answer-card__value money">${formatMoney(Math.abs(vsCommitted))} <span class="answer-card__word">${short ? "short" : "to spare"}</span></span>
+      <span class="answer-card__sub">${formatMoney(state.currentFunds)} in the pot · ${formatMoney(totalCommitted)} committed</span>
       <span class="answer-card__bar" aria-hidden="true">
-        <span style="width:${totalBudget > 0 ? Math.min(100, (totalPaid / totalBudget) * 100) : 0}%"></span>
-        <span class="answer-card__bar--due" style="width:${totalBudget > 0 ? Math.min(100, (totalDue / totalBudget) * 100) : 0}%"></span>
+        <span style="width:${fundsShare}%"></span>
+        ${short ? `<span class="answer-card__bar--due" style="width:${Math.min(100, (Math.abs(vsCommitted) / Math.max(1, totalCommitted)) * 100)}%"></span>` : ""}
       </span>
       <span class="answer-card__legend">${formatMoney(totalPaid)} paid · ${formatMoney(totalDue)} still to pay</span>
     </div>`;
@@ -3182,9 +3217,9 @@ function renderGlobal() {
       <span class="stat__label">Funds vs budget</span>
       <span class="stat__value">${formatMoney(vsBudget)}</span>
     </div>
-    <div class="stat ${vsCommitted < 0 ? "stat--warn" : "stat--ok"}">
-      <span class="stat__label">Funds vs committed</span>
-      <span class="stat__value">${formatMoney(vsCommitted)}</span>
+    <div class="stat ${totalDue > 0 ? "stat--warn" : "stat--ok"}">
+      <span class="stat__label">Still to pay (${yearNote})</span>
+      <span class="stat__value">${formatMoney(totalDue)}</span>
     </div>
     ${
       overBudgetGlobal
@@ -3271,7 +3306,7 @@ function renderTripCard(trip) {
         <div><dt>Still to pay</dt><dd class="${due > 0 ? "trip-metrics__due" : ""}">${formatMoney(due)}</dd></div>
         <div><dt>Left in budget</dt><dd class="${remaining < 0 ? "over-badge" : ""}">${formatMoney(remaining)}</dd></div>
       </dl>
-      <details class="expenses-fold" ${window.innerWidth > 900 || trip.expenses.length === 0 ? "open" : ""}>
+      <details class="expenses-fold" data-trip-fold="${trip.id}" ${window.innerWidth > 900 || trip.expenses.length === 0 || expensesFoldOpen.has(trip.id) ? "open" : ""}>
         <summary>${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}</summary>
         <ul class="expense-list">${expensesHtml}</ul>
       </details>
@@ -3296,7 +3331,17 @@ function renderTrips() {
   empty.hidden = true;
   list.innerHTML = trips.map(renderTripCard).join("");
   bindExpenseRowActions();
+  /* v1.15.0: remember which folds are open. Marking an expense paid re-renders the whole list,
+     and on the phone (<900px) every fold snapped shut — the one you were working in included. */
+  list.querySelectorAll("[data-trip-fold]").forEach((d) =>
+    d.addEventListener("toggle", () => {
+      const id = d.getAttribute("data-trip-fold");
+      if (d.open) expensesFoldOpen.add(id); else expensesFoldOpen.delete(id);
+    })
+  );
 }
+/* Outside `state` on purpose, like collapsedDays: a fold is not an edit and must never sync. */
+const expensesFoldOpen = new Set();
 
 function bindExpenseRowActions() {
   const tripsList = $("trips-list");
@@ -3615,7 +3660,9 @@ function openTripDialog(trip = null) {
     form.travelers.value = (trip.travelers || []).join(", ");
     form.cancelled.checked = trip.cancelled === true;
     $("trip-cancelled-field").hidden = false;
+    $("trip-delete-row").hidden = false;
   } else {
+    $("trip-delete-row").hidden = true;
     title.textContent = "New trip";
     form.tripId.value = "";
     form.year.value = selectedYear === "all" ? new Date().getFullYear() : Number(selectedYear);
@@ -3660,7 +3707,8 @@ function readDestRows() {
   return [...document.querySelectorAll("#dest-rows .dest-input")].map((i) => i.value.trim());
 }
 
-function openExpenseDialog(tripId, expense = null) {
+/* `defaults` (v1.15.0) prefills a new expense from a booking: label, category, date, itemId. */
+function openExpenseDialog(tripId, expense = null, defaults = {}) {
   const form = $("form-expense");
   const title = $("expense-dialog-title"); // has an id now — no fragile DOM traversal
   const expenseId = expense ? expense.id : "";
@@ -3668,6 +3716,7 @@ function openExpenseDialog(tripId, expense = null) {
   form.reset();
   expenseFormField(form, "tripId").value = tripId;
   expenseFormField(form, "expenseId").value = expenseId;
+  expenseFormField(form, "itemId").value = expense ? (expense.itemId || "") : (defaults.itemId || "");
   title.textContent = expense ? "Edit expense" : "Add expense";
 
   const normalized = expense ? normalizeExpense(expense) : null;
@@ -3683,10 +3732,27 @@ function openExpenseDialog(tripId, expense = null) {
     setExpenseStatus("booked", true);
     expenseFormField(form, "amountPaid").value = 0;
     expenseFormField(form, "paidDate").value = "";
+    if (defaults.label) expenseFormField(form, "label").value = defaults.label;
+    if (defaults.category && CATEGORIES.includes(defaults.category)) expenseFormField(form, "category").value = defaults.category;
+    if (defaults.date) expenseFormField(form, "date").value = defaults.date;
   }
 
   syncExpensePaidDateVisibility();
   openDialog($("dialog-expense"));
+  // Prefilled from a booking: the only thing left to type is the amount.
+  if (!expense && defaults.label) expenseFormField(form, "amount").focus();
+}
+
+/* "Add expense" from a booking: everything but the amount comes from the booking itself. */
+function openExpenseForItem(item) {
+  const linked = linkedExpense(item);
+  if (linked) { openExpenseDialog(item.tripId, linked); return; }
+  openExpenseDialog(item.tripId, null, {
+    label: item.title,
+    category: TYPE_TO_CATEGORY[item.type] || "Other",
+    date: item.date || "",
+    itemId: item.id,
+  });
 }
 
 /* ---------- Itinerary reservation dialog ---------- */
@@ -3757,7 +3823,7 @@ function openItemDialog(tripId, item = null, defaults = {}) {
   form.reset();
   form.tripId.value = tripId;
   form.itemId.value = item ? item.id : "";
-  $("item-dialog-title").textContent = item ? "Edit reservation" : "Add reservation";
+  $("item-dialog-title").textContent = item ? "Edit booking" : "Add booking";
   // Disclosure: open on desktop or when editing an item that uses those fields
   const more = $("item-more");
   // Open when adding (notes are usually the point), on desktop, or when editing
@@ -3888,6 +3954,7 @@ function handleItemSubmit(e) {
 
   if (existing) Object.assign(existing, item);
   else state.items.push(item);
+  bookingsGroupOpen.set(tripId, true); // what you just added or edited must be visible on Bookings
 
   saveState();
   closeDialog($("dialog-item"));
@@ -3897,12 +3964,32 @@ function handleItemSubmit(e) {
   }
 }
 
+/* Deleting a booking also deletes the expense linked to it (v1.15.0, Isaac's call) — one way:
+   deleting an expense never touches a booking. The confirm says so, and an Undo toast puts both
+   back where they were, the way the checklist's Undo works. */
 function deleteItem(itemId) {
   const item = state.items.find((i) => i.id === itemId);
-  if (!item || !confirm(`Delete "${item.title}"?`)) return;
+  if (!item) return;
+  const trip = state.trips.find((t) => t.id === item.tripId);
+  const exp = linkedExpense(item);
+  const msg = exp
+    ? `Delete "${item.title}"? Its ${formatMoney(exp.amount)} expense will be deleted too.`
+    : `Delete "${item.title}"?`;
+  if (!confirm(msg)) return;
+  const itemIndex = state.items.indexOf(item);
+  const expIndex = exp && trip ? trip.expenses.indexOf(exp) : -1;
   state.items = state.items.filter((i) => i.id !== itemId);
+  if (exp && trip) trip.expenses = trip.expenses.filter((e) => e.id !== exp.id);
   saveState();
   render();
+  undoAction = () => {
+    if (!state.items.some((i) => i.id === item.id)) state.items.splice(Math.min(itemIndex, state.items.length), 0, item);
+    const t = trip && state.trips.find((x) => x.id === trip.id);
+    if (exp && t && !t.expenses.some((e) => e.id === exp.id)) t.expenses.splice(Math.min(expIndex, t.expenses.length), 0, exp);
+    saveState();
+    render();
+  };
+  showToast(exp ? `Removed “${item.title}” and its expense` : `Removed “${item.title}”`, "undo");
 }
 
 /* Try to read coordinates directly out of pasted text — a Google Maps link
@@ -3975,6 +4062,14 @@ function parseMapsPaste(text) {
   return name ? { kind: "place", name, ...coords } : { kind: "coords", ...coords };
 }
 
+/* fetch with a hard deadline. The Photon calls abort-on-supersede; this one is for a single
+   request that must not leave a "Opening…" line up forever. */
+function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(timer));
+}
+
 /* Apply a parseMapsPaste verdict to the reservation form. Returns true when the paste was
    handled (so the caller must not start a Photon search on the URL text). `pasted` is the raw
    text, so a URL sitting in Title can be swapped for the clean name without clobbering a title
@@ -3984,10 +4079,27 @@ function applyMapsPaste(form, parsed, pasted) {
   const el = $("loc-suggest");
   const show = (html) => { el.innerHTML = `<div class="loc-suggest__empty">${html}</div>`; el.hidden = false; };
   if (parsed.kind === "short") {
-    // No coordinates in a short link; do not hand the URL to Photon either.
-    if (form.locationName.value.trim() === pasted) form.locationName.value = "";
-    if (form.title.value.trim() === pasted) form.title.value = "";
-    show("That's a short Maps link, which carries no location. Open it in Google Maps, copy the full link from the address bar (it contains <code>@lat,lng</code>), and paste that instead.");
+    // No coordinates in a short link; do not hand the URL to Photon either. Ask our own
+    // /api/expand (v1.15.0) to follow Google's redirect and re-run with the full URL.
+    show("Opening that short link…");
+    const guidance = () => show("That short Maps link could not be opened here. Open it in Google Maps, copy the full link from the address bar (it contains <code>@lat,lng</code>), and paste that instead.");
+    const stillPasted = () => form.title.value.trim() === pasted || form.locationName.value.trim() === pasted;
+    form._expandPending = fetchWithTimeout(`/api/expand?url=${encodeURIComponent(pasted)}`, 6000)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then(({ url }) => {
+        if (!stillPasted()) return; // the user moved on; do not overwrite what they typed since
+        const full = parseMapsPaste(url);
+        if (full && full.kind !== "short") { applyMapsPaste(form, full, pasted); return; }
+        // A name-only URL (…/maps/place/<Name>/data=…): fill the name, let Save geocode it.
+        const name = placeNameFromMapsUrl(url);
+        if (!name) { guidance(); return; }
+        form.locLat.value = ""; form.locLng.value = "";
+        form.locationName.value = name;
+        const title = form.title.value.trim();
+        if (!title || title === pasted) form.title.value = name;
+        show(`📍 Location set from your link — “${escapeHtml(name)}”. The pin will be found on Save.`);
+      })
+      .catch(() => { if (stillPasted()) guidance(); });
     return true;
   }
   form.locLat.value = parsed.lat;
@@ -4302,25 +4414,29 @@ function handleExpenseSubmit(e) {
   } else {
     trip.expenses.push(normalizeExpense({ id: uid("exp"), ...payload }));
   }
+  expensesFoldOpen.add(tripId); // what you just added must be visible, not behind a closed fold
 
   saveState();
   render();
   closeDialog($("dialog-expense"));
 }
 
+/* Returns true when the trip was deleted, false when the confirm was declined — the Edit
+   dialog stays open on a decline. */
 function deleteTrip(tripId) {
   const trip = state.trips.find((t) => t.id === tripId);
-  if (!trip) return;
+  if (!trip) return false;
   const itemCount = state.items.filter((i) => i.tripId === tripId).length;
   const bits = [];
-  if (trip.expenses.length) bits.push(`${trip.expenses.length} expense(s)`);
-  if (itemCount) bits.push(`${itemCount} reservation(s)`);
+  if (trip.expenses.length) bits.push(`${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`);
+  if (itemCount) bits.push(`${itemCount} booking${itemCount === 1 ? "" : "s"}`);
   const msg = bits.length ? `Delete "${trip.name}" and its ${bits.join(" & ")}?` : `Delete "${trip.name}"?`;
-  if (!confirm(msg)) return;
+  if (!confirm(msg)) return false;
   state.trips = state.trips.filter((t) => t.id !== tripId);
   state.items = state.items.filter((i) => i.tripId !== tripId);
   saveState();
   render();
+  return true;
 }
 
 function deleteExpense(tripId, expenseId) {
@@ -4404,6 +4520,9 @@ function bindEvents() {
 
   $("form-funds").addEventListener("submit", handleFundsSubmit);
   $("form-trip").addEventListener("submit", handleTripSubmit);
+  $("trip-delete").addEventListener("click", () => {
+    if (deleteTrip($("form-trip").tripId.value)) closeDialog($("dialog-trip"));
+  });
   // Both events: desktop date inputs fire `input` per keystroke, Android's picker fires `change`.
   ["input", "change"].forEach((ev) =>
     $("form-trip").startDate.addEventListener(ev, () => syncTripYearField($("form-trip")))
@@ -4531,6 +4650,8 @@ let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let bookingsFilter = "all"; // all | flight | hotel | other
 let bookingsPastOpen = false;         // Bookings re-renders wholesale, so the fold's state lives here
+let bookingsGroupOpen = new Map();    // v1.15.0: per-trip group open/closed, remembered for the session
+let bookingsFocusTrip = null;         // set by the Trips step card: open only this trip's group, once
 let itinerarySwitcherShowPast = false; // the "Past trips (N)" toggle in the itinerary switcher
 /* ISO dates whose timeline day is folded shut. Deliberately NOT in `state`:
    saveState() calls notifyLocalChange(), so a collapse would sync to everyone
@@ -4819,13 +4940,24 @@ function avatar(name) {
 function tripItems(trip) {
   return state.items.filter((i) => i.tripId === trip.id);
 }
-/* Seed items were migrated as `item-<expenseId>`; recover the linked expense
-   so Bookings can show its cost/payment status. New uid items return null. */
+/* The expense that pays for a booking. Since v1.15.0 a real field (`expense.itemId`, set when
+   the expense is created from the booking); before that the only link was the seed data's
+   `item-<expenseId>` id pattern, which is still honoured. */
 function linkedExpense(item) {
+  const trip = state.trips.find((t) => t.id === item.tripId);
+  if (!trip) return null;
+  const byField = trip.expenses.find((e) => e.itemId && e.itemId === item.id);
+  if (byField) return byField;
   const m = String(item.id).match(/^item-(.+)$/);
-  if (!m) return null;
-  return state.trips.find((t) => t.id === item.tripId)?.expenses.find((e) => e.id === m[1]) || null;
+  return m ? trip.expenses.find((e) => e.id === m[1]) || null : null;
 }
+
+/* Booking type → Budget category, for "Add expense" from a booking. Every ITEM_TYPES entry
+   has a row and every value is in CATEGORIES (the self-test checks both). */
+const TYPE_TO_CATEGORY = {
+  flight: "Flight", hotel: "Hotel", restaurant: "Food", cafe: "Food",
+  transport: "Transport", attraction: "Activities", store: "Shopping", other: "Other",
+};
 function tripHotelName(trip) {
   return tripItems(trip).find((i) => i.type === "hotel")?.title || null;
 }
@@ -4842,7 +4974,10 @@ function buildNav() {
     (n) => `<button type="button" class="tab" data-nav="${n.id}" aria-label="${n.label}">${n.icon}<span>${n.label}</span>${dot(n.id)}</button>`
   ).join("");
   document.querySelectorAll("[data-nav]").forEach((el) => {
-    el.addEventListener("click", () => { location.hash = "#" + el.getAttribute("data-nav"); });
+    el.addEventListener("click", () => {
+      bookingsFocusTrip = null; // the tab opens Bookings with the default groups, not a focused trip
+      location.hash = "#" + el.getAttribute("data-nav");
+    });
   });
 }
 
@@ -4904,8 +5039,8 @@ function router() {
   const ADD_LABEL = {
     budget: "Add funds",
     family: "Add checklist item",
-    itinerary: "Add reservation",
-    bookings: "Add reservation",
+    itinerary: "Add booking",
+    bookings: "Add booking",
   };
   const addLabel = ADD_LABEL[id] || "New trip";
   addBtn.setAttribute("aria-label", addLabel);
@@ -5051,7 +5186,7 @@ function renderTripsScreen() {
     { icon: ICONS.daybyday, title: "Day by Day", desc: "Edit your day-by-day schedule in a timeline view.", go: "itinerary", subtab: "timeline", cta: "Start now" },
     { icon: ICONS.route, title: "Route", desc: "See the trip in route mode, by dates and location.", go: "itinerary", subtab: "maps", cta: "Start now" },
     { icon: ICONS.checklist, title: "Checklist", desc: "Create a shared family checklist so nothing is missed.", go: "family", cta: "Start now" },
-    { icon: ICONS.reservations, title: "Reservations", desc: "Keep track of all your bookings and confirmations.", go: "bookings", cta: "Start now" },
+    { icon: ICONS.reservations, title: "Bookings", desc: "Keep track of all your bookings and confirmations.", go: "bookings", cta: "Start now" },
   ];
   /* The itinerary steps carry the featured trip's id. Without it they only set the hash,
      and itineraryTripId is module-level and sticky for the session — so once the switcher
@@ -5059,7 +5194,7 @@ function renderTripsScreen() {
      whichever trip was last viewed. */
   const featuredId = trip ? trip.id : "";
   const goAttrs = (s) =>
-    (s.go === "itinerary" && featuredId ? ` data-trip-id="${escapeHtml(featuredId)}"` : "") +
+    ((s.go === "itinerary" || s.go === "bookings") && featuredId ? ` data-trip-id="${escapeHtml(featuredId)}"` : "") +
     (s.subtab ? ` data-subtab-target="${s.subtab}"` : "");
   $("steps").innerHTML = steps
     .map(
@@ -5261,7 +5396,11 @@ function bindGoButtons(scope) {
     const go = () => {
       // Select the trip before navigating, so the destination screen renders the right one.
       const tripId = b.getAttribute("data-trip-id");
-      if (tripId && state.trips.some((t) => t.id === tripId)) setItineraryTrip(tripId);
+      const go = b.getAttribute("data-go");
+      if (tripId && state.trips.some((t) => t.id === tripId)) {
+        if (go === "bookings") bookingsFocusTrip = tripId; // the Bookings step opens the featured trip's group only
+        else setItineraryTrip(tripId);
+      }
       // …and the view, so a card labelled "Route" lands on the map rather than the timeline.
       const subtab = b.getAttribute("data-subtab-target");
       if (subtab === "timeline" || subtab === "maps") itinerarySubTab = subtab;
@@ -5660,7 +5799,7 @@ function renderTimelineTab(trip) {
       const numbers = stopNumbers(trip, iso); // same numbers the map pins use
       const entries = itemsForDay(trip, iso).map((e) => itemCard(e, numbers.get(e.item.id)));
       entries.push(
-        `<button type="button" class="act act--add" data-add-item="${iso}" aria-label="Add a reservation on ${escapeHtml(fmtDow(d))} ${d.getDate()}">${ICONS.explore}<span class="act__body"><span class="act__title">Add reservation</span></span></button>`
+        `<button type="button" class="act act--add" data-add-item="${iso}" aria-label="Add a booking on ${escapeHtml(fmtDow(d))} ${d.getDate()}">${ICONS.explore}<span class="act__body"><span class="act__title">Add booking</span></span></button>`
       );
       /* The date rail becomes the fold control. It was a plain <div> — not
          focusable, not announced — so making it a button fixes that too. */
@@ -5677,7 +5816,7 @@ function renderTimelineTab(trip) {
           </button>
           ${collapsed
             ? `<button type="button" class="day__summary" data-day-toggle="${iso}">${
-                count ? `${count} reservation${count === 1 ? "" : "s"}` : "Nothing planned"
+                count ? `${count} booking${count === 1 ? "" : "s"}` : "Nothing planned"
               }</button>`
             : `<div class="day__items">${entries.join("")}</div>`}
         </div>`;
@@ -5692,7 +5831,7 @@ function renderTimelineTab(trip) {
         return `<button type="button" class="daychip ${iso === timelineDayIso ? "is-active" : ""}" data-strip-day="${iso}"><span class="dc-dow">${fmtDow(d)}</span><span class="dc-num">${d.getDate()}</span></button>`;
       })
       .join("")}</div>`;
-  const fab = `<button type="button" class="fab" data-fab-add aria-label="Add reservation"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`;
+  const fab = `<button type="button" class="fab" data-fab-add aria-label="Add booking"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`;
 
   /* The strip lives in the sticky header now, not in the scrolling view, so the Timeline/Maps
      toggle stays put alongside it. Maps clears the slot. */
@@ -5855,11 +5994,14 @@ function openItemActionsSheet(trip, itemId) {
   // Only offer Maps for somewhere you could actually go.
   const hasPlace = Boolean(item.location?.name || item.location?.lat != null);
   dlg.querySelector('[data-item-action="maps"]').hidden = !hasPlace;
+  // "Add expense" until one is linked, then "Open expense" — the same row, never two.
+  dlg.querySelector("[data-item-action-label]").textContent = linkedExpense(item) ? "Open expense" : "Add expense";
   dlg.querySelectorAll("[data-item-action]").forEach((b) => {
     b.onclick = () => {
       closeDialog(dlg);
       const action = b.getAttribute("data-item-action");
       if (action === "edit") openItemDialog(trip.id, item);
+      else if (action === "expense") openExpenseForItem(item);
       else if (action === "move-up") moveItemInDay(trip, itemId, -1);
       else if (action === "move-down") moveItemInDay(trip, itemId, 1);
       else if (action === "maps") window.open(gmapsLink(item, trip), "_blank", "noopener");
@@ -6245,7 +6387,7 @@ function renderMapsTab(trip) {
   }
 
   const listHtml = sidebar ||
-    `<p class="empty-state">No located reservations ${mapDayFilter === "all" ? "yet" : "on this day"}. Add a location to a reservation to see it here.</p>`;
+    `<p class="empty-state">No located bookings ${mapDayFilter === "all" ? "yet" : "on this day"}. Add a location to a booking to see it here.</p>`;
 
   view.innerHTML = `
     <div class="daychips">${chips}</div>
@@ -6313,7 +6455,7 @@ function renderMapsTab(trip) {
     mapApplyView = withViewGuard(() => leafletMap.setView([48.8566, 2.3522], 4));
     mapApplyView();
     canvas.insertAdjacentHTML("afterbegin",
-      `<div class="map-hint">No locations pinned yet — tap <strong>Locate</strong> on a reservation to place it on the map.</div>`);
+      `<div class="map-hint">No locations pinned yet — tap <strong>Locate</strong> on a booking to place it on the map.</div>`);
     return;
   }
 
@@ -6396,12 +6538,17 @@ function renderBookings() {
             it.confirmation ? `Conf: ${it.confirmation}` : "",
             it.details,
           ].filter(Boolean).join(" · ");
+          /* v1.15.0: a booking with no expense yet offers to create one, prefilled from itself;
+             once linked, the card shows the expense's payment status and amount. */
           const foot = exp
             ? `<div class="booking__foot">
                   <span class="payment-status payment-status--${expenseDisplayStatus(exp)}">${paymentStatusLabel(exp)}</span>
                   <span class="booking__amount">${formatMoney(exp.amount)}</span>
                 </div>`
-            : "";
+            : `<div class="booking__foot">
+                  <button type="button" class="btn btn--small btn--ghost booking__add-expense" data-add-expense="${escapeHtml(it.id)}">Add expense</button>
+                </div>`;
+          const notes = it.notes ? `<p class="booking__notes">${escapeHtml(it.notes)}</p>` : "";
           /* data-item makes the whole card open its reservation, the same gesture the
              timeline learned in v1.10.2. The parity doc claimed this worked for several
              releases while the cards carried no id and no handler at all. */
@@ -6411,26 +6558,43 @@ function renderBookings() {
               <div class="booking__body">
                 <p class="booking__title">${escapeHtml(it.title)}${when ? ` <span class="booking__when">· ${escapeHtml(when)}</span>` : ""}</p>
                 ${sub ? `<p class="booking__ref">${escapeHtml(sub)}</p>` : ""}
+                ${notes}
                 ${foot}
               </div>
             </div>`;
         })
         .join("");
+      /* v1.15.0: one collapsible group per trip. Open by default only for the trip you are on
+         (else the next upcoming one); every render remembers what you opened or closed. */
+      const open = bookingsGroupOpen.get(trip.id) === true;
       return `
-        <section class="booking-group">
-          <h2 class="booking-group__title">${nameWithCity(trip)} <span class="badge">${items.length} reservation${items.length === 1 ? "" : "s"}</span></h2>
+        <details class="booking-group" data-trip-group="${escapeHtml(trip.id)}" ${open ? "open" : ""}>
+          <summary><h2 class="booking-group__title">${nameWithCity(trip)} <span class="badge">${items.length} booking${items.length === 1 ? "" : "s"}</span></h2></summary>
           <div class="booking-list">${cards}</div>
-        </section>`;
+        </details>`;
     };
   /* v1.14.0: past and cancelled trips' bookings fold away. The chips above still count them —
      a filter that only matches folded bookings shows the fold rather than a dead end. */
   const ordered = sortTripsByUpcoming(state.trips);
-  const liveGroups = ordered.filter((t) => !tripArchived(t)).map(groupFor).join("");
+  const liveTrips = ordered.filter((t) => !tripArchived(t));
+  /* Seed the group memory once, or when the Trips step card asked for one specific trip. */
+  if (bookingsFocusTrip) {
+    liveTrips.forEach((t) => bookingsGroupOpen.set(t.id, t.id === bookingsFocusTrip));
+  } else {
+    const unseeded = liveTrips.filter((t) => !bookingsGroupOpen.has(t.id));
+    if (unseeded.length === liveTrips.length && liveTrips.length) {
+      const live = liveTrips.find((t) => tripTiming(t).state === "travelling") || liveTrips[0];
+      liveTrips.forEach((t) => bookingsGroupOpen.set(t.id, t === live));
+    } else {
+      unseeded.forEach((t) => bookingsGroupOpen.set(t.id, false)); // a trip added later starts closed
+    }
+  }
+  const liveGroups = liveTrips.map(groupFor).join("");
   const pastTripsWithItems = ordered.filter((t) => tripArchived(t) && tripItems(t).some(matchesFilter));
   const pastCount = pastTripsWithItems.reduce((n, t) => n + tripItems(t).filter(matchesFilter).length, 0);
   const pastGroups = pastTripsWithItems.length
     ? `<details class="past-fold" id="bookings-past" ${bookingsPastOpen ? "open" : ""}>
-         <summary>Past trips <span class="past-fold__count">${pastCount} reservation${pastCount === 1 ? "" : "s"}</span></summary>
+         <summary>Past trips <span class="past-fold__count">${pastCount} booking${pastCount === 1 ? "" : "s"}</span></summary>
          <div class="past-fold__body">${pastTripsWithItems.map(groupFor).join("")}</div>
        </details>`
     : "";
@@ -6440,7 +6604,7 @@ function renderBookings() {
     `<button type="button" class="filter-chip ${bookingsFilter === value ? "is-active" : ""}"
        data-bookings-filter="${escapeHtml(value)}"
        aria-pressed="${bookingsFilter === value ? "true" : "false"}"
-       aria-label="${escapeHtml(label)}, ${count} reservation${count === 1 ? "" : "s"}"
+       aria-label="${escapeHtml(label)}, ${count} booking${count === 1 ? "" : "s"}"
      >${escapeHtml(label)} <span class="filter-chip__count">${count}</span></button>`;
 
   // Only types that actually exist, so a chip never leads to an empty list.
@@ -6449,10 +6613,18 @@ function renderBookings() {
     ...presentTypes.map((t) => chip(t, ITEM_TYPE_PLURAL[t] || t, counts[t])),
   ].join("");
 
+  /* v1.15.0: the chip row is rebuilt with the rest of the body, which threw away its scroll
+     position — pick Transport at the far right and the row snapped back to All. */
+  const chipScroll = body.querySelector(".filter-chips")?.scrollLeft || 0;
   body.innerHTML = `
     <div class="filter-chips">${filterChips}</div>
-    ${groups || `<div class="empty-card"><h3>No reservations${bookingsFilter === "all" ? " yet" : " in this filter"}</h3><p>Add reservations in Itinerary and they'll appear here.</p></div>`}
+    ${groups || `<div class="empty-card"><h3>No bookings${bookingsFilter === "all" ? " yet" : " in this filter"}</h3><p>Add bookings in Itinerary and they'll appear here.</p></div>`}
 `;
+  const chipRow = body.querySelector(".filter-chips");
+  if (chipRow) {
+    chipRow.scrollLeft = chipScroll;
+    chipRow.querySelector(".is-active")?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }
 
   body.querySelectorAll("[data-bookings-filter]").forEach((chip) =>
     chip.addEventListener("click", () => {
@@ -6461,6 +6633,20 @@ function renderBookings() {
     })
   );
   $("bookings-past")?.addEventListener("toggle", (e) => { bookingsPastOpen = e.target.open; });
+  body.querySelectorAll("[data-trip-group]").forEach((d) =>
+    d.addEventListener("toggle", () => bookingsGroupOpen.set(d.getAttribute("data-trip-group"), d.open))
+  );
+  body.querySelectorAll("[data-add-expense]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const item = state.items.find((i) => i.id === b.getAttribute("data-add-expense"));
+      if (item) openExpenseForItem(item);
+    })
+  );
+  if (bookingsFocusTrip) {
+    // Arrived from the Trips step card: land on that trip, then let later renders keep the user's choices.
+    body.querySelector(`[data-trip-group="${bookingsFocusTrip}"]`)?.scrollIntoView({ block: "start", behavior: "auto" });
+    bookingsFocusTrip = null;
+  }
 
   /* Same guard as the timeline card: every control inside a card is a <button>, so one
      bail covers the lot and any future in-card action keeps working. */
@@ -6978,7 +7164,7 @@ function diffStates(prevRaw, nextRaw) {
       out.push({ screens: ["trips"], text: t.cancelled ? `cancelled trip ${t.name}` : `reinstated trip ${t.name}` });
     }
     if (Number(p.budget) !== Number(t.budget)) out.push({ screens: ["budget"], text: `changed budget of ${t.name}` });
-    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "status", "amountPaid"],
+    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "status", "amountPaid", "itemId"],
       (e) => `expense ${e.label}`, ["budget"], out);
   }
   for (const [id, p] of prevTrips) {
