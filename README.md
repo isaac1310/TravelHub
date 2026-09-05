@@ -24,13 +24,20 @@ Open `index.html` in a browser — no build step. Data is saved in
 - **Itinerary → Maps** — Leaflet + OpenStreetMap view with lettered pins per
   day (day chips 16 | 17 | … | All). Locations autocomplete via **Photon**
   (OpenStreetMap) and are geocoded on save. **Import a place from Google Maps:**
-  paste a Maps link into the reservation's name or Location field and the place
+  paste a Maps link into the booking's name or Location field and the place
   name and pin fill in (bare `lat, lng`, decimal or DMS, works too). Short
-  `maps.app.goo.gl` links carry no location and cannot be expanded by the app —
-  open the link once and paste the full URL from the address bar. Every stop has an
+  `maps.app.goo.gl` links are expanded by the app's own `/api/expand` (the one
+  serverless function, `api/expand.js`; also served by `tools/serve.js` locally) —
+  if that is unreachable the sheet asks you to paste the full URL. Every stop has an
   "open in Google Maps" link, which doubles as the fallback when the map
   library or coordinates are unavailable. Flights are not pinned on the map.
-- **Budget** — funds, per-trip budgets, expenses, rollovers, JSON export/import.
+- **Bookings** — every booking across trips, one collapsible group per trip (the trip you are
+  on opens first), filter chips by type, notes on the card, and **Add expense** on a booking
+  that has none yet — prefilled from the booking and linked to it, so the card then shows
+  its payment status. Deleting a booking deletes its linked expense too (with Undo).
+- **Budget** — funds, per-trip budgets, expenses (Hotel · Flight · Food · Transport ·
+  Activities · Shopping · Other), rollovers, JSON export/import. The overview leads with
+  *Funds vs committed* — "₪X to spare" or "₪X short".
 - **Sharing (optional)** — with Supabase configured, the Share button creates a
   link (`?room=…&key=…`). Anyone with the link sees and edits the same data,
   synced every ~20 s (last write wins).

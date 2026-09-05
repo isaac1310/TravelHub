@@ -128,6 +128,7 @@
       releaseV1120();
       releaseV1130();
       releaseV1140();
+      releaseV1150();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -912,17 +913,21 @@
 
     /* The three generated-cover checks that lived here were removed in v1.10.1:
        coverFor() no longer exists. Monuments are covered in the v1.10.1 group. */
-    check("the budget lead number equals still-to-pay", () => {
+    /* v1.15.0 changed the lead: it is now funds vs committed (see releaseV1150), and still-to-pay
+       moved into the tile grid. These two guard the same principle — one lead number, never
+       repeated as a tile — against the new figures. */
+    check("the budget lead number equals funds vs committed", () => {
       const lead = document.querySelector(".answer-card__value");
       if (!lead) return skip("budget screen not rendered in this pass");
-      const { totalDue } = totalsForTrips(tripsForFilter());
-      return eq(lead.textContent.trim(), formatMoney(totalDue));
+      const { totalCommitted } = totalsForTrips(tripsForFilter());
+      return lead.textContent.includes(formatMoney(Math.abs(state.currentFunds - totalCommitted)))
+        ? true : `lead reads "${lead.textContent.trim()}"`;
     });
 
-    check("still-to-pay is not repeated in the tile grid", () => {
+    check("the lead figure is not repeated in the tile grid", () => {
       const labels = [...document.querySelectorAll("#global-stats .stat__label")].map((l) => l.textContent);
       if (!labels.length) return true;
-      return labels.some((l) => /Still to pay/i.test(l)) ? "still-to-pay is both the lead and a tile" : true;
+      return labels.some((l) => /Funds vs committed/i.test(l)) ? "funds-vs-committed is both the lead and a tile" : true;
     });
   }
 
@@ -2744,7 +2749,7 @@
         if (all.textContent.trim() !== "4") return `All reads "${all.textContent.trim()}", expected 4`;
         /* The count is inside the label, so a screen reader would say "Cafés 3" — the
            aria-label spells it out instead. */
-        return /3 reservations/.test(cafe.getAttribute("aria-label") || "")
+        return /3 bookings/.test(cafe.getAttribute("aria-label") || "")
           ? true : `aria-label is "${cafe.getAttribute("aria-label")}"`;
       }));
 
@@ -2807,7 +2812,7 @@
         const dlg = document.getElementById("dialog-item");
         if (!dlg.open) return "nothing opened";
         const title = document.getElementById("item-dialog-title").textContent;
-        return /Add reservation/.test(title) ? true : `the dialog is titled "${title}"`;
+        return /Add booking/.test(title) ? true : `the dialog is titled "${title}"`;
       }));
 
     check("Bookings asks which trip, since it spans all of them", () =>
@@ -3360,8 +3365,8 @@
       const add = document.getElementById("btn-appbar-add");
       if (!add) return "btn-appbar-add missing";
       const expected = {
-        trips: "New trip", itinerary: "Add reservation", budget: "Add funds",
-        bookings: "Add reservation", family: "Add checklist item",
+        trips: "New trip", itinerary: "Add booking", budget: "Add funds",
+        bookings: "Add booking", family: "Add checklist item",
       };
       const startHash = location.hash;
       const wrong = [];
@@ -3772,7 +3777,10 @@
           const fold = document.getElementById("bookings-past");
           if (!fold) return "no Past trips fold on Bookings";
           if (!fold.querySelector(".booking-group__title")?.textContent.includes("past")) return "the past trip is not inside the fold";
-          if (document.querySelector("#bookings-body > .booking-group")?.textContent.includes("past")) return "the past trip is also listed live";
+          // Live groups are direct children of the body (v1.15.0: <details class="booking-group">).
+          const liveTitles = [...document.querySelectorAll("#bookings-body > .booking-group .booking-group__title")].map((h) => h.textContent);
+          if (liveTitles.some((t) => t.includes("past"))) return "the past trip is also listed live";
+          if (!liveTitles.length) return "no live group is a direct child of the body — the leak check would pass for the wrong reason";
           const all = document.querySelector('[data-bookings-filter="all"] .filter-chip__count')?.textContent;
           return eq(all, "2", "All chip counts folded bookings too");
         } finally { bookingsFilter = bf; }
@@ -3846,8 +3854,12 @@
       } finally { closeDialog(document.getElementById("dialog-item")); }
     });
 
-    check("a short Maps link shows the open-and-copy guidance and does not search Photon", () => {
+    check("a short Maps link is handled by the paste branch and does not search Photon", () => {
+      /* v1.15.0 turned the guidance into a request to /api/expand; stub fetch so the suite never
+         hits the network, and assert the branch that both versions share. */
       const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      const realFetch = window.fetch;
+      window.fetch = () => new Promise(() => {});
       openItemDialog(tripId);
       const form = document.getElementById("form-item");
       try {
@@ -3855,11 +3867,11 @@
         form.locationName.value = "https://maps.app.goo.gl/AbC12dEf";
         form.locationName.dispatchEvent(new Event("input", { bubbles: true }));
         const el = document.getElementById("loc-suggest");
-        if (el.hidden || !/short/i.test(el.textContent)) return `no guidance shown: "${el.textContent.trim().slice(0, 60)}"`;
+        if (el.hidden || !/short/i.test(el.textContent)) return `no status shown: "${el.textContent.trim().slice(0, 60)}"`;
         if (form.locLat.value) return "a short link produced a pin";
         // The paste branch returns before the Photon timer is (re)armed, so the handle is unchanged.
         return locSuggestTimer === timerBefore ? true : "a Photon search was scheduled for the URL";
-      } finally { closeDialog(document.getElementById("dialog-item")); }
+      } finally { window.fetch = realFetch; closeDialog(document.getElementById("dialog-item")); }
     });
 
     /* ---- C: the Today card ---- */
@@ -3966,6 +3978,395 @@
     check("Today rows link to Google Maps by coordinates", () => {
       const html = card([timed("Louvre", "09:00", "11:00", { location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } })], 10 * 60);
       return /query=48\.8606,2\.3376/.test(html) ? true : "no coordinate Maps link in the Now row";
+    });
+  }
+
+  /* ===== v1.15.0 — Delete trip in the dialog, expense fold memory, Bookings groups, linked
+     expenses, short-link expansion plumbing, the overview card ===== */
+  function releaseV1150() {
+    group("v1.15.0");
+
+    const shift = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return isoOf(d); };
+    const today = todayLocalISO();
+    const mk = (name, s, e, over) => makeTrip({ id: "t-" + name, name, startDate: s, endDate: e, expenses: [], ...(over || {}) });
+    const item = (over) => normalizeItem({ id: "it-" + Math.random().toString(36).slice(2, 8), tripId: "t-soon", type: "attraction",
+      title: "x", date: "", endDate: "", startTime: "", endTime: "", location: { name: "", lat: null, lng: null }, ...over });
+    const withTrips = (trips, items, fn) => {
+      const bt = state.trips, bi = state.items, bFunds = state.currentFunds, bFilter = bookingsFilter;
+      const bGroups = new Map(bookingsGroupOpen), bFocus = bookingsFocusTrip, bFold = new Set(expensesFoldOpen);
+      state.trips = trips; state.items = items || [];
+      try { return fn(); }
+      finally {
+        state.trips = bt; state.items = bi; state.currentFunds = bFunds; bookingsFilter = bFilter;
+        bookingsGroupOpen = bGroups; bookingsFocusTrip = bFocus; expensesFoldOpen.clear(); bFold.forEach((id) => expensesFoldOpen.add(id));
+        document.getElementById("toast").hidden = true; undoAction = null;
+        render();
+      }
+    };
+    /* Deletes go through the in-app appConfirm (v1.15.0), stubbed synchronously here. */
+    const withConfirm = (answer, fn) => {
+      const real = appConfirm; let asked = "";
+      appConfirm = (msg, cb) => { asked = String(msg); cb(answer); };
+      try { return fn(() => asked); } finally { appConfirm = real; }
+    };
+
+    check("deletes ask through the in-app confirm dialog, not the native prompt", () => {
+      const dlg = document.getElementById("dialog-confirm");
+      if (!dlg) return "no #dialog-confirm";
+      let answer = null;
+      appConfirm("Probe?", (ok) => { answer = ok; }, { okLabel: "Zap" });
+      try {
+        if (!dlg.open) return "the confirm dialog did not open";
+        if (document.getElementById("confirm-text").textContent !== "Probe?") return "message not shown";
+        if (document.getElementById("confirm-ok").textContent !== "Zap") return "ok label not applied";
+        document.getElementById("confirm-ok").click();
+        if (answer !== true) return `OK gave ${answer}`;
+        appConfirm("Again?", (ok) => { answer = ok; });
+        dlg.querySelector("[data-dialog-close]").click();
+        return eq(answer, false, "Cancel gives false");
+      } finally { if (dlg.open) closeDialog(dlg); }
+    });
+
+    /* ---- B: Delete trip from the Edit dialog ---- */
+
+    check("the Edit trip dialog offers Delete; a new trip does not", () => {
+      const trip = mk("soon", shift(today, 5), shift(today, 9));
+      return withTrips([trip], [], () => {
+        openTripDialog();
+        const onNew = document.getElementById("trip-delete-row").hidden;
+        closeDialog(document.getElementById("dialog-trip"));
+        openTripDialog(trip);
+        const onEdit = document.getElementById("trip-delete-row").hidden;
+        closeDialog(document.getElementById("dialog-trip"));
+        return [eq(onNew, true, "hidden on New"), eq(onEdit, false, "shown on Edit")].filter((x) => x !== true).join("; ") || true;
+      });
+    });
+
+    check("Delete trip: declining keeps the trip and the dialog; confirming removes trip + bookings and closes it", () => {
+      const trip = mk("soon", shift(today, 5), shift(today, 9));
+      const dlg = document.getElementById("dialog-trip");
+      return withTrips([trip], [item({ tripId: "t-soon", title: "Museum", date: shift(today, 6) })], () => {
+        openTripDialog(trip);
+        const declined = withConfirm(false, (asked) => {
+          document.getElementById("trip-delete").click();
+          return [eq(state.trips.length, 1, "trip kept"), eq(dlg.open, true, "dialog still open"), /Museum|1 booking/.test(asked()) ? true : `confirm text: ${asked()}`];
+        }).filter((x) => x !== true);
+        if (declined.length) { closeDialog(dlg); return declined.join("; "); }
+        return withConfirm(true, () => {
+          document.getElementById("trip-delete").click();
+          return [eq(state.trips.length, 0, "trip removed"), eq(state.items.length, 0, "its bookings removed"), eq(dlg.open, false, "dialog closed")]
+            .filter((x) => x !== true).join("; ") || true;
+        });
+      });
+    });
+
+    /* ---- C: expense fold memory ---- */
+
+    check("Budget: a fold you opened stays open after marking an expense paid", () => {
+      if (window.innerWidth > 900) return skip("desktop layout — folds are always open");
+      const trip = mk("soon", shift(today, 5), shift(today, 9), { year: Number(today.slice(0, 4)), expenses: [
+        makeExpense({ id: "e-1", label: "Hotel", amount: 500, status: "booked", amountPaid: 0 }),
+      ] });
+      return withTrips([trip], [], () => window.__withScreenVisible("screen-budget", renderTrips, () => {
+        const fold = () => document.querySelector('[data-trip-fold="t-soon"]');
+        if (!fold()) return "no fold rendered";
+        if (fold().open) return "fold open by default at phone width";
+        fold().open = true;
+        fold().dispatchEvent(new Event("toggle"));
+        if (!expensesFoldOpen.has("t-soon")) return "toggle did not record the open fold";
+        markExpensePaid("t-soon", "e-1");
+        return eq(fold()?.open, true, "fold still open after marking paid");
+      }));
+    });
+
+    check("Budget: adding an expense opens its trip's fold", () => {
+      const trip = mk("soon", shift(today, 5), shift(today, 9), { year: Number(today.slice(0, 4)) });
+      return withTrips([trip], [], () => {
+        expensesFoldOpen.delete("t-soon");
+        openExpenseDialog("t-soon");
+        const form = document.getElementById("form-expense");
+        form.elements.label.value = "probe"; form.elements.amount.value = "10";
+        form.requestSubmit();
+        return [eq(state.trips[0].expenses.length, 1, "expense added"), eq(expensesFoldOpen.has("t-soon"), true, "fold marked open")]
+          .filter((x) => x !== true).join("; ") || true;
+      });
+    });
+
+    /* ---- D + G + E: Bookings groups, focus, notes ---- */
+
+    const threeTrips = () => [
+      mk("now", shift(today, -1), shift(today, 1)),
+      mk("soon", shift(today, 5), shift(today, 9)),
+      mk("past", shift(today, -10), shift(today, -8)),
+    ];
+    const threeItems = () => [
+      item({ tripId: "t-now", title: "Now hotel", type: "hotel", date: shift(today, -1), endDate: shift(today, 1), notes: "Ask for a quiet room" }),
+      item({ tripId: "t-soon", title: "Soon flight", type: "flight", date: shift(today, 5) }),
+      item({ tripId: "t-past", title: "Past hotel", type: "hotel", date: shift(today, -10), endDate: shift(today, -8) }),
+    ];
+    const openGroups = () => [...document.querySelectorAll("#bookings-body [data-trip-group]")].filter((d) => d.open).map((d) => d.getAttribute("data-trip-group")).join(",");
+
+    check("Bookings: from the tab every trip group starts closed, and each is a real <details>", () =>
+      withTrips(threeTrips(), threeItems(), () => {
+        bookingsGroupOpen = new Map(); bookingsFocusTrip = null; bookingsFilter = "all";
+        renderBookings();
+        const groups = [...document.querySelectorAll("#bookings-body > [data-trip-group]")];
+        if (groups.length !== 2) return `${groups.length} live groups, expected 2`;
+        if (groups.some((d) => d.tagName !== "DETAILS")) return "a group is not a <details>";
+        return eq(openGroups(), "", "all closed by default");
+      }));
+
+    check("Bookings: each card has a ⋯ that opens the action sheet without the reorder rows", () =>
+      withTrips(threeTrips(), threeItems(), () => {
+        bookingsGroupOpen = new Map(); bookingsFocusTrip = null; bookingsFilter = "all";
+        renderBookings();
+        const more = document.querySelector("#bookings-body [data-booking-more]");
+        if (!more) return "no ⋯ on the booking cards";
+        more.click();
+        const dlg = document.getElementById("dialog-item-actions");
+        try {
+          return [
+            eq(dlg.open, true, "sheet opened"),
+            eq(dlg.querySelector('[data-item-action="move-up"]').hidden, true, "Move up hidden on Bookings"),
+            eq(dlg.querySelector('[data-item-action="delete"]').hidden, false, "Delete offered"),
+          ].filter((x) => x !== true).join("; ") || true;
+        } finally { closeDialog(dlg); }
+      }));
+
+    check("Bookings: a group you closed stays closed across a filter re-render", () =>
+      withTrips(threeTrips(), threeItems(), () => {
+        bookingsGroupOpen = new Map(); bookingsFocusTrip = null; bookingsFilter = "all";
+        renderBookings();
+        const now = document.querySelector('[data-trip-group="t-now"]');
+        now.open = false; now.dispatchEvent(new Event("toggle"));
+        const soon = document.querySelector('[data-trip-group="t-soon"]');
+        soon.open = true; soon.dispatchEvent(new Event("toggle"));
+        renderBookings(); // what a chip tap does
+        return eq(openGroups(), "t-soon", "remembered choice");
+      }));
+
+    check("Bookings: the Trips step card opens the featured trip's group only", () =>
+      withTrips(threeTrips(), threeItems(), () => {
+        bookingsGroupOpen = new Map(); bookingsFilter = "all";
+        renderTripsScreen();
+        const step = document.querySelector('#steps .step-card[data-go="bookings"]');
+        if (!step) return "no Bookings step card";
+        if (step.getAttribute("data-trip-id") !== featuredTrip().id) return "step card does not carry the featured trip";
+        bookingsFocusTrip = "t-soon"; // what clicking the card sets (the hash change itself is async)
+        renderBookings();
+        return [eq(openGroups(), "t-soon", "focused group only"), eq(bookingsFocusTrip, null, "focus consumed")]
+          .filter((x) => x !== true).join("; ") || true;
+      }));
+
+    check("Bookings card shows the booking's notes, two lines max, and omits the line when empty", () =>
+      withTrips(threeTrips(), threeItems(), () => {
+        bookingsGroupOpen = new Map(); bookingsFocusTrip = null; bookingsFilter = "all";
+        renderBookings();
+        const withNotes = document.querySelector('.booking[data-item] .booking__notes');
+        if (!withNotes || !/quiet room/.test(withNotes.textContent)) return "notes not rendered";
+        const clamp = getComputedStyle(withNotes).webkitLineClamp;
+        if (String(clamp) !== "2") return `line clamp is ${clamp}`;
+        const cards = [...document.querySelectorAll(".booking[data-item]")];
+        const without = cards.filter((c) => !c.querySelector(".booking__notes"));
+        return without.length === cards.length - 1 ? true : `${cards.length - without.length} cards carry a notes line, expected 1`;
+      }));
+
+    /* ---- F: one word ---- */
+
+    check("the word is Bookings: dialog title, add label, group badges", () => {
+      const r = [];
+      // The appbar + label per screen is asserted by the v1.12.0 check; here the dialog and the nav.
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      openItemDialog(tripId);
+      const title = document.getElementById("item-dialog-title").textContent;
+      closeDialog(document.getElementById("dialog-item"));
+      if (title !== "Add booking") r.push(`dialog title "${title}"`);
+      const nav = [...document.querySelectorAll("[data-nav] span")].map((s) => s.textContent);
+      if (!nav.includes("Bookings")) r.push(`nav: ${nav.join(",")}`);
+      return r.length ? r.join("; ") : true;
+    });
+
+    /* ---- H: linked expenses ---- */
+
+    check("every booking type maps to a Budget category that exists, and Shopping is one of them", () => {
+      const missing = ITEM_TYPES.filter((t) => !TYPE_TO_CATEGORY[t]);
+      const unknown = Object.values(TYPE_TO_CATEGORY).filter((c) => !CATEGORIES.includes(c));
+      const opts = [...document.querySelectorAll('#form-expense [name="category"] option')].map((o) => o.value);
+      return [
+        missing.length ? `types without a category: ${missing.join(",")}` : true,
+        unknown.length ? `categories not in CATEGORIES: ${unknown.join(",")}` : true,
+        eq(TYPE_TO_CATEGORY.store, "Shopping", "store"),
+        opts.includes("Shopping") ? true : "Shopping missing from the dialog select",
+        eq(normalizeCategory("shopping"), "Shopping", "normalizeCategory"),
+      ].filter((x) => x !== true).join("; ") || true;
+    });
+
+    check("Add expense from a booking prefills label, category and date, and the saved expense is linked", () => {
+      const trips = threeTrips(), items = threeItems();
+      return withTrips(trips, items, () => {
+        const flight = state.items.find((i) => i.id && i.tripId === "t-soon");
+        openExpenseForItem(flight);
+        const form = document.getElementById("form-expense");
+        const pre = [
+          eq(form.elements.label.value, "Soon flight", "label"),
+          eq(form.elements.category.value, "Flight", "category"),
+          eq(form.elements.date.value, shift(today, 5), "date"),
+          eq(form.elements.itemId.value, flight.id, "itemId"),
+          eq(document.activeElement, form.elements.amount, "amount focused"),
+        ].filter((x) => x !== true);
+        if (pre.length) { closeDialog(document.getElementById("dialog-expense")); return pre.join("; "); }
+        form.elements.amount.value = "1200";
+        form.requestSubmit();
+        const trip = state.trips.find((t) => t.id === "t-soon");
+        const exp = trip.expenses[0];
+        if (!exp) return "no expense saved";
+        const r = [
+          eq(exp.itemId, flight.id, "saved itemId"),
+          eq(linkedExpense(flight)?.id, exp.id, "linkedExpense finds it"),
+          eq(normalizeExpense({ ...exp }).itemId, flight.id, "normalizeExpense keeps itemId"),
+        ].filter((x) => x !== true);
+        if (r.length) return r.join("; ");
+        // The ⋯ sheet now says Open expense; the Bookings card shows the status instead of the button.
+        openItemActionsSheet(trip, flight.id);
+        const label = document.querySelector("[data-item-action-label]").textContent;
+        closeDialog(document.getElementById("dialog-item-actions"));
+        bookingsGroupOpen = new Map(); bookingsFocusTrip = null; bookingsFilter = "all";
+        renderBookings();
+        const card = document.querySelector(`.booking[data-item="${flight.id}"]`);
+        const other = document.querySelector(`.booking[data-item="${items[0].id}"]`);
+        return [
+          eq(label, "Open expense", "sheet label once linked"),
+          card?.querySelector(".payment-status") ? true : "linked card shows no payment status",
+          card?.querySelector("[data-add-expense]") ? "linked card still offers Add expense" : true,
+          other?.querySelector("[data-add-expense]") ? true : "unlinked card lacks Add expense",
+        ].filter((x) => x !== true).join("; ") || true;
+      });
+    });
+
+    check("deleting a linked booking deletes its expense too, says so, and Undo restores both; deleting the expense is one-way", () => {
+      const trips = threeTrips(), items = threeItems();
+      const flight = items[1];
+      trips[1].expenses.push(makeExpense({ id: "e-link", label: "Soon flight", amount: 1200, status: "booked", amountPaid: 0, itemId: flight.id }));
+      return withTrips(trips, items, () => {
+        const trip = () => state.trips.find((t) => t.id === "t-soon");
+        const r = withConfirm(true, (asked) => {
+          deleteItem(flight.id);
+          return [
+            /expense will be deleted too/.test(asked()) ? true : `confirm text: ${asked()}`,
+            eq(state.items.some((i) => i.id === flight.id), false, "booking removed"),
+            eq(trip().expenses.length, 0, "linked expense removed"),
+            eq(document.getElementById("toast-view").textContent.trim(), "Undo", "Undo offered"),
+          ];
+        }).filter((x) => x !== true);
+        if (r.length) return r.join("; ");
+        document.getElementById("toast-view").click();
+        const back = [
+          eq(state.items.some((i) => i.id === flight.id), true, "booking restored"),
+          eq(trip().expenses.some((e) => e.id === "e-link"), true, "expense restored"),
+        ].filter((x) => x !== true);
+        if (back.length) return back.join("; ");
+        // One way: the expense goes, the booking stays.
+        return withConfirm(true, () => {
+          deleteExpense("t-soon", "e-link");
+          return [eq(trip().expenses.length, 0, "expense removed"), eq(state.items.some((i) => i.id === flight.id), true, "booking kept")]
+            .filter((x) => x !== true).join("; ") || true;
+        });
+      });
+    });
+
+    /* ---- A: short-link plumbing that can be asserted synchronously ---- */
+
+    check("a short Maps link asks /api/expand and shows an opening state, never Photon", () => {
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      const realFetch = window.fetch; const calls = [];
+      window.fetch = (url) => { calls.push(String(url)); return new Promise(() => {}); }; // never settles: we only assert the request
+      openItemDialog(tripId);
+      const form = document.getElementById("form-item");
+      try {
+        const timerBefore = locSuggestTimer;
+        form.locationName.value = "https://maps.app.goo.gl/AbC12dEf";
+        form.locationName.dispatchEvent(new Event("input", { bubbles: true }));
+        const el = document.getElementById("loc-suggest");
+        return [
+          calls.length === 1 && /^\/api\/expand\?url=https%3A%2F%2Fmaps\.app\.goo\.gl%2FAbC12dEf$/.test(calls[0]) ? true : `fetch calls: ${calls.join(" | ") || "none"}`,
+          /Opening/.test(el.textContent) && !el.hidden ? true : `status: "${el.textContent.trim().slice(0, 50)}"`,
+          eq(locSuggestTimer, timerBefore, "Photon timer untouched"),
+          eq(form.locLat.value, "", "no pin yet"),
+        ].filter((x) => x !== true).join("; ") || true;
+      } finally { window.fetch = realFetch; closeDialog(document.getElementById("dialog-item")); }
+    });
+
+    check("an expanded full URL applied against the short paste swaps the short link for the place", () => {
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      openItemDialog(tripId);
+      const form = document.getElementById("form-item");
+      try {
+        const short = "https://maps.app.goo.gl/AbC12dEf";
+        form.title.value = short;
+        applyMapsPaste(form, parseMapsPaste("https://www.google.com/maps/place/Eiffel+Tower/@48.8583,2.2944,17z"), short);
+        return [eq(form.title.value, "Eiffel Tower", "title"), eq(form.locationName.value, "Eiffel Tower", "location"), eq(form.locLat.value, "48.8583", "pin")]
+          .filter((x) => x !== true).join("; ") || true;
+      } finally { closeDialog(document.getElementById("dialog-item")); }
+    });
+
+    /* ---- L: Budget expense filter ---- */
+
+    check("Budget: Unpaid / Paid chips filter the expense rows in every trip card", () => {
+      const y = Number(today.slice(0, 4));
+      const trip = mk("soon", shift(today, 5), shift(today, 9), { year: y, expenses: [
+        makeExpense({ id: "e-p", label: "Paid hotel", amount: 500, status: "paid", amountPaid: 500 }),
+        makeExpense({ id: "e-u", label: "Unpaid flight", amount: 300, status: "booked", amountPaid: 0 }),
+        makeExpense({ id: "e-h", label: "Half paid", amount: 200, status: "booked", amountPaid: 100 }),
+      ] });
+      const ef = expenseFilter;
+      return withTrips([trip], [], () => {
+        try {
+          expenseFilter = "all"; renderTrips();
+          const rows = () => [...document.querySelectorAll('[data-trip-fold="t-soon"] .expense-list li:not(.empty-state)')].length;
+          const chip = (v) => document.querySelector(`[data-expense-filter="${v}"]`);
+          const r = [];
+          if (rows() !== 3) r.push(`all shows ${rows()} rows`);
+          if (!chip("unpaid") || chip("unpaid").querySelector(".filter-chip__count").textContent !== "2") r.push("Unpaid chip count is not 2 (partly paid counts as unpaid)");
+          if (!chip("paid") || chip("paid").querySelector(".filter-chip__count").textContent !== "1") r.push("Paid chip count is not 1");
+          chip("unpaid").click();
+          if (rows() !== 2) r.push(`unpaid shows ${rows()} rows`);
+          if (!/2 unpaid of 3 expenses/.test(document.querySelector('[data-trip-fold="t-soon"] summary').textContent)) r.push("fold summary does not say 2 unpaid of 3");
+          if (!document.querySelector('[data-trip-fold="t-soon"]').open) r.push("filtering did not open the fold");
+          document.querySelector('[data-expense-filter="paid"]').click();
+          if (rows() !== 1) r.push(`paid shows ${rows()} rows`);
+          return r.length ? r.join("; ") : true;
+        } finally { expenseFilter = ef; }
+      });
+    });
+
+    /* ---- K: the overview card ---- */
+
+    check("Budget overview leads with Funds vs committed, in words", () => {
+      const y = Number(today.slice(0, 4));
+      const trip = mk("soon", shift(today, 5), shift(today, 9), { year: y, budget: 12000, expenses: [
+        makeExpense({ id: "e-1", label: "Hotel", amount: 10000, status: "booked", amountPaid: 4000 }),
+      ] });
+      return withTrips([trip], [], () => {
+        const sy = selectedYear; selectedYear = "all";
+        try {
+          state.currentFunds = 9447; renderGlobal();
+          const card = () => document.querySelector("#global-answer .answer-card");
+          const r1 = [
+            /Funds vs committed/.test(card().textContent) ? true : "label missing",
+            /553/.test(card().textContent) && /short/.test(card().textContent) ? true : `text: ${card().textContent.replace(/\s+/g, " ").trim().slice(0, 80)}`,
+            card().classList.contains("answer-card--short") ? true : "no short class",
+          ].filter((x) => x !== true);
+          if (r1.length) return r1.join("; ");
+          state.currentFunds = 12300; renderGlobal();
+          const tiles = document.getElementById("global-stats").textContent;
+          return [
+            /2,300/.test(card().textContent) && /to spare/.test(card().textContent) ? true : "positive case not in words",
+            card().classList.contains("answer-card--clear") ? true : "no clear class",
+            /Still to pay/.test(tiles) ? true : "Still to pay tile missing",
+            /Funds vs committed/.test(tiles) ? "Funds vs committed still duplicated in the tiles" : true,
+          ].filter((x) => x !== true).join("; ") || true;
+        } finally { selectedYear = sy; }
+      });
     });
   }
 

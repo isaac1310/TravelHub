@@ -36,6 +36,22 @@ const TYPES = {
 http
   .createServer((req, res) => {
     const url = decodeURIComponent((req.url || "/").split("?")[0].split("#")[0]);
+
+    /* The one non-static route: the short-link expander that Vercel runs as api/expand.js.
+       Same module, so local and production cannot drift. */
+    if (url === "/api/expand") {
+      const q = new URL(req.url, "http://localhost").searchParams.get("url");
+      const reply = (status, body) => {
+        res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        res.end(JSON.stringify(body));
+      };
+      Promise.resolve()
+        .then(() => require("../api/expand.js").handleExpand(q))
+        .then(({ status, body }) => reply(status, body))
+        .catch((err) => reply(500, { error: String(err && err.message || err) })); // never leave the request hanging
+      return;
+    }
+
     const rel = url === "/" ? "index.html" : url.replace(/^\/+/, "");
     const file = path.resolve(ROOT, rel);
 
