@@ -10,10 +10,11 @@
    in tools/serve.js for local development (see `handleExpand`). Dependency-free: Node 18+. */
 
 const ALLOWED = /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co)\/[^\s]+$/i;
-const MAX_HOPS = 4;
+const MAX_HOPS = 6;
 const BUDGET_MS = 5000;
 
 async function expandShortLink(short) {
+  short = String(short || "").trim().replace(/^http:\/\//i, "https://");
   if (!ALLOWED.test(short)) return { status: 400, body: { error: "Not a Google Maps short link" } };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), BUDGET_MS);
@@ -39,6 +40,11 @@ async function expandShortLink(short) {
         // Stop as soon as we are on a full Maps URL — that is what the client can parse.
         if (/^https:\/\/(www\.)?google\.[a-z.]+\/maps\//i.test(url)) return { status: 200, body: { url } };
         continue;
+      }
+      // A 200 on the short host is Google's JS interstitial — no Location, no coords.
+      // Returning that URL would look like success and then fail to parse.
+      if (/^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co)\//i.test(url)) {
+        return { status: 502, body: { error: "The short link did not redirect" } };
       }
       // Not a redirect: whatever we landed on is the answer (Google sometimes 200s the maps page).
       return /google\./i.test(url) ? { status: 200, body: { url } } : { status: 502, body: { error: "The link did not lead to Google Maps" } };

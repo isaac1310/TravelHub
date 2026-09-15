@@ -2217,7 +2217,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.15.2";
+const APP_VERSION = "v1.15.3";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -4102,16 +4102,21 @@ function parseCoordsFromText(text) {
     Math.abs(lat) <= 90 && Math.abs(lng) <= 180
       ? { lat, lng } : null;
 
-  // Google Maps URL: .../@48.8583,2.2944,17z  or  ...!3d48.8583!4d2.2944
-  const at = t.match(/@(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
-  if (at) return ok(Number(at[1]), Number(at[2]));
-  const d3d4 = t.match(/!3d(-?\d{1,3}\.\d+)!4d(-?\d{1,3}\.\d+)/);
+  const num = "-?\\d{1,3}(?:\\.\\d+)?";
+  // !3d!4d is the place pin. @lat,lng is often just the camera, and they disagree.
+  const d3d4 = t.match(new RegExp(`!3d(${num})!4d(${num})`));
   if (d3d4) return ok(Number(d3d4[1]), Number(d3d4[2]));
+  const at = t.match(new RegExp(`@(${num}),(${num})`));
+  if (at) return ok(Number(at[1]), Number(at[2]));
   // ?q=lat,lng, query=lat,lng, and the "?q=Name,lat,lng" shape some apps share.
-  const q = t.match(/[?&](?:q|query)=(?:[^&#]*?,)?(-?\d{1,3}\.\d+),(-?\d{1,3}\.\d+)/);
+  const q = t.match(new RegExp(`[?&](?:q|query)=(?:[^&#]*?,)?(${num}),(${num})`));
   if (q) return ok(Number(q[1]), Number(q[2]));
+  const ll = t.match(new RegExp(`[?&](?:ll|center)=(${num}),(${num})`));
+  if (ll) return ok(Number(ll[1]), Number(ll[2]));
+  const dest = t.match(new RegExp(`[?&]destination=(${num}),(${num})`));
+  if (dest) return ok(Number(dest[1]), Number(dest[2]));
   // Plain "lat, lng" (only when the whole field is just that — avoids false hits)
-  const plain = t.match(/^(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)$/);
+  const plain = t.match(new RegExp(`^(${num})\\s*,\\s*(${num})$`));
   if (plain) return ok(Number(plain[1]), Number(plain[2]));
   // DMS, e.g. 48°51'26.0"N 2°17'20.3"E  (also comma-separated variant)
   const dt = t.replace(/([NSEW])\s*,\s*/gi, "$1 ");
@@ -4131,36 +4136,68 @@ function parseCoordsFromText(text) {
   return null;
 }
 
+function decodeMapsName(raw) {
+  const cleaned = String(raw || "").replace(/\+/g, " ")
+    .replace(/,\s*-?\d{1,3}(?:\.\d+)?\s*,\s*-?\d{1,3}(?:\.\d+)?\s*$/, "");
+  if (!cleaned || /^-?\d{1,3}(?:\.\d+)?\s*,\s*-?\d{1,3}(?:\.\d+)?$/.test(cleaned)) return "";
+  try {
+    return decodeURIComponent(cleaned).trim();
+  } catch {
+    return cleaned.trim();
+  }
+}
+
 /* Pull a human place name out of a Google Maps URL: /place/Eiffel+Tower/…, /search/Le+Comptoir/…,
-   or a non-numeric ?q= / query= (a trailing ",lat,lng" is dropped). */
+   or a non-numeric ?q= / query= / destination= (a trailing ",lat,lng" is dropped). */
 function placeNameFromMapsUrl(text) {
   const t = text || "";
   const m = t.match(/\/place\/([^/@?]+)/) || t.match(/\/search\/([^/@?]+)/) ||
-    t.match(/[?&](?:q|query)=([^&#]*[^\d.,\-&#][^&#]*)/);
-  if (!m) return "";
-  const raw = m[1].replace(/\+/g, " ").replace(/,\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/, "");
-  try {
-    return decodeURIComponent(raw).trim();
-  } catch {
-    return raw.trim();
+    t.match(/[?&](?:q|query|destination)=([^&#]*[^\d.,\-&#][^&#]*)/) ||
+    t.match(/\/maps\/dir\/(?:[^/@]*\/)+([^/@?]+)/);
+  return m ? decodeMapsName(m[1]) : "";
+}
+
+/* Share sheets (especially Android) paste a place name, then a maps.app.goo.gl URL
+   on the next line, wrap the URL in bidi marks, or omit https://. Title/Location also
+   truncate at 120/160, which shears a long google.com/maps/place/… URL before @lat,lng. */
+function stripMapsNoise(text) {
+  return String(text || "").replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g, "");
+}
+
+function extractMapsLink(text) {
+  const t = stripMapsNoise(text);
+  const re = /https?:\/\/(?:maps\.app\.goo\.gl\/|goo\.gl\/maps\/|g\.co\/(?:maps\/)?|(?:www\.)?google\.[a-z.]+\/maps(?:\/|\?)|maps\.google\.[a-z.]+\/)[^\s<>"'）)\]]*/gi;
+  let m, last = "";
+  while ((m = re.exec(t))) last = m[0];
+  if (!last) {
+    const bare = t.match(/(?:^|\s)((?:maps\.app\.goo\.gl|goo\.gl\/maps)\/[^\s<>"']+)/i);
+    if (bare) last = "https://" + bare[1];
   }
+  return last.replace(/[.,;:!?]+$/, "");
 }
 
 /* v1.14.0 — one verdict on a paste, used by both the Title and the Location field:
      null                      plain text, let Photon search it
-     { kind: "short" }         a maps.app.goo.gl / goo.gl/maps / g.co link — carries no coordinates
+     { kind: "short", url }    a maps.app.goo.gl / goo.gl/maps / g.co link — carries no coordinates
                                and cannot be expanded here (CSP connect-src, and Google's CORS)
      { kind: "place", name, lat, lng }   full Maps URL with a name
+     { kind: "name", name, url }         a Maps URL with a name but no pin (Save will geocode)
      { kind: "coords", lat, lng }        coordinates only (bare "lat, lng", DMS, or a nameless URL) */
 function parseMapsPaste(text) {
-  const t = (text || "").trim();
-  if (/^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co)\//i.test(t)) return { kind: "short" };
+  const extracted = extractMapsLink(text);
+  const t = extracted || stripMapsNoise(text || "").trim();
+  if (/^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|g\.co)\//i.test(t) ||
+      /^(maps\.app\.goo\.gl|goo\.gl\/maps)\//i.test(t)) {
+    const url = /^https?:\/\//i.test(t) ? t.replace(/^http:\/\//i, "https://") : "https://" + t;
+    return { kind: "short", url };
+  }
   const coords = parseCoordsFromText(t);
-  if (!coords) return null;
   const name = placeNameFromMapsUrl(t);
   // Keep the full Maps URL (never bare coordinates or a short link) so "open in Maps" can reuse it.
-  const url = /^https:\/\/(www\.)?google\.[a-z.]+\/maps/i.test(t) ? t : "";
-  return name ? { kind: "place", name, url, ...coords } : { kind: "coords", url, ...coords };
+  const url = /^https:\/\/((www|maps)\.)?google\.[a-z.]+\/maps/i.test(t) ? t : "";
+  if (coords) return name ? { kind: "place", name, url, ...coords } : { kind: "coords", url, ...coords };
+  if (name && url) return { kind: "name", name, url };
+  return null;
 }
 
 /* fetch with a hard deadline. The Photon calls abort-on-supersede; this one is for a single
@@ -4184,8 +4221,11 @@ function applyMapsPaste(form, parsed, pasted) {
     // /api/expand (v1.15.0) to follow Google's redirect and re-run with the full URL.
     show("Opening that short link…");
     const guidance = () => show("That short Maps link could not be opened here. Open it in Google Maps, copy the full link from the address bar (it contains <code>@lat,lng</code>), and paste that instead.");
-    const stillPasted = () => form.title.value.trim() === pasted || form.locationName.value.trim() === pasted;
-    form._expandPending = fetchWithTimeout(`/api/expand?url=${encodeURIComponent(pasted)}`, 6000)
+    const shortUrl = parsed.url || extractMapsLink(pasted) || String(pasted || "").trim();
+    const token = shortUrl;
+    form._mapsPasteToken = token;
+    const stillPasted = () => form._mapsPasteToken === token;
+    form._expandPending = fetchWithTimeout(`/api/expand?url=${encodeURIComponent(shortUrl)}`, 6000)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then(({ url }) => {
         if (!stillPasted()) return; // the user moved on; do not overwrite what they typed since
@@ -4194,13 +4234,18 @@ function applyMapsPaste(form, parsed, pasted) {
         // A name-only URL (…/maps/place/<Name>/data=…): fill the name, let Save geocode it.
         const name = placeNameFromMapsUrl(url);
         if (!name) { guidance(); return; }
-        form.locLat.value = ""; form.locLng.value = "";
-        form.locationName.value = name;
-        const title = form.title.value.trim();
-        if (!title || title === pasted) form.title.value = name;
-        show(`📍 Location set from your link — “${escapeHtml(name)}”. The pin will be found on Save.`);
+        applyMapsPaste(form, { kind: "name", name, url }, pasted);
       })
       .catch(() => { if (stillPasted()) guidance(); });
+    return true;
+  }
+  if (parsed.kind === "name") {
+    form.locLat.value = ""; form.locLng.value = "";
+    form.locUrl.value = parsed.url || "";
+    form.locationName.value = parsed.name;
+    const title = form.title.value.trim();
+    if (!title || title === pasted || extractMapsLink(title)) form.title.value = parsed.name;
+    show(`📍 Location set from your link — “${escapeHtml(parsed.name)}”. The pin will be found on Save.`);
     return true;
   }
   form.locLat.value = parsed.lat;
@@ -4210,10 +4255,10 @@ function applyMapsPaste(form, parsed, pasted) {
   if (name) {
     form.locationName.value = name;
     const title = form.title.value.trim();
-    if (!title || title === pasted) form.title.value = name;
+    if (!title || title === pasted || extractMapsLink(title)) form.title.value = name;
   } else if (form.locationName.value.trim() === pasted && form.title.value.trim() === pasted) {
     form.title.value = ""; // bare coordinates make no title
-  } else if (form.title.value.trim() === pasted) {
+  } else if (form.title.value.trim() === pasted || extractMapsLink(form.title.value)) {
     form.title.value = "";
   }
   if (!form.locationName.value.trim()) form.locationName.value = pasted;
@@ -4659,6 +4704,7 @@ function bindEvents() {
     form.locLat.value = "";
     form.locLng.value = "";
     form.locUrl.value = "";
+    form._mapsPasteToken = "";
     clearTimeout(locSuggestTimer);
     const q = locInput.value.trim();
     // Pasted a Google Maps link or "lat, lng"? Use it directly instead of searching.
@@ -4668,13 +4714,30 @@ function bindEvents() {
   });
   /* The Title field takes the same paste. It is the field the sheet opens on, and Isaac pastes
      into the field he is in (see the destinations comment on the trip dialog) — a Maps link
-     typed there used to become the literal title. */
+     typed there used to become the literal title. Share sheets often put the place name first,
+     so we look for a Maps URL anywhere in the field, not only a value that starts with http. */
   $("form-item").title.addEventListener("input", () => {
     const form = $("form-item");
     const q = form.title.value.trim();
-    if (!/^https?:\/\//i.test(q)) return;
-    applyMapsPaste(form, parseMapsPaste(q), q);
+    const parsed = parseMapsPaste(q);
+    if (!parsed) return;
+    applyMapsPaste(form, parsed, q);
   });
+  /* Read the clipboard before maxlength (120/160) shears a long maps URL. */
+  const onMapsClipboard = (e) => {
+    const form = $("form-item");
+    const text = (e.clipboardData && e.clipboardData.getData("text")) || "";
+    const parsed = parseMapsPaste(text);
+    if (!parsed) return;
+    e.preventDefault();
+    const first = stripMapsNoise(text).split(/\r?\n/).map((s) => s.trim()).find(Boolean) || "";
+    if (first && !extractMapsLink(first) && (e.target === form.title || !form.title.value.trim())) {
+      form.title.value = first.slice(0, form.title.maxLength || 120);
+    }
+    applyMapsPaste(form, parsed, extractMapsLink(text) || text.trim());
+  };
+  $("form-item").title.addEventListener("paste", onMapsClipboard);
+  locInput.addEventListener("paste", onMapsClipboard);
   $("dialog-item").addEventListener("close", () => {
     clearTimeout(locSuggestTimer);
     hideLocSuggestions();

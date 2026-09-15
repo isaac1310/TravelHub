@@ -1,6 +1,6 @@
 # Feature parity inventory
 
-Every user-reachable action in the app, as of **v1.15.2**.
+Every user-reachable action in the app, as of **v1.15.3**.
 
 **Why this exists.** While planning a redesign I specified building a sticky date strip —
 which had already shipped, working, for several releases. That kind of drift is invisible
@@ -60,7 +60,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Delete a reservation | `data-delete-item`, and ⋯ → Delete |
 | ⋯ action sheet | `dialog-item-actions`: Edit · Move up · Move down · **Open in Google Maps** · Delete |
 | Geocode a place | `data-locate-item` ("Locate") |
-| **Import a place from Google Maps** | *v1.14.0*. Paste a Maps link into **either** the name field or Location; `parseMapsPaste()` → `applyMapsPaste()` fills the location name and the pin, and the title too when it is empty or is the pasted URL (a typed title is kept). Shapes: `/place/<name>/@lat,lng`, `/search/<name>/`, `?q=<name>,lat,lng`, `!3d!4d`, bare `lat, lng`, DMS. **Short links expand** (*v1.15.0*): `maps.app.goo.gl` / `goo.gl/maps` / `g.co` go to the app's own `/api/expand` (`api/expand.js`, the only server code; allow-listed hosts, 4 hops, 5 s; also served by `tools/serve.js` locally), which follows Google's redirect and returns the full URL — then the normal paste path runs. A name-only result fills the name and lets Save geocode the pin. If the call fails or times out (6 s), the sheet asks for the full URL. Photon is **never** asked to search the URL text |
+| **Import a place from Google Maps** | *v1.14.0*. Paste a Maps link into **either** the name field or Location; `parseMapsPaste()` → `applyMapsPaste()` fills the location name and the pin, and the title too when it is empty or is the pasted URL (a typed title is kept). Shapes: `/place/<name>/@lat,lng`, `/search/<name>/`, `?q=<name>,lat,lng`, `!3d!4d`, `ll=`, bare `lat, lng`, DMS. **Short links expand** (*v1.15.0*): `maps.app.goo.gl` / `goo.gl/maps` / `g.co` go to the app's own `/api/expand` (`api/expand.js`, the only server code; allow-listed hosts, 6 hops, 5 s; also served by `tools/serve.js` locally), which follows Google's redirect and returns the full URL — then the normal paste path runs. A name-only result fills the name and lets Save geocode the pin. If the call fails or times out (6 s), the sheet asks for the full URL. Photon is **never** asked to search the URL text. **Share-sheet pastes** (*v1.15.3*): a place name plus a short link, bidi marks, a missing `https://`, or a long `google.com/maps/…` URL that Title/Location would truncate are pulled out of the clipboard (`paste` event + `extractMapsLink`). The place pin (`!3d!4d`) is preferred over the camera (`@lat,lng`) |
 | **Add expense from a booking** | *v1.15.0*. ⋯ sheet row **Add expense** (becomes **Open expense** once linked) and an **Add expense** button in the Bookings card foot when no expense is linked. `openExpenseForItem()` prefills Description = title, Category from type (`TYPE_TO_CATEGORY`: flight→Flight, hotel→Hotel, restaurant/cafe→Food, transport→Transport, attraction→Activities, store→**Shopping** (new category), other→Other), Booking date = the booking's date, and focuses Amount. The saved expense carries `itemId`; `linkedExpense()` reads it (and still honours the seed `item-<expId>` pattern). **Deleting a booking deletes its linked expense** — the confirm says so — with an **Undo** toast that restores both at their indexes; deleting an expense never touches a booking |
 | Filter the map by day | day chips in the same format as the timeline's — day-of-week over the date, same tile, one scrolling line — plus `All`. `mapDayFilter`. The day travels with you between Timeline and Maps: scroll or tap a day, switch tabs, and the other view opens on it. Only a day you *chose* carries — the scroll spy sets one on arrival, and carrying that would stop Maps ever opening on the whole route |
 | **Tap a stop to focus it** | `data-focus-stop` on the row body — *v1.10.1*. Centres the map and opens that pin; the Locate and Maps buttons sit outside it. The v1.10.0 carousel was removed (it never rendered) |
@@ -123,7 +123,7 @@ Derived from the handlers actually wired in `index.html`, not from memory.
 | Import data (`import`) | always |
 | Restore my old data (`restore`) | a pre-join backup exists |
 | Room badge | `Shared · xxxxxx` / `Local only` — tap to copy the full room id |
-| Build version | `TravelHub v1.15.2 · <sha>` — selectable |
+| Build version | `TravelHub v1.15.3 · <sha>` — selectable |
 
 Background behaviour: auto-apply of remote changes when nothing local is pending · notify +
 "tap Sync" when there are unsaved edits · three-way merge on sync · pre-join backup ·

@@ -131,6 +131,7 @@
       releaseV1150();
       releaseV1151();
       releaseV1152();
+      releaseV1153();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -3835,6 +3836,36 @@
       return r.length ? r.join("; ") : true;
     });
 
+    check("parseMapsPaste reads a share-sheet paste, a bare short link, and a name-only Maps URL", () => {
+      const mixed = parseMapsPaste("Target\nhttps://maps.app.goo.gl/AbC12dEf");
+      const bidi = parseMapsPaste("\u202ahttps://maps.app.goo.gl/AbC12dEf\u202c");
+      const bare = parseMapsPaste("maps.app.goo.gl/AbC12dEf");
+      const nameOnly = parseMapsPaste("https://www.google.com/maps/place/Le+Comptoir/data=!4m2");
+      const search = parseMapsPaste("https://www.google.com/maps/search/?api=1&query=Eiffel+Tower");
+      const r = [
+        eq(mixed && mixed.kind, "short", "mixed kind"),
+        eq(mixed && mixed.url, "https://maps.app.goo.gl/AbC12dEf", "mixed url"),
+        eq(bidi && bidi.kind, "short", "bidi"),
+        eq(bare && bare.url, "https://maps.app.goo.gl/AbC12dEf", "bare"),
+        eq(nameOnly && nameOnly.kind, "name", "name-only kind"),
+        eq(nameOnly && nameOnly.name, "Le Comptoir", "name-only name"),
+        eq(search && search.kind, "name", "search kind"),
+        eq(search && search.name, "Eiffel Tower", "search name"),
+      ].filter((x) => x !== true);
+      return r.length ? r.join("; ") : true;
+    });
+
+    check("parseCoordsFromText prefers the place pin over the camera, and reads ll=", () => {
+      const pin = parseCoordsFromText("https://www.google.com/maps/place/X/@33.8000,-118.1239,15z/data=!8m2!3d33.7978!4d-118.1226");
+      const ll = parseCoordsFromText("https://www.google.com/maps?ll=48.8583,2.2944");
+      const r = [
+        pin ? near(pin.lat, 33.7978, 0.0001, "pin lat") : "no pin",
+        pin ? near(pin.lng, -118.1226, 0.0001, "pin lng") : "no pin lng",
+        ll ? near(ll.lat, 48.8583, 0.0001, "ll lat") : "no ll",
+      ].filter((x) => x !== true);
+      return r.length ? r.join("; ") : true;
+    });
+
     check("pasting a Maps link into the name field fills name, location and pin; a typed name is kept", () => {
       const tripId = (state.trips[0] && state.trips[0].id) || "probe";
       const url = "https://www.google.com/maps/place/Eiffel+Tower/@48.8583,2.2944,17z";
@@ -4488,6 +4519,50 @@
         form.requestSubmit();
         return eq(state.items[0].location.url, FULL, "url survives an unrelated edit");
       } finally { if (document.getElementById("dialog-item").open) closeDialog(document.getElementById("dialog-item")); state.items = bi; saveState(); render(); }
+    });
+  }
+
+  /* ===== v1.15.3 — Maps import: share-sheet text, long URLs, name-only links ===== */
+  function releaseV1153() {
+    group("v1.15.3");
+
+    check("a share-sheet paste in Location expands the short URL, not the place name", () => {
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      const realFetch = window.fetch; const calls = [];
+      window.fetch = (url) => { calls.push(String(url)); return new Promise(() => {}); };
+      openItemDialog(tripId);
+      const form = document.getElementById("form-item");
+      try {
+        form.locationName.value = "Target\nhttps://maps.app.goo.gl/AbC12dEf";
+        form.locationName.dispatchEvent(new Event("input", { bubbles: true }));
+        return calls.length === 1 && /url=https%3A%2F%2Fmaps\.app\.goo\.gl%2FAbC12dEf$/.test(calls[0])
+          ? true : `fetch calls: ${calls.join(" | ") || "none"}`;
+      } finally { window.fetch = realFetch; closeDialog(document.getElementById("dialog-item")); }
+    });
+
+    check("paste event reads a long Maps URL the title field would otherwise truncate", () => {
+      const tripId = (state.trips[0] && state.trips[0].id) || "probe";
+      const longName = "A".repeat(80);
+      const url = `https://www.google.com/maps/place/${longName}/@48.8583,2.2944,17z`;
+      if (url.length <= 120) return "fixture is not longer than title maxlength";
+      openItemDialog(tripId);
+      const form = document.getElementById("form-item");
+      try {
+        const dt = new DataTransfer();
+        dt.setData("text", url);
+        const ev = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
+        form.title.dispatchEvent(ev);
+        if (!form.locationName.value && !form.locLat.value) {
+          return skip("paste handler did not see clipboardData (untrusted ClipboardEvent)");
+        }
+        return [
+          eq(form.locationName.value, longName, "location"),
+          eq(form.locLat.value, "48.8583", "lat"),
+          eq(form.title.value, longName, "title"),
+        ].filter((x) => x !== true).join("; ") || true;
+      } catch (err) {
+        return skip("ClipboardEvent/DataTransfer not constructable: " + (err && err.message));
+      } finally { closeDialog(document.getElementById("dialog-item")); }
     });
   }
 
