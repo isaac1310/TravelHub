@@ -25,7 +25,8 @@ Open `index.html` in a browser — no build step. Data is saved in
   day (day chips 16 | 17 | … | All). Locations autocomplete via **Photon**
   (OpenStreetMap) and are geocoded on save. **Import a place from Google Maps:**
   paste a Maps link into the booking's name or Location field and the place
-  name and pin fill in (bare `lat, lng`, decimal or DMS, works too). Short
+  name and pin fill in (bare `lat, lng`, decimal or DMS, works too). A share-sheet
+  paste that includes a place name plus the link is fine. Short
   `maps.app.goo.gl` links are expanded by the app's own `/api/expand` (the one
   serverless function, `api/expand.js`; also served by `tools/serve.js` locally) —
   if that is unreachable the sheet asks you to paste the full URL. Every stop has an
