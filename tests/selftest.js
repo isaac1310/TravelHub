@@ -5047,26 +5047,27 @@
         ? true : "the line art is not underneath the painting";
     });
 
-    check("the cover scrim clears at its far end instead of washing everything", () => {
-      /* The scrim shipped as a full-surface wash and the paintings all but vanished.
-         The cause was measuring ELEMENT boxes rather than glyphs: the hero's text nodes
-         sit in full-width blocks, so sampling across them "found" text at 96% where
-         there is only empty space, and the whole surface got protected. This asserts the
-         gradient still ENDS light — the property that lets the artwork show. */
-      const hero = document.querySelector(".hero .cover__scrim");
-      const card = document.querySelector(".tripcard__cover .cover__scrim");
+    check("nothing is printed straight onto the painting", () => {
+      /* The artwork was first shown under a scrim heavy enough to hide it, because text
+         sat directly on the image and had to be made readable there. The fix was
+         structural, the way the pastel gallery lays these out: the painting gets its own
+         surface and the words get theirs. So the invariant is not "the scrim is light" —
+         it is that no bare text is laid over the image at all. */
       const bad = [];
-      for (const [name, el] of [["hero", hero], ["card", card]]) {
-        if (!el) continue;
-        const css = getComputedStyle(el).backgroundImage;
-        const alphas = [...css.matchAll(/rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\)/g)]
-          .map((m) => Number(m[1]));
-        if (!alphas.length) { bad.push(`${name}: no rgba stops found`); continue; }
-        const last = alphas[alphas.length - 1];
-        if (last > 0.45) bad.push(`${name} ends at alpha ${last} — that is a wash, not a falloff`);
-        if (Math.max(...alphas) - Math.min(...alphas) < 0.3) bad.push(`${name} barely varies: ${alphas.join(", ")}`);
+      for (const sel of [".hero", ".tripcard__cover"]) {
+        const el = document.querySelector(sel);
+        if (!el || !el.querySelector(".cover__photo")) continue;
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let n;
+        while ((n = w.nextNode())) {
+          if (!n.nodeValue.trim()) continue;
+          const p = n.parentElement;
+          // Anything with its own backing (plate, Today card, tags, pills) is fine.
+          if (p.closest(".hero__plate, .hero__today, .tag, .pill, .btn, .avatar")) continue;
+          bad.push(`${sel}: "${n.nodeValue.trim().slice(0, 24)}" sits directly on the painting`);
+        }
       }
-      if (!hero && !card) return skip("no cover on this screen");
+      if (!document.querySelector(".cover__photo")) return skip("no painting on this screen");
       return bad.length ? bad.join("; ") : true;
     });
 

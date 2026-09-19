@@ -45,6 +45,16 @@
   --surface: #ffffff;
   --text: #33302e;          /* charcoal */
   --heading: #2c2a28;
+  /* Palette lifted from design/blueprints/pastel/index.html — the gallery the paintings
+     were art-directed for. Used by the cover surfaces so the artwork sits on colours
+     drawn from it rather than fighting the brand salmon. */
+  --pastel-paper: #f7f2e9;
+  --pastel-ink: #494e47;
+  --pastel-line: #ded7cb;
+  --pastel-muted: #807c73;
+  --pastel-blush: #d9a6a2;
+  --pastel-apricot: #e9bc94;
+  --pastel-cream: #ece1ca;
   /* #9a9089 measured 2.79-3.12:1 against the four surfaces — below the 4.5:1 needed for
      normal text. #6f6660 is the LIGHTEST value that clears it everywhere (5.61 on --surface,
      5.26 on --bg, 5.03 on --cream-2, 4.67 on --cream), chosen over a darker, safer grey to
@@ -419,28 +429,41 @@ h1, h2, h3, h4, .brand__name {
    file has always promised, and both are LIGHTER than the first attempt, which measured
    4.88 / 4.61 while hiding far more of the painting — that is the element-box error
    being paid back. */
+/* Barely there. The words sit on .hero__plate now, so the scrim's only job is to stop a
+   very pale sky washing out the plate's own edge — not to carry contrast. */
 .hero .cover__scrim {
-  background: linear-gradient(to right,
-    rgba(242,160,143,0.95) 0%, rgba(239,142,127,0.88) 38%,
-    rgba(236,138,130,0.35) 58%, rgba(228,128,132,0.08) 78%, rgba(224,122,134,0.04) 100%);
+  background: linear-gradient(to bottom, rgba(73,78,71,0.14) 0%, transparent 38%, rgba(73,78,71,0.10) 100%);
 }
-/* On a phone the kicker wraps out to 79% of the width, so the protected band has to
-   reach much further. The hero there is mostly text and the Today card anyway; the
-   trip cards are where the artwork gets room on a small screen. */
-@media (max-width: 900px) {
-  .hero .cover__scrim {
-    background: linear-gradient(to right,
-      rgba(242,160,143,0.95) 0%, rgba(239,142,127,0.92) 55%,
-      rgba(236,138,130,0.72) 80%, rgba(224,122,134,0.30) 100%);
-  }
+.hero .cover__photo { opacity: 1; }
+/* Paper from the gallery palette, and ink rather than the salmon-era heading colour:
+   on a warm painting a near-black reads heavier than the artwork wants. */
+/* 74% paper, not 94%: the plate and the Today card together were covering most of the
+   painting. Measured across all 19 paintings, downsampled to approximate the backdrop
+   blur, the worst composite still gives ink 4.78 — the blur is what makes this safe,
+   since the plate sits over a local average rather than a single bright pixel. */
+.hero__plate {
+  background: color-mix(in srgb, var(--pastel-paper) 74%, transparent);
+  backdrop-filter: blur(14px) saturate(1.08);
+  border: 1px solid color-mix(in srgb, var(--pastel-line) 55%, transparent);
+  border-radius: var(--radius); padding: 1rem 1.1rem; color: var(--pastel-ink);
+  max-width: 30rem;
 }
+/* Ink, NOT muted. --pastel-muted measured 3.37 against this plate even at 94% opacity
+   and never reaches 4.5 at any transparency — it is a colour for solid paper, which is
+   where the gallery uses it. */
+.hero__plate .hero__kicker { color: var(--pastel-ink); opacity: 0.75; }
+.hero__plate .hero__title { color: var(--pastel-ink); }
+.hero__plate .hero__dates { color: var(--pastel-ink); }
+.hero__plate .hero__travellers { margin-top: 0.7rem; color: var(--pastel-ink); }
 /* The 96px card's title is right-aligned, so this one runs the other way: the left of
    the card — where the painting is most legible — stays clear. */
+/* No scrim on the card at all. Nothing is printed over the painting any more, so there
+   is nothing to protect — only a whisper at the very top so the year/timing chips keep
+   their edge against a bright sky. */
 .tripcard__cover .cover__scrim {
-  background: linear-gradient(to left,
-    rgba(242,160,143,0.97) 0%, rgba(239,142,127,0.94) 40%,
-    rgba(232,132,130,0.55) 70%, rgba(224,122,134,0.20) 100%);
+  background: linear-gradient(to bottom, rgba(73,78,71,0.20) 0%, rgba(73,78,71,0.06) 22%, transparent 45%);
 }
+.tripcard__cover .cover__photo { opacity: 1; }
 /* Without a photo the scrim would just double the gradient and darken the card. */
 .cover--nophoto .cover__scrim { display: none; }
 /* Every child EXCEPT the cover layers is lifted above them. The exclusion list has to
@@ -449,6 +472,9 @@ h1, h2, h3, h4, .brand__name {
    inset rectangle instead of filling the card. */
 .hero > *:not(.cover__art):not(.cover__photo):not(.cover__scrim),
 .tripcard__cover > *:not(.cover__art):not(.cover__photo):not(.cover__scrim) { position: relative; z-index: 1; }
+/* The hero is a painting now, so its own salmon gradient would show through wherever the
+   image has not covered — and the ::after highlight was tuned for that gradient. */
+.hero::after { display: none; }
 .hero::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background:
@@ -469,8 +495,11 @@ h1, h2, h3, h4, .brand__name {
 .hero__travellers { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
 /* Today card (v1.14.0), inside the hero while travelling. A white panel on the salmon so the
    text can be the normal charcoal-on-white and Maps links stay legible. */
-.hero__today { margin-top: 1.1rem; background: rgba(255,255,255,0.93); color: var(--text); border-radius: var(--radius); padding: 0.85rem 0.95rem; display: grid; gap: 0.5rem; }
-.today__head { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--muted); }
+/* Same treatment as .hero__plate — between them they were covering the painting almost
+   entirely. Blurred backdrop, so the 0.80 is over a local average rather than a pixel. */
+.hero__today { margin-top: 1.1rem; background: rgba(255,255,255,0.80); backdrop-filter: blur(14px) saturate(1.08); color: var(--text); border-radius: var(--radius); padding: 0.85rem 0.95rem; display: grid; gap: 0.5rem; }
+/* Not --muted over a translucent card, for the reason documented on .hero__plate. */
+.today__head { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--text); opacity: 0.7; }
 .today__row { display: grid; grid-template-columns: 3.4rem 22px 1fr auto; gap: 0.5rem; align-items: center; min-height: 44px; }
 .today__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--brand-text); }
 .today__icon svg { width: 20px; height: 20px; color: var(--heading); display: block; }
@@ -523,7 +552,9 @@ h1, h2, h3, h4, .brand__name {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 @media (hover: hover) { .tripcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); } }
-.tripcard__cover { height: 96px; position: relative; color: var(--heading); padding: 0.8rem 1rem; display: flex; align-items: flex-end; }
+/* Taller now that it is purely a painting rather than a strip with a title on it —
+   96px cropped these to a band; 132px lets a landmark actually read. */
+.tripcard__cover { height: 132px; position: relative; color: var(--heading); padding: 0.8rem 1rem; display: flex; align-items: flex-end; }
 .tripcard__cover .tag { position: absolute; top: 0.7rem; right: 0.8rem; background: rgba(255,255,255,0.85); color: var(--brand-text); border-radius: var(--radius-pill); padding: 0.15rem 0.6rem; font-size: 0.72rem; font-weight: 700; }
 /* The timing badge sits opposite the year so the two never stack (both are absolute).
    Travelling gets a solid fill because "you are on this trip now" is the one state worth
@@ -572,7 +603,10 @@ h1, h2, h3, h4, .brand__name {
 .booking-group[open] > summary { margin-bottom: 0.9rem; }
 .booking-group .booking-group__title .booking__add-expense { margin-left: 0; }
 .booking__foot .btn--small { min-height: 36px; padding: 0.3rem 0.7rem; }
+/* The name lives in the body now (see renderTripOverviewCard); this keeps the old
+   selector working if anything still renders one inside the cover. */
 .tripcard__cover h3 { margin: 0; color: var(--heading); font-size: 1.25rem; }
+.tripcard__name { margin: 0 0 0.15rem; font-size: 1.25rem; color: var(--heading); }
 .tripcard__body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; }
 .tripcard__row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.86rem; }
 .tripcard__row svg { width: 16px; height: 16px; flex: none; }
@@ -1050,6 +1084,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .fx-settled { color: #3f8a63; font-weight: 600; }
 .fx-norate { color: #b0456a; font-weight: 600; }
 .trip-card__fxnote { margin: -0.2rem 0 0.5rem; font-size: 0.78rem; color: var(--muted); }
+.trip-card__fold { display: flex; align-items: center; gap: 0.4rem; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: inherit; text-align: start; }
+.trip-card__chev { color: var(--muted); font-size: 0.8rem; }
+.trip-card__glance { display: block; margin-top: 0.2rem; font-size: 0.8rem; color: var(--muted); }
+.trip-card--collapsed { padding-bottom: 0.7rem; }
 .quickadd {
   position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 0.75rem;
   margin: 0.5rem -0.25rem 0; padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
@@ -1064,18 +1102,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 #global-panel > summary::after { content: "▾"; margin-inline-start: auto; color: var(--muted); font-size: 0.8rem; transition: transform 0.15s ease; }
 #global-panel[open] > summary::after { transform: rotate(180deg); }
 .panel__summary-note { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
-/* Same chip vocabulary as the timeline's day strip, scrolled sideways rather than wrapped —
-   a 7-day trip would otherwise push the expense list off the screen before you reached it. */
-.expense-days { display: flex; gap: 0.35rem; overflow-x: auto; padding: 0.15rem 0 0.5rem; scrollbar-width: none; }
+/* The chips themselves are .filter-chip, shared with the Unpaid/Paid row so the font,
+   size and weight cannot drift apart. Only the row's own spacing lives here, and it has
+   to scroll sideways — a week-long trip would otherwise push the list off the screen. */
+.expense-days { display: flex; gap: 0.45rem; overflow-x: auto; padding: 0.1rem 0 0.6rem; scrollbar-width: none; }
 .expense-days::-webkit-scrollbar { display: none; }
-.daychip--exp {
-  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.3rem;
-  min-height: 34px; padding: 0.2rem 0.6rem; border-radius: var(--radius-pill);
-  border: 1px solid var(--border-strong, #d9cfc7); background: var(--surface, #fff);
-  font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--text); cursor: pointer;
-}
-.daychip--exp.is-active { background: var(--brand); border-color: var(--brand); color: #fff; }
-.daychip--exp.is-active .filter-chip__count { color: #fff; opacity: 0.85; }
 #global-panel[open] .panel__summary-note { display: none; }
 /* Visited: dimmed with a tick, never struck through or hidden — you look back at
    what you did as often as forward at what is left.
@@ -3874,6 +3905,7 @@ function renderExpenseItem(trip, e) {
 function renderTripCard(trip) {
   const committedAgg = tripCommittedHome(trip);
   const committed = committedAgg.value;
+  const unsettled = tripUnsettledCount(trip);
   const paid = tripPaid(trip);
   const due = tripDue(trip);
   /* An excluded row must be VISIBLE in the number it was excluded from. Totals here
@@ -3881,7 +3913,6 @@ function renderTripCard(trip) {
      be a lie — but silently dropping them reads as "nothing spent, budget intact",
      which is the more dangerous lie. Same for estimates: a total built partly from
      guesses says so, next to the figure rather than in a chip somewhere else. */
-  const unsettled = tripUnsettledCount(trip);
   const notes = [
     committedAgg.unrated ? `${committedAgg.unrated} awaiting rate${committedAgg.unrated === 1 ? "" : "s"}` : "",
     unsettled ? `${unsettled} unsettled` : "",
@@ -3905,7 +3936,7 @@ function renderTripCard(trip) {
   /* The summary names whichever narrowings are active, rather than just counting. It
      briefly lost the "unpaid" word when the day filter was added — but "5 of 22" does
      not tell you WHY 17 are missing, which is the whole job of this line. */
-  const dayWord = day === "none" ? "with no date" : day ? `on ${(() => { const d = parseISO(day); return d ? `${fmtDow(d)} ${d.getDate()}` : day; })()}` : "";
+  const dayWord = day === "none" ? "with no date" : day ? `on ${fmtDayMonth(day)}` : "";
   const narrowings = [expenseFilter === "all" ? "" : expenseFilter, dayWord].filter(Boolean).join(" ");
   const foldLabel = narrowings
     ? `${shown.length} ${narrowings} of ${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`
@@ -3922,36 +3953,47 @@ function renderTripCard(trip) {
     if (e.date) dayCounts.set(e.date, (dayCounts.get(e.date) || 0) + 1);
     else undated++;
   }
+  /* Same classes as the Unpaid/Paid chips above, not a lookalike: those styles live only
+     inside the <=900px block, so anything that copied their values would match on a phone
+     and diverge everywhere else. Sharing the class means they cannot drift. */
   const dayChip = (value, label, count) =>
-    `<button type="button" class="daychip daychip--exp ${day === value ? "is-active" : ""}"
+    `<button type="button" class="filter-chip ${day === value ? "is-active" : ""}"
        data-exp-day="${escapeHtml(value)}" data-trip-id="${trip.id}"
        aria-pressed="${day === value ? "true" : "false"}"
        aria-label="${escapeHtml(label)}, ${count} expense${count === 1 ? "" : "s"}"
-     ><span class="dc-num">${escapeHtml(label)}</span><span class="filter-chip__count">${count}</span></button>`;
+     >${escapeHtml(label)}<span class="filter-chip__count">${count}</span></button>`;
   const dayRow = dayCounts.size > 1 || (dayCounts.size >= 1 && undated)
-    ? `<div class="expense-days">${
+    ? `<div class="filter-chips expense-days">${
         dayChip("", "All", trip.expenses.length)
-        + [...dayCounts.keys()].sort().map((iso) => {
-            const d = parseISO(iso);
-            return dayChip(iso, d ? `${fmtDow(d)} ${d.getDate()}` : iso, dayCounts.get(iso));
-          }).join("")
+        + [...dayCounts.keys()].sort().map((iso) => dayChip(iso, fmtDayMonth(iso), dayCounts.get(iso))).join("")
         + (undated ? dayChip("none", "No date", undated) : "")
       }</div>`
     : "";
 
+  /* The whole card collapses, not just its expense list: with four or five trips in a
+     year the screen is mostly cards you are not spending on. Collapsed it keeps the one
+     line that says whether the trip is in trouble. Travelling trips start open. */
+  const collapsed = tripCardCollapsed.has(trip.id);
   return `
-    <article class="trip-card ${over ? "trip-card--over" : ""}" data-trip-id="${trip.id}">
+    <article class="trip-card ${over ? "trip-card--over" : ""} ${collapsed ? "trip-card--collapsed" : ""}" data-trip-id="${trip.id}">
       <div class="trip-card__head">
         <div>
-          <h3 class="trip-card__title">${escapeHtml(trip.name)}</h3>
+          <button type="button" class="trip-card__fold" data-trip-collapse="${trip.id}"
+                  aria-expanded="${collapsed ? "false" : "true"}"
+                  aria-label="${collapsed ? "Expand" : "Collapse"} ${escapeHtml(trip.name)}">
+            <span class="trip-card__chev" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>
+            <h3 class="trip-card__title">${escapeHtml(trip.name)}</h3>
+          </button>
           <span class="trip-card__year">${trip.year}</span>
           ${over ? '<span class="over-badge">Over budget</span>' : ""}
+          ${collapsed ? `<span class="trip-card__glance">${formatMoney(committed)} of ${formatMoney(budget)}${unsettled ? ` · ${unsettled} unsettled` : ""}</span>` : ""}
         </div>
         <div class="trip-card__actions">
           <button type="button" class="btn btn--small btn--ghost btn-edit-trip" data-trip-id="${trip.id}">Edit</button>
           <button type="button" class="btn btn--small btn--danger btn-delete-trip" data-trip-id="${trip.id}">Delete</button>
         </div>
       </div>
+      <div class="trip-card__rest" ${collapsed ? "hidden" : ""}>
       <div class="progress" title="${pct.toFixed(0)}% of budget committed">
         <div class="progress__bar ${over ? "progress__bar--over" : ""}" style="width: ${pct}%"></div>
       </div>
@@ -3970,6 +4012,7 @@ function renderTripCard(trip) {
       </details>
       <button type="button" class="btn btn--secondary btn-add-expense btn-add-expense--card" data-trip-id="${trip.id}">Add expense</button>
       ${renderCategoryBreakdown(trip, committed)}
+      </div>
     </article>
   `;
 }
@@ -4000,6 +4043,13 @@ function renderTrips() {
      the trip you are standing in. */
   const travelling = active && tripTiming(active).state === "travelling" ? active : null;
   if (travelling) expensesFoldOpen.add(travelling.id);
+  /* First render of a travelling year: fold the trips you are not on. Only once — after
+     that the Set is whatever you last chose, so a re-render never re-folds a card you
+     opened. */
+  if (travelling && !tripCardsDefaulted) {
+    tripCardsDefaulted = true;
+    trips.forEach((t) => { if (t.id !== travelling.id) tripCardCollapsed.add(t.id); });
+  }
   renderExpenseQuickAdd(active);
   layoutBudgetForTrip(travelling);
   renderExpenseFilter(trips);
@@ -4007,6 +4057,14 @@ function renderTrips() {
   bindExpenseRowActions();
   /* v1.15.0: remember which folds are open. Marking an expense paid re-renders the whole list,
      and on the phone (<900px) every fold snapped shut — the one you were working in included. */
+  list.querySelectorAll("[data-trip-collapse]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const id = b.getAttribute("data-trip-collapse");
+      if (tripCardCollapsed.has(id)) tripCardCollapsed.delete(id); else tripCardCollapsed.add(id);
+      renderTrips();
+    })
+  );
+
   list.querySelectorAll("[data-exp-day]").forEach((b) =>
     b.addEventListener("click", () => {
       const tripId = b.getAttribute("data-trip-id");
@@ -5820,6 +5878,10 @@ let expenseFilter = "all";  // all | unpaid | paid | unsettled — Budget expens
 /* Remembered like expensesFoldOpen: re-rendering the Budget screen must not reopen a
    panel you deliberately folded. Module-level, never synced — it is a view preference. */
 let budgetOverviewOpen = false;
+/* Which Budget trip cards are folded shut. Module-level like expensesFoldOpen and
+   deliberately not synced — how you have arranged your own screen is not trip data. */
+let tripCardCollapsed = new Set();
+let tripCardsDefaulted = false;
 /* Per-trip day narrowing on the expense list: "" = every day. Keyed by trip id so
    switching trips does not carry a day that belongs to another one. */
 let expenseDayFilter = new Map();
@@ -6113,6 +6175,15 @@ function parseISO(s) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
+/* dd/mm — the chips sit in a tight scrolling row, and "Wed 16" costs a third more width
+   than "16/09" while saying less about which month you are looking at on a trip that
+   crosses one. */
+function fmtDayMonth(iso) {
+  const d = parseISO(iso);
+  if (!d) return iso || "";
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function fmtDay(date) {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
@@ -6425,13 +6496,19 @@ function renderTripsScreen() {
       <div class="hero">
         ${coverArt(trip)}
         <span class="hero__plane">${ICONS.plane}</span>
-        <div class="hero__kicker">${escapeHtml(kicker)}</div>
-        <h2 class="hero__title">${nameWithCity(trip)}</h2>
-        <div class="hero__meta">
-          ${range ? `<span class="hero__dates">${ICONS.calendar} ${range}</span>` : `<span class="hero__dates">${trip.year}</span>`}
-          <button type="button" class="pill" data-edit-trip="${trip.id}">Edit</button>
+        <!-- The text gets its own surface instead of being laid over the painting. That is
+             how the pastel gallery presents these — a plate of paper under the words — and
+             it is the only way the artwork can be seen whole while the type stays readable
+             at any brightness the painting happens to have there. -->
+        <div class="hero__plate">
+          <div class="hero__kicker">${escapeHtml(kicker)}</div>
+          <h2 class="hero__title">${nameWithCity(trip)}</h2>
+          <div class="hero__meta">
+            ${range ? `<span class="hero__dates">${ICONS.calendar} ${range}</span>` : `<span class="hero__dates">${trip.year}</span>`}
+            <button type="button" class="pill" data-edit-trip="${trip.id}">Edit</button>
+          </div>
+          <div class="hero__travellers">${travellers}<span style="font-weight:600">${escapeHtml((meta.travelers || []).join(", "))}</span></div>
         </div>
-        <div class="hero__travellers">${travellers}<span style="font-weight:600">${escapeHtml((meta.travelers || []).join(", "))}</span></div>
         ${timing.state === "travelling" ? renderTodayCard(trip, todayLocalISO(), nowMinutes()) : ""}
       </div>`;
     hero.querySelector("[data-edit-trip]")?.addEventListener("click", () => openTripDialog(trip));
@@ -6637,9 +6714,12 @@ function renderTripOverviewCard(trip) {
         ${trip.cancelled
           ? `<span class="tag tag--timing tag--cancelled">Cancelled</span>`
           : timing.text ? `<span class="tag tag--timing tag--${timing.state}">${escapeHtml(timing.text)}</span>` : ""}
-        <h3>${escapeHtml(trip.name)}</h3>
       </div>
       <div class="tripcard__body">
+        <!-- The title sits BELOW the painting, the way the gallery lays these out. It used
+             to be printed over the art, which is what forced a scrim heavy enough to hide
+             the painting. Nothing over the image means the image can simply be seen. -->
+        <h3 class="tripcard__name">${escapeHtml(trip.name)}</h3>
         <div class="tripcard__row">${ICONS.trips}<span>${
           (meta.destinations || []).length
             ? escapeHtml(meta.destinations.join(" · ")) // "·" not "," — comma means city/country
