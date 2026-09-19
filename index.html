@@ -386,7 +386,59 @@ h1, h2, h3, h4, .brand__name {
    x in the meta row, so a width-only rule collided again as the viewport
    narrowed. Ending the art above that row clears it at every width. */
 .hero .cover__art { inset: 0 0 auto auto; width: 34%; height: 44%; }
-.hero > *:not(.cover__art), .tripcard__cover > *:not(.cover__art) { position: relative; z-index: 1; }
+/* The pastel painting, composited with the gradient rather than replacing it — see
+   coverArt(). It sits above .cover__art (so the line art only shows if the image
+   fails) and below every text node.
+
+   A scrim, not a mask on the image, and no blend mode. Masking left a visible
+   straight edge where the painting stopped; `mix-blend-mode: luminosity` drained the
+   pastels to monochrome salmon, which is the one thing this artwork exists to
+   provide. So the painting keeps its colour at full bleed and the brand gradient is
+   laid back OVER it — near-opaque where the text is dense (the hero's lower-left:
+   title, dates, Edit pill, traveller names) and clearing toward the upper right
+   where only the short kicker sits. The contrast floor is then set by a known
+   colour rather than by whatever the painting happens to show there, which is what
+   keeps the measured ratios above honest. */
+.cover__photo {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center 40%;
+  pointer-events: none;
+}
+.cover__scrim { position: absolute; inset: 0; pointer-events: none; }
+/* Two layers, because one diagonal could not do both jobs. The diagonal lets the
+   painting through toward the upper right; the vertical one puts the floor back under
+   the lower half, where the title, dates and traveller names sit. With the diagonal
+   alone the traveller row measured 4.20 against #2c2a28 — below the 4.5 the comment
+   above promises, and worse than the plain gradient's 4.97.
+
+   MEASURED, not estimated: the composite was sampled at 132 points across the four
+   text elements for all 19 paintings (canvas replays these exact gradient stops over
+   the decoded image). Floor is 4.88, on Paris, whose bright sunset sky is the
+   brightest thing in the set. Lightening these stops drops it below 4.5 again — the
+   first variant tried came out at 4.53 — so treat the numbers as load-bearing. */
+.hero .cover__scrim {
+  background:
+    linear-gradient(to bottom, rgba(239,142,127,0) 26%, rgba(237,138,128,0.74) 62%, rgba(232,130,132,0.88) 100%),
+    linear-gradient(118deg,
+      rgba(242,160,143,0.98) 0%, rgba(239,142,127,0.95) 34%,
+      rgba(232,132,130,0.87) 58%, rgba(224,122,134,0.68) 100%);
+}
+/* The 96px card is almost all text, so the painting reads as a tint behind it.
+   Measured the same way as the hero, against the 20px/700 title: 4.11 at 0.90/0.87/0.82
+   and 4.61 here — Lisbon is the worst of the 19. WCAG would allow 3.0 for text this
+   size; this file's own bar is 4.5, so 4.5 is what it clears. The .tag chips are not
+   in that measurement because they carry their own opaque backgrounds. */
+.tripcard__cover .cover__scrim {
+  background: linear-gradient(135deg, rgba(242,160,143,0.95) 0%, rgba(239,142,127,0.94) 45%, rgba(224,122,134,0.92) 100%);
+}
+/* Without a photo the scrim would just double the gradient and darken the card. */
+.cover--nophoto .cover__scrim { display: none; }
+/* Every child EXCEPT the cover layers is lifted above them. The exclusion list has to
+   name each layer: this rule sets position:relative, so a .cover__photo caught by it
+   stops being absolutely positioned and lays itself out in the padded flow as an
+   inset rectangle instead of filling the card. */
+.hero > *:not(.cover__art):not(.cover__photo):not(.cover__scrim),
+.tripcard__cover > *:not(.cover__art):not(.cover__photo):not(.cover__scrim) { position: relative; z-index: 1; }
 .hero::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background:
@@ -5859,12 +5911,19 @@ const MONUMENT_ALIASES = {
 };
 
 function monumentFor(trip) {
+  return MONUMENTS[monumentKeyFor(trip)] || MONUMENTS.generic;
+}
+
+/* The key, not the paths — the painting filenames are keyed the same way, so one
+   alias table drives both and a city can never resolve to one city's line art and
+   another's painting. */
+function monumentKeyFor(trip) {
   const dest = (getMeta(trip).destinations || [])[0] || getMeta(trip).destination || trip.name || "";
   const s = String(dest).toLowerCase();
   for (const [key, names] of Object.entries(MONUMENT_ALIASES)) {
-    if (names.some((n) => s.includes(n))) return MONUMENTS[key];
+    if (names.some((n) => s.includes(n))) return key;
   }
-  return MONUMENTS.generic;
+  return "generic";
 }
 
 /* One SVG for both crops. `xMaxYMax meet` keeps the monument right-aligned and
@@ -5878,15 +5937,32 @@ function monumentFor(trip) {
 const COVER_INK = "rgba(38,24,18,.62)";
 const COVER_INK_SOFT = "rgba(38,24,18,.30)";
 
+/* The pastel painting AND the line art, deliberately both.
+
+   The paintings are opaque, and the comment above .hero records measured contrast
+   ratios (6.94 / 6.02 / 4.97) for #2c2a28 text against the salmon gradient. Dropping
+   a photograph in as the background throws all three away and makes legibility a
+   per-image, per-region accident. So the painting composites OVER the gradient at
+   partial opacity instead: the gradient still sets the floor, the painting supplies
+   the character, and the numbers stay in the range they were measured in.
+
+   The <svg> stays underneath as the fallback. If the image 404s (an unbuilt cover, a
+   city with no painting) onerror drops the <img> and the line art is simply there —
+   no empty box, no layout shift, and the app degrades to exactly what it shipped
+   with in v1.15.3. */
 function coverArt(trip, opts) {
   const o = opts || {};
   const mon = monumentFor(trip);
+  const key = monumentKeyFor(trip);
   return `
     <svg class="cover__art" viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"
          fill="none" stroke-linecap="round" stroke-linejoin="round">
       <path d="${mon.bg}" stroke="${o.bg || COVER_INK_SOFT}" stroke-width="1.2"/>
       <path d="${mon.fg}" stroke="${o.fg || COVER_INK}" stroke-width="2.2"/>
-    </svg>`;
+    </svg>
+    <img class="cover__photo" src="assets/covers/${encodeURIComponent(key)}.jpg" alt="" aria-hidden="true"
+         loading="lazy" decoding="async" onerror="this.closest('.hero,.tripcard__cover')?.classList.add('cover--nophoto'); this.remove();">
+    <span class="cover__scrim" aria-hidden="true"></span>`;
 }
 
 function cityOf(trip) { return (getMeta(trip).destination || "").split(",")[0].trim(); }

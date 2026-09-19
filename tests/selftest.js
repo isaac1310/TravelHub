@@ -4861,6 +4861,47 @@
         ? true : "handleItemSubmit does not scroll back to the item's day";
     });
 
+    check("the painting and the line art resolve to the same city", () => {
+      /* One alias table drives both, so a trip can never get Rome's painting under
+         Paris's blueprint. */
+      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
+      for (const [dest, key] of [["Paris, France", "paris"], ["Pressburg", "bratislava"],
+                                 ["Nowhere, Atlantis", "generic"]]) {
+        if (monumentKeyFor(t(dest)) !== key) return `${dest} resolved to ${monumentKeyFor(t(dest))}`;
+        const art = coverArt(t(dest));
+        if (!art.includes(`assets/covers/${key}.jpg`)) return `${dest} did not load ${key}.jpg`;
+        if (monumentFor(t(dest)) !== MONUMENTS[key]) return `${dest} line art disagrees with the painting`;
+      }
+      return true;
+    });
+
+    check("a missing painting falls back to the line art instead of a hole", () => {
+      /* An unbuilt cover must degrade to exactly what v1.15.3 shipped: the blueprint,
+         the plain gradient, no empty box and no doubled scrim. */
+      const art = coverArt({ name: "x", destinations: ["Paris, France"] });
+      if (!/onerror=/.test(art)) return "the cover image has no fallback path";
+      if (!/cover--nophoto/.test(art)) return "the fallback does not disable the scrim";
+      return /<svg/.test(art) && /<path /.test(art)
+        ? true : "the line art is not underneath the painting";
+    });
+
+    check("the cover layers are not caught by the lift-above rule", () => {
+      /* .hero > *:not(...) sets position:relative. A cover layer caught by it stops
+         being absolutely positioned and lays out as an inset rectangle in the padded
+         flow instead of filling the card — which is exactly what happened. */
+      const hero = document.querySelector(".hero");
+      if (!hero) return skip("no featured trip on this screen");
+      const photo = hero.querySelector(".cover__photo");
+      const scrim = hero.querySelector(".cover__scrim");
+      if (!photo || !scrim) return skip("cover layers not rendered here");
+      for (const [name, el] of [["photo", photo], ["scrim", scrim]]) {
+        if (getComputedStyle(el).position !== "absolute") return `the ${name} is not absolutely positioned`;
+      }
+      const hb = hero.getBoundingClientRect(), pb = photo.getBoundingClientRect();
+      return Math.abs(pb.width - hb.width) < 2 && Math.abs(pb.height - hb.height) < 2
+        ? true : `the painting is ${Math.round(pb.width)}x${Math.round(pb.height)} inside a ${Math.round(hb.width)}x${Math.round(hb.height)} hero`;
+    });
+
     check("the day sheet escapes every field that comes from user text", () => {
       /* Notes, addresses and confirmations land in generated markup. A trip name with
          a < in it must not become an element. */

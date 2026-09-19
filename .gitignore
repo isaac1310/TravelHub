@@ -6,3 +6,9 @@ node_modules/
 *-handoff.zip
 
 # Written at build time by scripts/write-config.js (a placeholder is committed)
+
+# The pastel source paintings: 19 PNGs, ~49MB. Deliberately NOT committed — this repo's
+# entire app is one HTML file and that weight would sit in every clone forever. The
+# shipped covers are assets/covers/*.jpg (~1.8MB, built by tools/build-covers.sh), and
+# prompts.json beside these files regenerates the originals if they are ever needed.
+design/blueprints/pastel/*.png
