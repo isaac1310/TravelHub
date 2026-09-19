@@ -1,8 +1,11 @@
 # Manual test plan — v2.0.0
 
-**Where:** `http://localhost:8723` (**not** 8722 — an earlier session's in-memory probes got
-saved onto the real-data origin, and this release rewrites how every amount is read). Phone on
-the LAN for anything marked 📱. Footer should read `TravelHub v2.0.0`.
+**Where:** `http://localhost:8722`, with the real data imported into it (below). Phone on the
+LAN for anything marked 📱. Footer should read `TravelHub v2.0.0`.
+
+**localhost is a sandbox — never share or join a room from it.** Production and both devices
+run v1.15.3; a v2.0 client writing into that room is the strip scenario in §0.1. Testing here
+touches nothing real.
 
 **Automated first:** `?selftest=1` at **phone width**, not just desktop — 19 checks skip
 themselves on a wide viewport, including the sticky-bar and FAB clearance ones. Expect
@@ -18,16 +21,27 @@ the stripped version back — a €420 row becomes ₪420 with nothing left to s
 euros, recoverable only from a backup. There is deliberately no code guard (an old client
 does not run the new check); this step is the guard. ☐
 
-0.2 Export a JSON backup from the Budget ⋯ menu before you start. ☐
+0.2 **Load the real data into localhost:8722.** Export a **fresh** backup from the phone first
+— any file more than a few hours old is already behind, because the trip was still being spent
+on. Then Budget → Data & year-end → **Import** on localhost. Without this you are testing
+against the stale Mac copy (3 expenses, no itinerary) and most of §5–§7 has nothing to act on.
+The import snapshots whatever was there first, so it is reversible. ☐
+
+0.3 The trip worth using for the money sections is **Christmas** (Bratislava + Vienna, December).
+It is the only one that will really be spent in euros; Paris is entirely shekels and already
+closed. ☐
 
 ---
 
 ## 1. Migration — the release stands or falls here
 
-1.1 Import your real pre-v2.0 backup on 8723.
-- **Expect:** every trip's Budget / Committed / Paid / Still to pay / Left in budget is
-  **identical to the numbers you saw before**, to the shekel. No expense shows a foreign
-  symbol. No "awaiting rate" note anywhere. ☐
+1.1 With the import from §0.2 done, compare against the phone, screen by screen.
+- **Expect:** every trip's Committed / Paid / Still to pay / Left matches the phone **to the
+  shekel**. Do not compare against a number written down earlier — read both screens now.
+  Migration converts nothing, so any difference at all is a finding. ☐
+- **Expect:** no expense shows a foreign symbol, and no "awaiting rate" note anywhere. ☐
+- **Expect:** the itinerary item count and the checklist match too — migration touches items
+  (`visitedAt`) as well as expenses. ☐
 1.2 Open a trip's category breakdown.
 - **Expect:** same categories, same amounts, percentages still summing to 100. ☐
 1.3 Reload twice.
