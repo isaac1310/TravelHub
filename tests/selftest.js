@@ -4861,6 +4861,105 @@
         ? true : "handleItemSubmit does not scroll back to the item's day";
     });
 
+    check("repeated map renders never leak a second geolocation watcher", () => {
+      /* renderMapsTab destroys and rebuilds the Leaflet map on every day-chip tap.
+         A watch started against the old map holds layers on a dead object, and an
+         uncleared one means several live GPS subscriptions at once. */
+      if (typeof L === "undefined") return skip("Leaflet CDN blocked");
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip to open the map on");
+      const realGeo = navigator.geolocation;
+      let watches = 0, cleared = 0, nextId = 1;
+      Object.defineProperty(navigator, "geolocation", {
+        configurable: true,
+        value: { watchPosition: () => { watches++; return nextId++; }, clearWatch: () => { cleared++; }, getCurrentPosition: () => {} },
+      });
+      const wasWanted = geoWanted, wasSub = itinerarySubTab, wasTrip = itineraryTripId;
+      try {
+        setItineraryTrip(trip.id);
+        itinerarySubTab = "maps";
+        renderItinerary();
+        if (!document.getElementById("btn-geo")) return skip("map canvas not rendered here");
+        toggleGeo();                       // user asks to be located
+        if (watches !== 1) return `first locate started ${watches} watches`;
+        renderItinerary(); renderItinerary(); renderItinerary();
+        const live = watches - cleared;
+        if (live !== 1) return `${watches} watches, ${cleared} cleared — ${live} left running`;
+        // and leaving the map must leave none
+        itinerarySubTab = "timeline";
+        renderItinerary();
+        return watches - cleared === 0
+          ? true : `${watches - cleared} watch(es) still running on the timeline`;
+      } finally {
+        geoWanted = false; stopGeoWatch();
+        Object.defineProperty(navigator, "geolocation", { configurable: true, value: realGeo });
+        itinerarySubTab = wasSub; if (wasTrip) setItineraryTrip(wasTrip);
+        geoWanted = wasWanted;
+      }
+    });
+
+    check("switching locating off removes the dot, not just the reference", () => {
+      /* Nulling the layer references left the blue dot on the map: a position that no
+         longer updates but still looks live, which is worse than showing nothing. */
+      if (typeof L === "undefined") return skip("Leaflet CDN blocked");
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip to open the map on");
+      const realGeo = navigator.geolocation;
+      Object.defineProperty(navigator, "geolocation", { configurable: true, value: {
+        watchPosition: (ok) => { ok({ coords: { latitude: 48.8583, longitude: 2.3375, accuracy: 30 } }); return 1; },
+        clearWatch: () => {}, getCurrentPosition: () => {},
+      }});
+      const wasWanted = geoWanted, wasSub = itinerarySubTab, wasTrip = itineraryTripId;
+      try {
+        setItineraryTrip(trip.id);
+        itinerarySubTab = "maps";
+        geoWanted = false;
+        renderItinerary();
+        if (!document.getElementById("btn-geo")) return skip("map canvas not rendered here");
+        toggleGeo();
+        if (!document.querySelector(".map-me")) return skip("no fix rendered to clear");
+        toggleGeo();
+        if (document.querySelector(".map-me")) return "the dot survived switching locating off";
+        return geoLastFix === null ? true : "a stale fix was kept and still feeds the distance line";
+      } finally {
+        geoWanted = false; stopGeoWatch();
+        Object.defineProperty(navigator, "geolocation", { configurable: true, value: realGeo });
+        itinerarySubTab = wasSub; if (wasTrip) setItineraryTrip(wasTrip);
+        geoWanted = wasWanted;
+      }
+    });
+
+    check("locating is never asked for without a tap", () => {
+      /* A permission prompt that fires because a screen opened gets denied once and
+         is then awkward to undo. Behavioural, not a source grep: open the map with a
+         stubbed geolocation and assert nothing asks until the button is pressed. */
+      if (typeof L === "undefined") return skip("Leaflet CDN blocked");
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip to open the map on");
+      const realGeo = navigator.geolocation;
+      let asked = 0;
+      Object.defineProperty(navigator, "geolocation", {
+        configurable: true,
+        value: { watchPosition: () => { asked++; return 1; }, clearWatch: () => {}, getCurrentPosition: () => { asked++; } },
+      });
+      const wasWanted = geoWanted, wasSub = itinerarySubTab, wasTrip = itineraryTripId;
+      geoWanted = false;
+      try {
+        setItineraryTrip(trip.id);
+        itinerarySubTab = "maps";
+        renderItinerary(); renderItinerary();
+        if (!document.getElementById("btn-geo")) return skip("map canvas not rendered here");
+        if (asked !== 0) return `opening the map asked for a position ${asked} time(s)`;
+        toggleGeo();
+        return asked === 1 ? true : `the button produced ${asked} requests`;
+      } finally {
+        geoWanted = false; stopGeoWatch();
+        Object.defineProperty(navigator, "geolocation", { configurable: true, value: realGeo });
+        itinerarySubTab = wasSub; if (wasTrip) setItineraryTrip(wasTrip);
+        geoWanted = wasWanted;
+      }
+    });
+
     check("the painting and the line art resolve to the same city", () => {
       /* One alias table drives both, so a trip can never get Rome's painting under
          Paris's blueprint. */

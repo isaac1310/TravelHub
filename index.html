@@ -1097,6 +1097,21 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
   .ds-row--visited { opacity: 1; }
   .ds-row__no { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+/* Sits over the Leaflet canvas, so it has to clear Leaflet's own control panes (z 400+). */
+.map-locate {
+  position: absolute; right: 10px; bottom: 10px; z-index: 500;
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-strong, #d9cfc7);
+  background: rgba(255,255,255,0.94); color: #5b5148; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(70,45,30,0.18);
+}
+.map-locate svg { width: 21px; height: 21px; }
+.map-locate.is-on { color: #2f6fd0; border-color: #2f6fd0; }
+.map-locate.is-busy { opacity: 0.6; }
+.map-me {
+  display: block; width: 18px; height: 18px; border-radius: 50%;
+  background: #2f6fd0; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(47,111,208,0.5);
+}
+.map-me-dist { margin: 0 0 0.5rem; font-size: 0.82rem; color: var(--muted); }
 .mapstop__note {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; color: var(--muted); font-size: 0.74rem; margin-top: 0.1rem;
@@ -2481,7 +2496,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.15.3";
+const APP_VERSION = "v2.0.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -6136,7 +6151,7 @@ function router() {
      so its day nodes survive with all-zero rects — every day then reads as "above the header",
      the last day wins, and scrolling an unrelated screen would rewrite timelineDayIso (which
      is what the FAB pre-fills) and smooth-scroll a hidden chip. renderItinerary re-arms it. */
-  if (id !== "itinerary") teardownDayScrollSpy();
+  if (id !== "itinerary") { teardownDayScrollSpy(); stopGeoWatch(); }
 
   renderActiveShellScreen();
   /* Not when the itinerary just landed on today: the render above schedules that
@@ -6725,7 +6740,12 @@ function renderItinerary() {
   bindTablistKeys(subList, activateSubTab);
 
   if (itinerarySubTab === "maps") renderMapsTab(trip);
-  else renderTimelineTab(trip);
+  else {
+    // The timeline has no map to draw a dot on; a watch left running here is pure drain.
+    stopGeoWatch();
+    if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+    renderTimelineTab(trip);
+  }
 
   /* Order matters: the header can only be measured once the tab has filled it, and the
      observer's rootMargin needs that height, so it is armed here rather than inside
@@ -7534,12 +7554,140 @@ function withViewGuard(fn) {
   };
 }
 
+/* ============================================================
+   WHERE AM I (v2.0)
+   ============================================================
+
+   Never auto-prompts. A permission dialog that appears because you opened a screen
+   is the kind of thing people deny once and then cannot easily undo — it has to be
+   the answer to a button press.
+
+   The lifecycle is the whole difficulty. renderMapsTab tears the Leaflet map down
+   and rebuilds it on every render (a day chip, a resize, any re-render), so a watch
+   started against one map holds layers on an object that no longer exists, and a
+   watch that is never cleared accumulates one live GPS subscription per render.
+   Hence: geoWanted (the intent) is module state and survives, while the watch and
+   its layers (the resources) are torn down and recreated with each map. */
+let geoWatchId = null;
+let geoWanted = false;       // the user asked to be shown; survives re-renders
+let geoMarker = null, geoCircle = null, geoLastFix = null;
+
+function stopGeoWatch() {
+  if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+  /* REMOVE the layers, do not just forget them. Dropping the references alone left
+     the blue dot sitting on the map after you switched locating off — a position
+     that no longer updates but still looks live, which is worse than no dot at all.
+     Guarded because the map may already be gone (this also runs during teardown),
+     and the intent flag is deliberately untouched here. */
+  if (leafletMap) {
+    if (geoMarker) leafletMap.removeLayer(geoMarker);
+    if (geoCircle) leafletMap.removeLayer(geoCircle);
+  }
+  geoMarker = null; geoCircle = null;
+  geoLastFix = null; // a stale fix must not feed the distance line either
+}
+
+function setGeoButton(state) {
+  const b = $("btn-geo");
+  if (!b) return;
+  b.classList.toggle("is-on", state === "on");
+  b.classList.toggle("is-busy", state === "busy");
+  b.setAttribute("aria-pressed", state === "on" ? "true" : "false");
+}
+
+function startGeoWatch() {
+  if (!leafletMap || geoWatchId !== null) return;
+  if (!navigator.geolocation || !window.isSecureContext) {
+    geoWanted = false;
+    showToast("Location needs a secure connection", "error");
+    return;
+  }
+  setGeoButton("busy");
+  geoWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      if (!leafletMap) return; // a render raced us; the next map will restart the watch
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      geoLastFix = { lat, lng, accuracy, at: Date.now() };
+      if (!geoMarker) {
+        geoMarker = L.marker([lat, lng], {
+          icon: L.divIcon({ className: "", html: `<span class="map-me"></span>`, iconSize: [18, 18], iconAnchor: [9, 9] }),
+          interactive: false, keyboard: false, zIndexOffset: 1000,
+        }).addTo(leafletMap);
+        // Accuracy matters: a 2km fix drawn as a precise dot is a lie you act on.
+        geoCircle = L.circle([lat, lng], { radius: accuracy, stroke: false, fillColor: "#2f6fd0", fillOpacity: 0.12, interactive: false }).addTo(leafletMap);
+        leafletMap.setView([lat, lng], Math.max(leafletMap.getZoom() || 0, 15));
+        mapUserMoved = true; // stop the fit-to-bounds logic yanking the view back off you
+      } else {
+        geoMarker.setLatLng([lat, lng]);
+        geoCircle.setLatLng([lat, lng]).setRadius(accuracy);
+      }
+      setGeoButton("on");
+      renderGeoDistance();
+    },
+    (err) => {
+      stopGeoWatch();
+      geoWanted = false;
+      setGeoButton("off");
+      // Quietly, and never twice: a refused permission is an answer, not an error.
+      showToast(err.code === err.PERMISSION_DENIED
+        ? "Location is off for this site"
+        : "Couldn't get a location fix", "error");
+      renderGeoDistance();
+    },
+    { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+  );
+}
+
+function toggleGeo() {
+  if (geoWanted) { geoWanted = false; stopGeoWatch(); setGeoButton("off"); renderGeoDistance(); return; }
+  geoWanted = true;
+  startGeoWatch();
+}
+
+/* How far to the next stop, from where you are standing — the question the map is
+   open to answer. Reuses legLabel so the units and walking assumptions match the
+   legs already drawn between stops. */
+function renderGeoDistance() {
+  const el = $("map-me-dist");
+  if (!el) return;
+  const stale = !geoLastFix || Date.now() - geoLastFix.at > 120000;
+  if (!geoWanted || stale) { el.hidden = true; return; }
+  const next = geoNextStop();
+  if (!next) { el.hidden = true; return; }
+  const leg = legLabel(geoLastFix, next.location);
+  el.hidden = !leg;
+  if (leg) el.innerHTML = `You are <strong>${escapeHtml(leg)}</strong> from ${escapeHtml(next.title)}`;
+}
+
+/* The next mappable stop on the day in view that has not been visited — if every
+   stop is ticked there is nothing left to walk to, and saying so beats pointing at
+   somewhere you have already been. */
+function geoNextStop() {
+  const trip = state.trips.find((t) => t.id === itineraryTripId);
+  if (!trip) return null;
+  const isos = mapDayFilter === "all" ? eachDay(trip).map(isoOf) : [mapDayFilter];
+  for (const iso of isos) {
+    for (const e of itemsForDay(trip, iso)) {
+      if (!isMappable(e) || e.item.location.lat === null) continue;
+      if (e.item.visitedAt) continue;
+      return e.item;
+    }
+  }
+  return null;
+}
+
 function renderMapsTab(trip) {
   const view = $("itinerary-view");
   const days = eachDay(trip);
   // No day strip on the map — the sticky header is just the view toggle here.
   $("daystrip-slot").innerHTML = "";
   teardownDayScrollSpy();
+  /* The watch has to stop BEFORE the map goes: its marker and accuracy circle belong
+     to this map instance, and renderMapsTab runs on every day-chip tap. Without this
+     each render leaks another watcher — several GPS subscriptions running at once,
+     all writing to layers on maps that no longer exist. geoWanted survives, so the
+     dot comes back on the new map without asking for permission again. */
+  stopGeoWatch();
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
 
   const dayIsos = days.map(isoOf);
@@ -7647,13 +7795,21 @@ function renderMapsTab(trip) {
     <div class="daychips">${chips}</div>
     <div class="map-layout">
       ${hasLeaflet
-        ? `<div id="map-canvas" class="map-canvas"></div>`
+        ? `<div id="map-canvas" class="map-canvas">
+             <button type="button" class="map-locate" id="btn-geo" aria-pressed="false"
+                     aria-label="Show my location on the map" title="Show my location">
+               <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" fill="currentColor"/><circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v2.6M12 19.4V22M22 12h-2.6M4.6 12H2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+             </button>
+           </div>`
         : `<div class="empty-card"><h3>Map unavailable</h3><p>Couldn't load the map library — check your connection, or use the Google Maps links below.</p><button type="button" class="btn btn--small" id="btn-map-retry">Retry</button></div>`}
       <div class="map-list ${window.innerWidth <= 900 && mapDayFilter === "all" ? "map-list--collapsed" : ""}" id="map-list">
         <h3 class="map-list__title">${escapeHtml((trip.destination || trip.name).split(",")[0])}</h3>
+        <p class="map-me-dist" id="map-me-dist" hidden></p>
         ${listHtml}
       </div>
     </div>`;
+
+  $("btn-geo")?.addEventListener("click", toggleGeo);
 
   // Mobile stops sheet: tap the sheet header to expand/collapse (map reflows)
   const mapList = $("map-list");
@@ -7699,6 +7855,10 @@ function renderMapsTab(trip) {
   });
   mapResizeObserver.observe(canvas);
   mapUserMoved = false;
+  /* The map is new, so the watch (torn down at the top of this function) is
+     recreated against it. No permission prompt: the browser already has the grant. */
+  setGeoButton(geoWanted ? "busy" : "off");
+  if (geoWanted) startGeoWatch();
   leafletMap.on("dragstart zoomstart", () => { if (!mapApplyingView) mapUserMoved = true; });
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
