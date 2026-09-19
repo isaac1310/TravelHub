@@ -4861,6 +4861,58 @@
         ? true : "handleItemSubmit does not scroll back to the item's day";
     });
 
+    check("the day sheet escapes every field that comes from user text", () => {
+      /* Notes, addresses and confirmations land in generated markup. A trip name with
+         a < in it must not become an element. */
+      const TID = "probe-sheet-trip";
+      const trip = { id: TID, name: "<img src=x onerror=1>", year: 2026, budget: 0, expenses: [],
+        destinations: [], travelers: [], startDate: "2026-05-02", endDate: "2026-05-02" };
+      state.trips.push(trip);
+      state.items.push({ id: "probe-sheet-i", tripId: TID, type: "attraction",
+        title: "<script>x</script>", date: "2026-05-02", startTime: "10:00", endTime: "", endDate: "",
+        location: { name: "<b>addr</b>", lat: null, lng: null, url: "" },
+        confirmation: "<i>C1</i>", notes: "<em>note</em>", details: "", flightNo: "",
+        departAirport: "", arrivalAirport: "", sortIndex: 0, visitedAt: "" });
+      try {
+        openDaySheet(trip, "2026-05-02");
+        const body = document.getElementById("daysheet-body");
+        const bad = body.querySelector("script, img, b, i, em");
+        const txt = body.textContent;
+        closeDialog(document.getElementById("dialog-daysheet"));
+        if (bad) return `user text became a <${bad.tagName.toLowerCase()}> element`;
+        // and it must still SHOW the text, not swallow it
+        return txt.includes("<em>note</em>") && txt.includes("<i>C1</i>")
+          ? true : "escaped fields were not rendered as text";
+      } finally {
+        state.items = state.items.filter((i) => i.tripId !== TID);
+        state.trips = state.trips.filter((t) => t.id !== TID);
+      }
+    });
+
+    check("the day sheet numbers its stops the same way the map does", () => {
+      /* It is generated from stopNumbers and legLabel rather than its own walk of the
+         day, so the sheet in your pocket cannot disagree with the pins on screen. */
+      const src = String(openDaySheet);
+      return /stopNumbers\(/.test(src) && /legLabel\(/.test(src)
+        ? true : "openDaySheet re-derives stop order instead of reusing stopNumbers/legLabel";
+    });
+
+    check("the print rule can actually isolate the day sheet", () => {
+      /* The @media print rule hides `body > *:not(#dialog-daysheet)`. If the dialog
+         were ever moved inside a wrapper that selector would silently stop matching
+         and printing would produce the whole app. */
+      const dlg = document.getElementById("dialog-daysheet");
+      return dlg && dlg.parentElement === document.body
+        ? true : "the day sheet dialog is no longer a direct child of <body>";
+    });
+
+    check("the day sheet does not claim the app works offline", () => {
+      const intro = document.getElementById("daysheet-intro").textContent.toLowerCase();
+      // It must describe the SAVED copy, not the app.
+      return /saved copy/.test(intro) && !/works offline\b(?!.*saved)/.test(intro)
+        ? true : `intro reads "${intro}"`;
+    });
+
     check("the map list shows notes and the confirmation, not just the address", () => {
       const src = String(renderMapsTab);
       return /e\.item\.notes/.test(src) && /e\.item\.confirmation/.test(src)

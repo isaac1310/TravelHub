@@ -1006,13 +1006,54 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
   display: inline-block; margin-inline-start: 0.3rem; color: #3f8a63;
   font-weight: 700; font-size: 0.85em; vertical-align: baseline;
 }
+/* ---- day sheet ---- */
+.day__sheet {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  padding: 0; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+}
+.day__sheet svg { width: 18px; height: 18px; }
+.day__sheet:hover { color: var(--brand); }
+.daysheet { margin: 0.4rem 0; }
+.ds-head { border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.6rem; }
+.ds-head__trip { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; }
+.ds-head__day { font-size: 1.15rem; font-weight: 700; }
+.ds-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
+.ds-row--visited { opacity: 0.6; }
+.ds-row__no {
+  flex: 0 0 22px; height: 22px; border-radius: 50%; background: var(--text); color: #fff;
+  font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.ds-row__body { flex: 1; min-width: 0; }
+.ds-row__title { font-weight: 600; }
+.ds-row__sub { font-size: 0.8rem; color: var(--muted); }
+.ds-row__notes { font-size: 0.8rem; margin-top: 0.15rem; }
+.ds-row__time { font-variant-numeric: tabular-nums; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.ds-leg { font-size: 0.74rem; color: var(--muted); padding-inline-start: 30px; }
+.daysheet__privacy:empty { display: none; }
+
+/* The app has never had a print path. Printing the dialog means printing ONLY the
+   sheet — everything else, including the dialog's own buttons, is furniture. */
+@media print {
+  body > *:not(#dialog-daysheet) { display: none !important; }
+  #dialog-daysheet {
+    display: block !important; position: static !important; border: 0; box-shadow: none;
+    max-width: none; width: auto; padding: 0; background: #fff; color: #000;
+  }
+  #dialog-daysheet::backdrop { display: none; }
+  #daysheet-intro, .dialog__actions { display: none !important; }
+  #dialog-daysheet .dialog__pad { padding: 0 !important; }
+  .ds-row--visited { opacity: 1; }
+  .ds-row__no { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
 .mapstop__note {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden; color: var(--muted); font-size: 0.74rem; margin-top: 0.1rem;
 }
 .field input[readonly] { background: var(--cream); color: var(--muted); }
 .dialog::backdrop { background: rgba(60, 42, 30, 0.4); backdrop-filter: blur(2px); }
-.dialog form { padding: 1.4rem; }
+/* .dialog__pad is for dialogs whose body is not a <form> (the day sheet):
+   same padding contract, one place to change it. */
+.dialog form, .dialog__pad { padding: 1.4rem; }
 .dialog__title { margin: 0 0 1rem; font-size: 1.15rem; }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
 
@@ -1428,7 +1469,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           content: ""; display: block; width: 40px; height: 4px; border-radius: 2px;
           background: var(--border-strong); margin: 10px auto 0;
         }
-        .dialog form, .dialog > h3 { padding-top: 0.9rem; }
+        .dialog form, .dialog__pad, .dialog > h3 { padding-top: 0.9rem; }
         .dialog__actions {
           position: sticky; bottom: 0; background: var(--surface);
           padding: 0.7rem 0 calc(0.4rem + env(safe-area-inset-bottom));
@@ -1439,7 +1480,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
            its centre returned the Save button, so tapping the select submitted the form
            and closed the dialog. Reserve its height so every field can scroll clear;
            scrollFieldClearOfActions() handles the field you're actually reaching for. */
-        .dialog form { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
+        .dialog form, .dialog__pad { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
         /* The dialog is the scroll container here, so scroll-padding keeps the browser's
            own scroll-into-view (focus, tabbing, find-in-page) clear of the bar too. */
         .dialog { scroll-padding-bottom: calc(5.2rem + env(safe-area-inset-bottom)); }
@@ -2232,6 +2273,20 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <div id="currency-list"></div>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close style="flex:1;justify-content:center">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ===== Day sheet: generate online, save, read offline ===== -->
+    <dialog id="dialog-daysheet" class="dialog" aria-labelledby="daysheet-title">
+      <div class="dialog__pad">
+        <h3 class="dialog__title" id="daysheet-title">Day sheet</h3>
+        <p class="field__hint" id="daysheet-intro">Save, share or screenshot this now — the saved copy is what works without signal.</p>
+        <div id="daysheet-body" class="daysheet"></div>
+        <p class="field__hint daysheet__privacy" id="daysheet-privacy"></p>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>Close</button>
+          <button type="button" class="btn btn--primary" id="daysheet-print">Save or print</button>
         </div>
       </div>
     </dialog>
@@ -6637,6 +6692,68 @@ function openTimelineOnToday(isos) {
   requestAnimationFrame(() => { markActiveDayChip(today); scrollToDay(today); });
 }
 
+/* ============================================================
+   DAY SHEET (v2.0) — "export a day for offline", precisely
+   ============================================================
+
+   This does NOT make the app work offline. There is no service worker, so the app
+   itself still needs the network to load. What it gives you is an ARTIFACT: you
+   generate it while you have signal, save/share/print/screenshot it, and that saved
+   copy is what works in the metro. The wording in the UI says so rather than
+   implying the app survives a cold start in flight mode.
+
+   Everything on it is already computed elsewhere — stopNumbers for the map-matching
+   numbers, legLabel for the walking legs — so the sheet cannot drift from the
+   timeline it describes. */
+function openDaySheet(trip, iso) {
+  const dlg = $("dialog-daysheet");
+  const d = parseISO(iso);
+  const numbers = stopNumbers(trip, iso);
+  const entries = itemsForDay(trip, iso);
+
+  let prevLoc = null;
+  const rows = entries.map((e) => {
+    const { item, checkout } = e;
+    const no = numbers.get(item.id);
+    const time = checkout ? (item.endTime || "") : fmtTimeRange(item);
+    const bits = [];
+    if (!checkout && item.location.name) bits.push(escapeHtml(item.location.name));
+    if (item.confirmation) bits.push(`Conf: <span class="ltr">${escapeHtml(item.confirmation)}</span>`);
+    let leg = "";
+    if (!checkout && isMappable(e) && item.location.lat != null) {
+      leg = legLabel(prevLoc, item.location);
+      prevLoc = item.location;
+    }
+    return `
+      ${leg ? `<div class="ds-leg">↓ ${escapeHtml(leg)}</div>` : ""}
+      <div class="ds-row${item.visitedAt ? " ds-row--visited" : ""}">
+        <div class="ds-row__no">${no ? escapeHtml(no) : "·"}</div>
+        <div class="ds-row__body">
+          <div class="ds-row__title">${escapeHtml(checkout ? `Check-out · ${item.title}` : item.title)}${item.visitedAt ? " ✓" : ""}</div>
+          ${bits.length ? `<div class="ds-row__sub">${bits.join(" · ")}</div>` : ""}
+          ${item.notes ? `<div class="ds-row__notes">${escapeHtml(item.notes)}</div>` : ""}
+        </div>
+        <div class="ds-row__time">${escapeHtml(time)}</div>
+      </div>`;
+  }).join("");
+
+  $("daysheet-body").innerHTML = `
+    <div class="ds-head">
+      <div class="ds-head__trip">${escapeHtml(trip.name)}</div>
+      <div class="ds-head__day">${escapeHtml(fmtDow(d))} ${d.getDate()} ${escapeHtml(d.toLocaleDateString("en-GB", { month: "long" }))}</div>
+    </div>
+    ${rows || `<p class="empty-state">Nothing planned for this day.</p>`}`;
+
+  /* Confirmation numbers and addresses end up on this sheet, so say so once. It is
+     the kind of thing that gets forwarded to a group chat without a second thought. */
+  $("daysheet-privacy").textContent =
+    entries.some((e) => e.item.confirmation)
+      ? "Includes booking references — check before you share it."
+      : "";
+  $("daysheet-print").onclick = () => window.print();
+  openDialog(dlg);
+}
+
 function minutesOf(hhmm, dflt) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || "");
   return m ? Number(m[1]) * 60 + Number(m[2]) : dflt;
@@ -6825,6 +6942,7 @@ function renderTimelineTab(trip) {
             <span class="dnum">${d.getDate()}</span>
             <span class="mon">${d.toLocaleDateString("en-GB", { month: "short" })}</span>
           </button>
+          ${count ? `<button type="button" class="day__sheet" data-day-sheet="${iso}" aria-label="Day sheet for ${escapeHtml(fmtDow(d))} ${d.getDate()} — save it to read without signal" title="Day sheet"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>` : ""}
           ${collapsed
             ? `<button type="button" class="day__summary" data-day-toggle="${iso}">${
                 count ? `${count} booking${count === 1 ? "" : "s"}` : "Nothing planned"
@@ -6849,6 +6967,13 @@ function renderTimelineTab(trip) {
   $("daystrip-slot").innerHTML = strip;
   view.innerHTML = `${route}${dayHtml}${fab}`;
   bindItemActions(view, trip);
+
+  view.querySelectorAll("[data-day-sheet]").forEach((btn) =>
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation(); // the day header is a fold toggle; this is not that
+      openDaySheet(trip, btn.getAttribute("data-day-sheet"));
+    })
+  );
 
   view.querySelectorAll("[data-day-toggle]").forEach((btn) =>
     btn.addEventListener("click", () => {
