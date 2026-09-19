@@ -984,6 +984,32 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .fx-settled { color: #3f8a63; font-weight: 600; }
 .fx-norate { color: #b0456a; font-weight: 600; }
 .trip-card__fxnote { margin: -0.2rem 0 0.5rem; font-size: 0.78rem; color: var(--muted); }
+.quickadd {
+  position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 0.75rem;
+  margin: 0.5rem -0.25rem 0; padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--cream, #fdf8f4) 92%, transparent);
+  backdrop-filter: blur(8px); border-top: 1px solid var(--border); border-radius: 12px 12px 0 0;
+}
+.quickadd__trip { font-size: 0.82rem; font-weight: 600; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quickadd__btn { margin-inline-start: auto; flex: 0 0 auto; }
+/* Visited: dimmed with a tick, never struck through or hidden — you look back at
+   what you did as often as forward at what is left.
+
+   The STOP NUMBER is deliberately left alone. It is the only thing tying a row in
+   the list to a pin on the map, so swapping it for a tick means standing in Paris
+   looking at pin 2 with no row that says 2. The tick goes beside the title instead,
+   and the pin just changes colour. */
+.act--visited { opacity: 0.62; }
+.act--visited .act__title { text-decoration: none; }
+.act__stopno--visited { background: #3f8a63; color: #fff; }
+.visited-tick {
+  display: inline-block; margin-inline-start: 0.3rem; color: #3f8a63;
+  font-weight: 700; font-size: 0.85em; vertical-align: baseline;
+}
+.mapstop__note {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; color: var(--muted); font-size: 0.74rem; margin-top: 0.1rem;
+}
 .field input[readonly] { background: var(--cream); color: var(--muted); }
 .dialog::backdrop { background: rgba(60, 42, 30, 0.4); backdrop-filter: blur(2px); }
 .dialog form { padding: 1.4rem; }
@@ -1019,6 +1045,14 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
   .appbar__eyebrow { display: none; }
   .appbar__title { display: none; }
   .content { padding: 1.1rem 1rem calc(80px + env(safe-area-inset-bottom)); }
+
+  /* Clear the fixed tab bar, the same 76px the itinerary FAB offsets by — otherwise
+     the quick-add sits underneath it and the button cannot be tapped at all. */
+  .quickadd {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    padding-bottom: 0.6rem;
+  }
+  #screen-budget { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
 
   .tabbar {
     display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
@@ -1746,6 +1780,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
                 No money added yet — use “Add funds” to record what’s in the pot.
               </p>
             </section>
+
+            <!-- Sticky while a trip is on: logging a coffee should never mean scrolling
+                 past the whole expense list and the category breakdown first. -->
+            <div id="budget-quickadd" class="quickadd" hidden>
+              <span class="quickadd__trip" data-quickadd-trip></span>
+              <button type="button" class="btn btn--primary quickadd__btn" data-quickadd-btn>+ Add expense</button>
+            </div>
           </section>
 
           <!-- ===== BOOKINGS & DOCUMENTS ===== -->
@@ -1910,6 +1951,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <button type="button" class="sheet-item" data-item-action="maps" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg>
           Open in Google Maps
+        </button>
+        <button type="button" class="sheet-item" data-item-action="visited">
+          <svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4 10-10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-visited-label>Mark visited</span>
         </button>
         <button type="button" class="sheet-item" data-item-action="expense">
           <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="6" width="17" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 10h17M8 14.5h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
@@ -2216,7 +2261,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
     <!-- ===== Itinerary reservation dialog ===== -->
     <dialog id="dialog-item" class="dialog dialog--wide" aria-labelledby="item-dialog-title">
       <form id="form-item" method="dialog">
-        <h3 class="dialog__title" id="item-dialog-title">Add booking</h3>
+        <h3 class="dialog__title" id="item-dialog-title">Add to day</h3>
         <input type="hidden" name="itemId" />
         <input type="hidden" name="tripId" />
         <!-- Buttons, not a select: opened from Bookings there is no trip context to inherit, and
@@ -2274,6 +2319,18 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <input type="time" name="startTime" />
           </label>
         </div>
+        <!-- Position within the day. Buttons everywhere else on this dialog for the
+             Android popup reason, but this list is rebuilt per day and can be long,
+             so it stays a select — it is not in the path that ever misbehaved (that
+             was the dialog closing on option-dismiss for status/type, both of which
+             sit above the fold and are tapped far more often). Hidden until the day
+             actually has something to be positioned against. -->
+        <label class="field" id="item-position-field" hidden>
+          <span class="field__label">Position in the day</span>
+          <select name="afterItem">
+            <option value="">Sort by time</option>
+          </select>
+        </label>
         <div class="roll-years">
           <label class="field" data-item-field="endDate">
             <span class="field__label" id="item-enddate-label">End date</span>
@@ -3720,10 +3777,22 @@ function renderTrips() {
     list.innerHTML = "";
     empty.hidden = false;
     $("expense-filter").hidden = true;
+    renderExpenseQuickAdd(null);
     return;
   }
 
   empty.hidden = true;
+  /* The sort already puts the trip you are ON first (sortTripsByUpcoming ranks
+     travelling: 0), so nothing here re-orders anything. What was missing in Paris
+     is that its expenses were still folded shut on the phone, and the only way to
+     add one was a button past the whole list. */
+  const active = activeExpenseTrip(trips);
+  /* Only unfold the trip actually being TRAVELLED. The quick-add bar happily targets
+     the next trip too — you book flights weeks ahead — but auto-expanding a list of
+     expenses for a trip five days out is noise on a phone. The affordance belongs to
+     the trip you are standing in. */
+  if (active && tripTiming(active).state === "travelling") expensesFoldOpen.add(active.id);
+  renderExpenseQuickAdd(active);
   renderExpenseFilter(trips);
   list.innerHTML = trips.map(renderTripCard).join("");
   bindExpenseRowActions();
@@ -4404,7 +4473,7 @@ function openItemDialog(tripId, item = null, defaults = {}) {
   form.reset();
   form.tripId.value = tripId;
   form.itemId.value = item ? item.id : "";
-  $("item-dialog-title").textContent = item ? "Edit booking" : "Add booking";
+  $("item-dialog-title").textContent = item ? "Edit" : "Add to day";
   // Disclosure: open on desktop or when editing an item that uses those fields
   const more = $("item-more");
   // Open when adding (notes are usually the point), on desktop, or when editing
@@ -4435,10 +4504,47 @@ function openItemDialog(tripId, item = null, defaults = {}) {
 
   buildTripChoice(defaults.chooseTrip ? tripId : null);
   syncItemTypeFields();
+  buildPositionChoices(tripId, form.date.value, item ? item.id : "");
+  /* The day can change while the dialog is open, and the positions belong to the
+     day you are actually filing this under. */
+  form.date.addEventListener("change", onItemDateChangedForPosition);
   openDialog($("dialog-item"));
   /* showModal() lands on the first focusable control — Flight — so editing a Hotel had the
      keyboard on the wrong chip while Hotel was the one highlighted. */
   $("type-grid").querySelector(".type-grid__opt.is-active")?.focus();
+}
+
+function onItemDateChangedForPosition(e) {
+  const form = e.target.form;
+  buildPositionChoices(form.tripId.value, form.date.value, form.itemId.value);
+}
+
+/* "Sort by time" stays the default and the first option: most stops have a time and
+   should order by it. The picker exists for the ones that do not — a market, a walk,
+   a place you just want third — which previously landed in an arbitrary order
+   decided by a localeCompare on a random id. */
+function buildPositionChoices(tripId, iso, selfId) {
+  const field = $("item-position-field");
+  const sel = $("form-item").afterItem;
+  if (!field || !sel) return;
+  const trip = state.trips.find((t) => t.id === tripId);
+  const entries = trip && iso
+    ? itemsForDay(trip, iso).filter((e) => !e.checkout && e.item.id !== selfId)
+    : [];
+  // Nothing to be positioned relative to — the control would be a decision about nothing.
+  field.hidden = entries.length === 0;
+  /* The default option must describe what leaving it alone actually DOES. An item
+     that already carries a manual sortIndex keeps it, so calling that "Sort by time"
+     would promise a reset the submit path does not perform. */
+  const self = selfId ? state.items.find((i) => i.id === selfId) : null;
+  const keeps = self && Number(self.sortIndex) > 0;
+  const opts = [
+    `<option value="">${keeps ? "Keep current position" : "Sort by time"}</option>`,
+    `<option value="__first">First in the day</option>`,
+  ].concat(entries.map((e) =>
+      `<option value="${escapeHtml(e.item.id)}">After ${escapeHtml(e.item.title || "(untitled)")}</option>`));
+  sel.innerHTML = opts.join("");
+  sel.value = "";
 }
 
 /* Shown only when the dialog is opened from a screen that spans every trip — Bookings. From the
@@ -4535,16 +4641,60 @@ function handleItemSubmit(e) {
      arbitrarily and adding a third could reshuffle the first two. */
   else if (!item.startTime) item.sortIndex = nextDayPosition(tripId, item.date);
 
+  /* v2.0: exactly the same hazard as sortIndex above — the form does not carry
+     visitedAt, so without this every edit silently un-visits the place. */
+  if (existing) item.visitedAt = existing.visitedAt;
+
   if (existing) Object.assign(existing, item);
   else state.items.push(item);
   bookingsGroupOpen.set(tripId, true); // what you just added or edited must be visible on Bookings
 
+  /* The Position picker. Applied AFTER the item is in state.items, because
+     placeItemAtIndex reads the day's rendered order to work out the new
+     sortIndex — an item that is not in the list yet cannot be placed within it. */
+  const pos = form.afterItem ? form.afterItem.value : "";
+  if (pos) placeItemAfter(tripId, item.date, item.id, pos === "__first" ? "" : pos);
+
   saveState();
   closeDialog($("dialog-item"));
+  /* render() rebuilds the whole timeline with no scroll restoration, so adding a
+     stop on day 4 dropped you back at day 1 with no sign of what you just added.
+     Target the day explicitly rather than trusting the scroll position to survive. */
+  const landedOn = item.date;
   render();
+  if (landedOn) {
+    timelineDayIso = landedOn;
+    dayChosen = true;
+    requestAnimationFrame(() => { markActiveDayChip(landedOn); scrollToDay(landedOn); });
+  }
   if (item.location.name && item.location.lat === null) {
     geocodeItem(item.id);
   }
+}
+
+/* Put `itemId` immediately after `afterId` within its day. "" means "first".
+   Works in terms of the day's ordered entries, the same list the ↑/↓ buttons and
+   the drag handler operate on, so all three agree about what "after" means.
+
+   Hotel checkout entries are skipped as targets: they are rendered pseudo-entries
+   derived from a hotel's endDate, not items of their own, so there is no position
+   to sit after — itemsForDay emits one per hotel and it always belongs at the time
+   its endTime says. */
+function placeItemAfter(tripId, iso, itemId, afterId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  if (!trip) return;
+  /* placeItemAtIndex indexes into the day's entries WITH the moving item removed,
+     and counts checkout pseudo-entries as positions — so the anchor is resolved in
+     exactly that list rather than a filtered one, or "after the 3rd stop" lands a
+     slot out on any day a hotel checks out. */
+  const entries = itemsForDay(trip, iso);
+  const from = entries.findIndex((e) => !e.checkout && e.item.id === itemId);
+  if (from < 0) return;
+  const rest = entries.filter((_, i) => i !== from);
+  if (afterId === "") return void placeItemAtIndex(trip, itemId, 0);
+  const anchor = rest.findIndex((e) => !e.checkout && e.item.id === afterId);
+  if (anchor < 0) return; // the anchor is gone; leave the time-derived slot alone
+  placeItemAtIndex(trip, itemId, anchor + 1);
 }
 
 /* Deleting a booking also deletes the expense linked to it (v1.15.0, Isaac's call) — one way:
@@ -5459,10 +5609,13 @@ let timelineDayIso = null;
    without this the map would open filtered to day 1 and you could never reach it on the whole
    trip in one tap. */
 let dayChosen = false;
+/* One-shot per trip: the timeline lands on today the first time it renders, and
+   never again fights a scroll you performed yourself. Reset by setItineraryTrip. */
+let timelineAutoLanded = false;
 
 /* Switching trips clears the folds — the ISO keys belong to the old trip's dates. */
 function setItineraryTrip(id) {
-  if (itineraryTripId !== id) { collapsedDays = new Set(); timelineDayIso = null; dayChosen = false; }
+  if (itineraryTripId !== id) { collapsedDays = new Set(); timelineDayIso = null; dayChosen = false; timelineAutoLanded = false; }
   itineraryTripId = id;
 }
 
@@ -5831,8 +5984,8 @@ function router() {
   const ADD_LABEL = {
     budget: "Add funds",
     family: "Add checklist item",
-    itinerary: "Add booking",
-    bookings: "Add booking",
+    itinerary: "Add to day",
+    bookings: "Add to day",
   };
   const addLabel = ADD_LABEL[id] || "New trip";
   addBtn.setAttribute("aria-label", addLabel);
@@ -5855,7 +6008,12 @@ function router() {
   if (id !== "itinerary") teardownDayScrollSpy();
 
   renderActiveShellScreen();
-  window.scrollTo({ top: 0, behavior: "auto" });
+  /* Not when the itinerary just landed on today: the render above schedules that
+     scroll, and resetting to the top here would fight it. Every other screen still
+     opens at the top, which is what you want when you switch tabs. */
+  if (!(id === "itinerary" && timelineAutoLanded && timelineDayIso === todayLocalISO())) {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
 }
 
 /* ---------- Trip timing and order ----------
@@ -5926,6 +6084,32 @@ function featuredTrip() {
   const live = state.trips.filter((t) => t.cancelled !== true);
   const dated = sortTripsByUpcoming(live.filter((t) => getMeta(t).startDate));
   return dated[0] || live[0] || null;
+}
+
+/* The trip an expense most likely belongs to right now: the one being travelled,
+   else the next one coming up. Boundaries (local timezone, inclusive end date,
+   cancelled trips excluded) all come from tripTiming, which already gets them
+   right and is already tested — reimplementing "is this trip on today" would be a
+   second, quietly different answer to a question the app has already answered. */
+function activeExpenseTrip(trips) {
+  const live = trips.filter((t) => t.cancelled !== true);
+  return live.find((t) => tripTiming(t).state === "travelling")
+    || live.find((t) => tripTiming(t).state === "upcoming")
+    || null;
+}
+
+/* A sticky bar rather than the card button alone: on a trip with a dozen expenses
+   the card button sits past the whole list and the category breakdown, so logging
+   a coffee meant scrolling the length of the trip first. */
+function renderExpenseQuickAdd(trip) {
+  const bar = $("budget-quickadd");
+  if (!bar) return;
+  bar.hidden = !trip;
+  if (!trip) return;
+  const timing = tripTiming(trip);
+  bar.querySelector("[data-quickadd-trip]").textContent =
+    timing.state === "travelling" ? trip.name : `${trip.name} · next`;
+  bar.querySelector("[data-quickadd-btn]").onclick = () => openExpenseDialog(trip.id);
 }
 
 function renderTripsScreen() {
@@ -6416,8 +6600,41 @@ function renderItinerary() {
      observer's rootMargin needs that height, so it is armed here rather than inside
      renderTimelineTab. */
   measureStickyHeader();
-  if (itinerarySubTab !== "maps") observeTimelineDays(eachDay(trip).map(isoOf));
+  if (itinerarySubTab !== "maps") {
+    const isos = eachDay(trip).map(isoOf);
+    observeTimelineDays(isos);
+    openTimelineOnToday(isos);
+  }
   restorePendingTabFocus(sw, subList);
+}
+
+/* The timeline opened at day 1 and the scroll spy then reported day 1 as "current",
+   so arriving on the Itinerary mid-trip meant scrolling past every day you had
+   already lived through. Runs only once per trip (dayChosen), so it never yanks
+   you back to today after you have deliberately navigated somewhere else —
+   setItineraryTrip resets the flag when the trip changes.
+
+   Deferred a frame because scrollToDay needs the day nodes laid out, and it goes
+   through scrollToDay so the 900ms programmaticScrollUntil guard suppresses the
+   spy — otherwise the scroll it performs is read as a user scroll and fights it. */
+function openTimelineOnToday(isos) {
+  /* Deliberately does NOT set dayChosen. That flag means "the user picked this day",
+     and Maps inherits it as a day filter (see activateSubTab) — auto-landing is not
+     a choice, so setting it made tapping Maps silently filter the whole trip down to
+     today, which is the exact bug v1.11.3 fixed. A separate one-shot flag keeps the
+     run-once behaviour without claiming an intent the user never expressed. */
+  if (dayChosen || timelineAutoLanded) return;
+  /* Only once the Itinerary is the screen on show. render() rebuilds whichever screen
+     is active, but renderItinerary also runs from other paths while the section is
+     still display:none — and scrollIntoView on a hidden element silently does nothing
+     while the one-shot flag is spent, so the landing was consumed by a render the user
+     never saw. Same reason teardownDayScrollSpy keys off currentScreenId(). */
+  if (currentScreenId() !== "itinerary") return;
+  const today = todayLocalISO();
+  if (!isos.includes(today)) return;
+  timelineAutoLanded = true;
+  timelineDayIso = today;
+  requestAnimationFrame(() => { markActiveDayChip(today); scrollToDay(today); });
 }
 
 function minutesOf(hhmm, dflt) {
@@ -6533,12 +6750,14 @@ function itemCard({ item, checkout }, stopNo) {
 
   /* data-item makes the whole card a tap target (edit) and a drag handle.
      .act--checkout marks the rows that can be tapped but never lifted. */
+  // A checkout row is a hotel's endDate, not a place you visit, so it never shows the tick.
+  const visited = !checkout && Boolean(item.visitedAt);
   return `
-    <div class="act${checkout ? " act--checkout" : ""}" data-item="${escapeHtml(item.id)}">
+    <div class="act${checkout ? " act--checkout" : ""}${visited ? " act--visited" : ""}" data-item="${escapeHtml(item.id)}">
       <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}</span>
-      ${stopNo ? `<span class="act__stopno" aria-label="Map stop ${stopNo}">${stopNo}</span>` : ""}
+      ${stopNo ? `<span class="act__stopno${visited ? " act__stopno--visited" : ""}" aria-label="Map stop ${stopNo}${visited ? ", visited" : ""}">${stopNo}</span>` : ""}
       <span class="act__body">
-        <span class="act__title">${escapeHtml(title)}</span>
+        <span class="act__title">${escapeHtml(title)}${visited ? ` <span class="visited-tick" title="Visited">✓</span>` : ""}</span>
         <span class="act__sub">${subParts.join(" · ")}</span>
       </span>
       ${time ? `<span class="act__time">${escapeHtml(time)}</span>` : ""}
@@ -6591,7 +6810,7 @@ function renderTimelineTab(trip) {
       const numbers = stopNumbers(trip, iso); // same numbers the map pins use
       const entries = itemsForDay(trip, iso).map((e) => itemCard(e, numbers.get(e.item.id)));
       entries.push(
-        `<button type="button" class="act act--add" data-add-item="${iso}" aria-label="Add a booking on ${escapeHtml(fmtDow(d))} ${d.getDate()}">${ICONS.explore}<span class="act__body"><span class="act__title">Add booking</span></span></button>`
+        `<button type="button" class="act act--add" data-add-item="${iso}" aria-label="Add to ${escapeHtml(fmtDow(d))} ${d.getDate()}">${ICONS.explore}<span class="act__body"><span class="act__title">Add to day</span></span></button>`
       );
       /* The date rail becomes the fold control. It was a plain <div> — not
          focusable, not announced — so making it a button fixes that too. */
@@ -6623,7 +6842,7 @@ function renderTimelineTab(trip) {
         return `<button type="button" class="daychip ${iso === timelineDayIso ? "is-active" : ""}" data-strip-day="${iso}"><span class="dc-dow">${fmtDow(d)}</span><span class="dc-num">${d.getDate()}</span></button>`;
       })
       .join("")}</div>`;
-  const fab = `<button type="button" class="fab" data-fab-add aria-label="Add booking"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`;
+  const fab = `<button type="button" class="fab" data-fab-add aria-label="Add to day"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`;
 
   /* The strip lives in the sticky header now, not in the scrolling view, so the Timeline/Maps
      toggle stays put alongside it. Maps clears the slot. */
@@ -6778,6 +6997,17 @@ function bindItemActions(scope, trip) {
 }
 
 /* Mobile ⋯ action sheet: Edit / Move up / Move down / Delete for one item */
+/* A timestamp rather than a flag: two devices toggling a boolean resolve by whoever
+   synced last, which can silently un-tick a place you ticked standing outside it.
+   The later stamp wins instead, and "when did we do the Louvre" is answerable. */
+function toggleVisited(itemId) {
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) return;
+  item.visitedAt = item.visitedAt ? "" : new Date().toISOString();
+  saveState();
+  render();
+}
+
 function openItemActionsSheet(trip, itemId, opts = {}) {
   const item = state.items.find((i) => i.id === itemId);
   if (!item) return;
@@ -6792,6 +7022,12 @@ function openItemActionsSheet(trip, itemId, opts = {}) {
   dlg.querySelector('[data-item-action="move-down"]').hidden = !reorder;
   // "Add expense" until one is linked, then "Open expense" — the same row, never two.
   dlg.querySelector("[data-item-action-label]").textContent = linkedExpense(item) ? "Open expense" : "Add expense";
+  /* Visiting a flight or a hotel is not a thing you tick off — the flag is about
+     places you go and see, which is what the timeline numbers and the map pins mark. */
+  const visitable = !["flight", "hotel"].includes(item.type);
+  const visitedRow = dlg.querySelector('[data-item-action="visited"]');
+  visitedRow.hidden = !visitable;
+  dlg.querySelector("[data-visited-label]").textContent = item.visitedAt ? "Mark not visited" : "Mark visited";
   dlg.querySelectorAll("[data-item-action]").forEach((b) => {
     b.onclick = () => {
       closeDialog(dlg);
@@ -6800,6 +7036,7 @@ function openItemActionsSheet(trip, itemId, opts = {}) {
       else if (action === "expense") openExpenseForItem(item);
       else if (action === "move-up") moveItemInDay(trip, itemId, -1);
       else if (action === "move-down") moveItemInDay(trip, itemId, 1);
+      else if (action === "visited") toggleVisited(itemId);
       else if (action === "maps") window.open(gmapsLink(item, trip), "_blank", "noopener");
       else if (action === "delete") deleteItem(itemId);
     };
@@ -7173,14 +7410,26 @@ function renderMapsTab(trip) {
       const leg = prevLoc && geo ? legLabel(prevLoc, e.item.location) : "";
       if (leg) sidebar += `<div class="mapstop-leg">↓ ${escapeHtml(leg)}</div>`;
       const when = e.item.startTime || "";
+      /* The timeline card has carried notes and the confirmation since v1.x; the map
+         list deliberately showed only the address, which meant standing outside a
+         restaurant with the booking reference one screen away. Clamped to two lines
+         so the collapsed sidebar (which hides stops 3+ on phones) still shows a
+         useful number of rows. Non-interactive text: this sits inside the focus
+         button, so it must not be a target of its own. */
+      const visited = Boolean(e.item.visitedAt);
+      const noteBits = [];
+      if (e.item.confirmation) noteBits.push(`Conf: <span class="ltr">${escapeHtml(e.item.confirmation)}</span>`);
+      if (e.item.notes) noteBits.push(escapeHtml(e.item.notes));
+      const noteLine = noteBits.join(" · ");
       sidebar += `
-        <div class="mapstop">
+        <div class="mapstop${visited ? " act--visited" : ""}">
           <button type="button" class="mapstop__focus" ${geo ? `data-focus-stop="${escapeHtml(e.item.id)}"` : "disabled"}
                   aria-label="Show ${escapeHtml(e.item.title)} on the map">
-            <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}">${e.label}</span>
+            <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}${visited ? " act__stopno--visited" : ""}">${e.label}</span>
             <span class="mapstop__body">
-              <span class="act__title">${escapeHtml(e.item.title)}</span>
+              <span class="act__title">${escapeHtml(e.item.title)}${visited ? ` <span class="visited-tick" title="Visited">✓</span>` : ""}</span>
               <span class="act__sub">${escapeHtml(e.item.location.name)}${when ? " · " + escapeHtml(when) : ""}</span>
+              ${noteLine ? `<span class="act__sub mapstop__note">${noteLine}</span>` : ""}
             </span>
           </button>
           ${geo ? "" : `<button type="button" class="icon-btn icon-btn--stop" data-locate-item="${e.item.id}" aria-label="Find this place on the map" title="Locate"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg></button>`}

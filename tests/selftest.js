@@ -2818,7 +2818,8 @@
         const dlg = document.getElementById("dialog-item");
         if (!dlg.open) return "nothing opened";
         const title = document.getElementById("item-dialog-title").textContent;
-        return /Add booking/.test(title) ? true : `the dialog is titled "${title}"`;
+        // v2.0 renamed this: a stop can be a landmark or an attraction, not only a booking.
+        return /Add to day/.test(title) ? true : `the dialog is titled "${title}"`;
       }));
 
     check("Bookings asks which trip, since it spans all of them", () =>
@@ -3371,8 +3372,8 @@
       const add = document.getElementById("btn-appbar-add");
       if (!add) return "btn-appbar-add missing";
       const expected = {
-        trips: "New trip", itinerary: "Add booking", budget: "Add funds",
-        bookings: "Add booking", family: "Add checklist item",
+        trips: "New trip", itinerary: "Add to day", budget: "Add funds",
+        bookings: "Add to day", family: "Add checklist item",
       };
       const startHash = location.hash;
       const wrong = [];
@@ -4217,7 +4218,10 @@
       openItemDialog(tripId);
       const title = document.getElementById("item-dialog-title").textContent;
       closeDialog(document.getElementById("dialog-item"));
-      if (title !== "Add booking") r.push(`dialog title "${title}"`);
+      /* The SCREEN is still Bookings — that word was the point of v1.15.0 and has not
+         changed. The dialog is what got renamed in v2.0, because what you add to a day
+         is as often a landmark or a viewpoint as a booking. */
+      if (title !== "Add to day") r.push(`dialog title "${title}"`);
       const nav = [...document.querySelectorAll("[data-nav] span")].map((s) => s.textContent);
       if (!nav.includes("Bookings")) r.push(`nav: ${nav.join(",")}`);
       return r.length ? r.join("; ") : true;
@@ -4778,6 +4782,114 @@
       next.trips[0].expenses[0].settledHome = 404;
       const out = A.diffStates(base, next);
       return out.length > 0 ? true : "settling an expense produced no change entry";
+    });
+
+    group("v2.0-timeline");
+
+    check("editing an item preserves visitedAt, exactly like sortIndex", () => {
+      /* The form carries neither field, so Object.assign resets both unless they are
+         copied forward. sortIndex already shipped this bug once (see the comment in
+         handleItemSubmit); visitedAt is the same shape. */
+      const src = String(handleItemSubmit);
+      return /item\.visitedAt\s*=\s*existing\.visitedAt/.test(src)
+        ? true : "handleItemSubmit does not carry visitedAt forward";
+    });
+
+    check("the Position picker is actually read on submit", () => {
+      // An unread picker is decoration: the item would keep its time-derived slot.
+      const src = String(handleItemSubmit);
+      return /afterItem/.test(src) && /placeItemAfter\(/.test(src)
+        ? true : "handleItemSubmit never reads form.afterItem";
+    });
+
+    check("placeItemAfter indexes the same list placeItemAtIndex does", () => {
+      /* placeItemAtIndex counts checkout pseudo-entries as positions and works on
+         the day minus the moving item. Resolving the anchor in a differently
+         filtered list puts the stop one slot out whenever a hotel checks out. */
+      /* Ids are prefixed because placeItemAtIndex resolves the item from state.items
+         globally and then works in ITS date — so a fixture id that collides with a
+         real item silently reorders the wrong day. Real ids come from uid() and do
+         not collide; test fixtures have to earn the same guarantee. */
+      const TID = "probe-order-trip";
+      const t = { id: TID, name: "P", year: 2026, budget: 0, expenses: [] };
+      state.trips.push(t);
+      const mk = (id, title, time) => ({ id: `probe-order-${id}`, tripId: TID, type: "attraction", title,
+        date: "2026-05-02", startTime: time, location: { name: "x", lat: null, lng: null, url: "" },
+        endDate: "", endTime: "", details: "", flightNo: "", departAirport: "", arrivalAirport: "",
+        confirmation: "", notes: "", sortIndex: 0, visitedAt: "" });
+      state.items.push(mk("a", "A", "09:00"), mk("b", "B", "10:00"), mk("c", "C", ""));
+      try {
+        placeItemAfter(TID, "2026-05-02", "probe-order-c", "probe-order-a");   // C after A
+        const order = itemsForDay(t, "2026-05-02").map((e) => e.item.id.replace("probe-order-", ""));
+        return JSON.stringify(order) === JSON.stringify(["a", "c", "b"])
+          ? true : `order was ${order.join(",")}`;
+      } finally {
+        state.items = state.items.filter((i) => i.tripId !== TID);
+        state.trips = state.trips.filter((x) => x.id !== TID);
+      }
+    });
+
+    check("toggling visited stamps a time and clears to empty", () => {
+      const it = { id: "probe-visited-item", tripId: "probe-visited-trip", type: "attraction", title: "Louvre",
+        date: "2026-05-02", startTime: "", endTime: "", endDate: "", details: "",
+        flightNo: "", departAirport: "", arrivalAirport: "",
+        location: { name: "", lat: null, lng: null, url: "" },
+        confirmation: "", notes: "", sortIndex: 0, visitedAt: "" };
+      state.items.push(it);
+      try {
+        toggleVisited("probe-visited-item");
+        if (!/^\d{4}-\d{2}-\d{2}T/.test(it.visitedAt)) return `visitedAt was "${it.visitedAt}"`;
+        toggleVisited("probe-visited-item");
+        return it.visitedAt === "" ? true : "un-visiting left a value";
+      } finally { state.items = state.items.filter((i) => i.id !== "probe-visited-item"); }
+    });
+
+    check("the timeline lands on today only until you navigate yourself", () => {
+      /* It must not yank you back to today every re-render after you have
+         deliberately scrolled to another day. */
+      const src = String(openTimelineOnToday);
+      if (!/dayChosen\s*\|\|\s*timelineAutoLanded/.test(src)) return "openTimelineOnToday does not guard on dayChosen";
+      /* And it must not SET dayChosen: Maps reads that flag as a day filter, so
+         claiming the user chose today silently filters the map to today. */
+      return !/dayChosen\s*=\s*true/.test(src)
+        ? true : "openTimelineOnToday sets dayChosen, which leaks into the Maps day filter";
+    });
+
+    check("adding a stop returns the view to the day it landed on", () => {
+      const src = String(handleItemSubmit);
+      return /scrollToDay\(landedOn\)/.test(src)
+        ? true : "handleItemSubmit does not scroll back to the item's day";
+    });
+
+    check("the map list shows notes and the confirmation, not just the address", () => {
+      const src = String(renderMapsTab);
+      return /e\.item\.notes/.test(src) && /e\.item\.confirmation/.test(src)
+        ? true : "renderMapsTab still omits notes/confirmation";
+    });
+
+    check("only the trip being travelled has its expenses unfolded", () => {
+      /* The quick-add bar targets an upcoming trip too, but unfolding a list of
+         expenses for a trip five days out is noise — and it would break the
+         "a fold you opened stays open" guarantee for every non-active trip. */
+      const src = String(renderTrips);
+      return /tripTiming\(active\)\.state\s*===\s*"travelling"/.test(src)
+        ? true : "renderTrips unfolds any active trip, not only the one being travelled";
+    });
+
+    check("the quick-add bar targets the trip you are on, else the next one", () => {
+      const mk = (id, start, end, extra) => Object.assign(
+        { id, name: id, year: 2026, budget: 0, expenses: [], startDate: start, endDate: end }, extra || {});
+      const today = todayLocalISO();
+      const past = mk("past", "2020-01-01", "2020-01-05");
+      const soon = mk("soon", "2099-01-01", "2099-01-05");
+      const now = mk("now", today, today);
+      if (activeExpenseTrip([past, soon])?.id !== "soon") return "did not fall through to the upcoming trip";
+      if (activeExpenseTrip([past, soon, now])?.id !== "now") return "did not prefer the trip being travelled";
+      // a cancelled trip is not one you are spending on
+      if (activeExpenseTrip([mk("x", today, today, { cancelled: true })]) !== null) return "picked a cancelled trip";
+      // inclusive end date — the last day of a trip is still the trip
+      const ends = mk("ends", "2020-01-01", today);
+      return activeExpenseTrip([ends])?.id === "ends" ? true : "the final day was treated as past";
     });
 
     group("trust-boundary");
