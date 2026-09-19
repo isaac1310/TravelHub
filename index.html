@@ -1030,6 +1030,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
   font: inherit; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.02em; cursor: pointer;
 }
 .currency-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* A lone three-letter pill reads as a badge, not a button. The chevron and the split
+   layout are what make it obviously pressable. */
+.currency-btn--wide { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; padding: 0 0.7rem; }
+.currency-btn__chev { font-size: 0.7em; opacity: 0.65; }
 .settled-line__row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 /* The estimate is muted and always prefixed "≈" — it must never read as settled money. */
 .fx-est { color: var(--muted); }
@@ -2146,19 +2150,26 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label">Budget (₪)</span>
           <input type="number" name="budget" min="0" step="0.01" required />
         </label>
+        <!-- The whole point of this control is that a rate exists behind it, so it has to
+             LOOK like a control. Shipped first as a bare "ILS" pill with the rate, fee and
+             hint all hidden until the currency had already been changed — which meant there
+             was no visible path to a rate at all, and Isaac could not find one. The hint now
+             always shows and names the next step. -->
         <div class="field">
           <span class="field__label">Spending currency</span>
           <div class="amount-row">
             <input type="hidden" name="spendCurrency" value="ILS" />
-            <button type="button" class="currency-btn" id="trip-currency-btn"
-                    style="flex:0 0 5.5rem" aria-label="Spending currency">ILS</button>
+            <button type="button" class="currency-btn currency-btn--wide" id="trip-currency-btn"
+                    style="flex:0 0 7rem" aria-label="Change the spending currency">
+              <span data-trip-currency-code>ILS</span><span class="currency-btn__chev" aria-hidden="true">▾</span>
+            </button>
             <input type="number" name="rate" min="0" step="0.0001" inputmode="decimal"
                    placeholder="rate" aria-labelledby="trip-rate-hint" style="flex:1" />
           </div>
           <!-- One field, not a rate table. The shekel figure it produces is a placeholder
                that the card statement later overwrites, so it does not need to be exact —
                it needs to exist before you are standing at a till. -->
-          <span class="field__hint" id="trip-rate-hint">What one unit costs in shekels. Rough is fine — the statement replaces it.</span>
+          <span class="field__hint" id="trip-rate-hint"></span>
         </div>
         <label class="field" id="trip-fee-field" hidden>
           <span class="field__label">Card fee (%)</span>
@@ -4306,12 +4317,15 @@ function setTripCurrency(code) {
   const form = $("form-trip");
   const cur = normalizeCurrency(code) || HOME_CURRENCY;
   form.spendCurrency.value = cur;
-  $("trip-currency-btn").textContent = cur;
+  $("trip-currency-btn").querySelector("[data-trip-currency-code]").textContent = cur;
   const foreign = cur !== HOME_CURRENCY;
   $("trip-fee-field").hidden = !foreign;
-  form.rate.parentElement.querySelector("input[name='rate']").hidden = !foreign;
-  $("trip-rate-hint").hidden = !foreign;
-  if (foreign) $("trip-rate-hint").textContent = `What one ${cur} costs in shekels. Rough is fine — the statement replaces it.`;
+  form.rate.hidden = !foreign;
+  /* The hint is never hidden. On a shekel trip it is the ONLY thing that says a rate
+     exists and how to reach it — hiding it is what made the feature undiscoverable. */
+  $("trip-rate-hint").textContent = foreign
+    ? `What one ${cur} costs in shekels. Rough is fine — the statement replaces it.`
+    : "Spending abroad? Change the currency to set an exchange rate for this trip.";
 }
 
 function openTripCurrencyPicker() {

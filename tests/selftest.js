@@ -4756,6 +4756,31 @@
         ? true : "changing only settledDate produced no What's-new entry";
     });
 
+    check("a shekel trip still shows how to reach an exchange rate", () => {
+      /* Shipped with the rate, fee AND hint all hidden until the currency had already
+         been changed, behind a bare "ILS" pill that did not look pressable — so there
+         was no visible path to a rate and the feature could not be found. */
+      const trip = state.trips[0];
+      if (!trip) return skip("no trip to open");
+      openTripDialog(trip);
+      try {
+        setTripCurrency("ILS");
+        const hint = document.getElementById("trip-rate-hint");
+        const btn = document.getElementById("trip-currency-btn");
+        if (hint.hidden || !hint.textContent.trim()) return "the hint is hidden on a shekel trip";
+        if (!/currency/i.test(hint.textContent)) return `hint does not name the next step: "${hint.textContent}"`;
+        if (btn.tagName !== "BUTTON") return "the currency control is not a button";
+        // and picking a foreign currency must reveal the rate
+        setTripCurrency("EUR");
+        const rate = document.getElementById("form-trip").rate;
+        if (rate.hidden) return "the rate field stayed hidden on a foreign trip";
+        return /EUR/.test(hint.textContent) ? true : `hint did not name the currency: "${hint.textContent}"`;
+      } finally {
+        setTripCurrency(trip.spendCurrency || "ILS");
+        closeDialog(document.getElementById("dialog-trip"));
+      }
+    });
+
     check("formatMoney still renders shekels when no code is passed", () => {
       const out = A.formatMoney(1234);
       if (!/₪|ILS/.test(out)) return `default render was "${out}"`;
