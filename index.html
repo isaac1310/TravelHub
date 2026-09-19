@@ -405,31 +405,41 @@ h1, h2, h3, h4, .brand__name {
   pointer-events: none;
 }
 .cover__scrim { position: absolute; inset: 0; pointer-events: none; }
-/* Two layers, because one diagonal could not do both jobs. The diagonal lets the
-   painting through toward the upper right; the vertical one puts the floor back under
-   the lower half, where the title, dates and traveller names sit. With the diagonal
-   alone the traveller row measured 4.20 against #2c2a28 — below the 4.5 the comment
-   above promises, and worse than the plain gradient's 4.97.
+/* The scrim is anchored to where the TEXT is, not spread over the whole surface.
 
-   MEASURED, not estimated: the composite was sampled at 132 points across the four
-   text elements for all 19 paintings (canvas replays these exact gradient stops over
-   the decoded image). Floor is 4.88, on Paris, whose bright sunset sky is the
-   brightest thing in the set. Lightening these stops drops it below 4.5 again — the
-   first variant tried came out at 4.53 — so treat the numbers as load-bearing. */
+   The first version washed everything evenly and the paintings all but vanished. That
+   came from measuring ELEMENT boxes: .hero__kicker and friends are full-width blocks,
+   so sampling across them "found" text out at 96% where there is only empty space.
+   Measuring real glyph rectangles (Range.getClientRects) shows the hero's glyphs stop
+   at 36% on desktop, and the trip card's title is RIGHT-aligned — opposite sides, which
+   is why they now get opposite gradients.
+
+   Numbers below are measured against all 19 paintings, sampling only actual glyphs:
+   hero 5.69 (worst: Paris), trip card 4.59 (worst: Jerusalem). Both clear the 4.5 this
+   file has always promised, and both are LIGHTER than the first attempt, which measured
+   4.88 / 4.61 while hiding far more of the painting — that is the element-box error
+   being paid back. */
 .hero .cover__scrim {
-  background:
-    linear-gradient(to bottom, rgba(239,142,127,0) 26%, rgba(237,138,128,0.74) 62%, rgba(232,130,132,0.88) 100%),
-    linear-gradient(118deg,
-      rgba(242,160,143,0.98) 0%, rgba(239,142,127,0.95) 34%,
-      rgba(232,132,130,0.87) 58%, rgba(224,122,134,0.68) 100%);
+  background: linear-gradient(to right,
+    rgba(242,160,143,0.95) 0%, rgba(239,142,127,0.88) 38%,
+    rgba(236,138,130,0.35) 58%, rgba(228,128,132,0.08) 78%, rgba(224,122,134,0.04) 100%);
 }
-/* The 96px card is almost all text, so the painting reads as a tint behind it.
-   Measured the same way as the hero, against the 20px/700 title: 4.11 at 0.90/0.87/0.82
-   and 4.61 here — Lisbon is the worst of the 19. WCAG would allow 3.0 for text this
-   size; this file's own bar is 4.5, so 4.5 is what it clears. The .tag chips are not
-   in that measurement because they carry their own opaque backgrounds. */
+/* On a phone the kicker wraps out to 79% of the width, so the protected band has to
+   reach much further. The hero there is mostly text and the Today card anyway; the
+   trip cards are where the artwork gets room on a small screen. */
+@media (max-width: 900px) {
+  .hero .cover__scrim {
+    background: linear-gradient(to right,
+      rgba(242,160,143,0.95) 0%, rgba(239,142,127,0.92) 55%,
+      rgba(236,138,130,0.72) 80%, rgba(224,122,134,0.30) 100%);
+  }
+}
+/* The 96px card's title is right-aligned, so this one runs the other way: the left of
+   the card — where the painting is most legible — stays clear. */
 .tripcard__cover .cover__scrim {
-  background: linear-gradient(135deg, rgba(242,160,143,0.95) 0%, rgba(239,142,127,0.94) 45%, rgba(224,122,134,0.92) 100%);
+  background: linear-gradient(to left,
+    rgba(242,160,143,0.97) 0%, rgba(239,142,127,0.94) 40%,
+    rgba(232,132,130,0.55) 70%, rgba(224,122,134,0.20) 100%);
 }
 /* Without a photo the scrim would just double the gradient and darken the card. */
 .cover--nophoto .cover__scrim { display: none; }
@@ -1048,6 +1058,25 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 }
 .quickadd__trip { font-size: 0.82rem; font-weight: 600; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quickadd__btn { margin-inline-start: auto; flex: 0 0 auto; }
+/* The overview panel is a <details> now; its heading is the summary row. */
+#global-panel > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; cursor: pointer; list-style: none; }
+#global-panel > summary::-webkit-details-marker { display: none; }
+#global-panel > summary::after { content: "▾"; margin-inline-start: auto; color: var(--muted); font-size: 0.8rem; transition: transform 0.15s ease; }
+#global-panel[open] > summary::after { transform: rotate(180deg); }
+.panel__summary-note { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+/* Same chip vocabulary as the timeline's day strip, scrolled sideways rather than wrapped —
+   a 7-day trip would otherwise push the expense list off the screen before you reached it. */
+.expense-days { display: flex; gap: 0.35rem; overflow-x: auto; padding: 0.15rem 0 0.5rem; scrollbar-width: none; }
+.expense-days::-webkit-scrollbar { display: none; }
+.daychip--exp {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 0.3rem;
+  min-height: 34px; padding: 0.2rem 0.6rem; border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong, #d9cfc7); background: var(--surface, #fff);
+  font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--text); cursor: pointer;
+}
+.daychip--exp.is-active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.daychip--exp.is-active .filter-chip__count { color: #fff; opacity: 0.85; }
+#global-panel[open] .panel__summary-note { display: none; }
 /* Visited: dimmed with a tick, never struck through or hidden — you look back at
    what you did as often as forward at what is left.
 
@@ -1866,11 +1895,17 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
               </div>
             </div>
 
-            <section class="panel panel--global" aria-labelledby="global-heading">
-              <h2 id="global-heading" class="panel__heading">Overview</h2>
+            <!-- Mid-trip this is background: on day 4 of 4 the live trip is the whole job,
+                 and the year's funds-vs-committed figure is not what you open the app for.
+                 renderTrips moves this below the trip list and folds it while travelling. -->
+            <details class="panel panel--global" id="global-panel" open>
+              <summary class="panel__heading" id="global-heading">
+                <span>Overview</span>
+                <span class="panel__summary-note" id="global-summary-note"></span>
+              </summary>
               <div id="global-answer"></div>
               <div id="global-stats" class="stats-grid"></div>
-            </section>
+            </details>
 
             <section class="trips-section" aria-labelledby="trips-heading">
               <div class="trips-section__head">
@@ -2324,7 +2359,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <input type="date" name="paidDate" />
         </label>
         <label class="field">
-          <span class="field__label">Booking date (optional)</span>
+          <!-- "Booking date" was wrong for the common case: on a trip this is the day you
+               spent the money, which is what the day filter groups by. -->
+          <span class="field__label">Date spent (optional)</span>
           <input type="date" name="date" />
         </label>
         <!-- Read-only: settling is its own flow (the Settle sheet), because it happens
@@ -3855,16 +3892,52 @@ function renderTripCard(trip) {
   const remaining = budget - committed;
   const over = committed > budget;
   const pct = budget > 0 ? Math.min(100, (committed / budget) * 100) : committed > 0 ? 100 : 0;
-  const shown = trip.expenses.filter((e) => expenseMatchesFilter(e, trip));
+  const day = expenseDayFilter.get(trip.id) || "";
+  const shown = trip.expenses
+    .filter((e) => expenseMatchesFilter(e, trip))
+    .filter((e) => !day || (day === "none" ? !e.date : e.date === day));
   const expensesHtml =
     trip.expenses.length === 0
       ? `<li class="empty-state">Nothing booked yet — add an expense to start tracking this budget.</li>`
       : shown.length === 0
-        ? `<li class="empty-state">No ${expenseFilter} expenses on this trip.</li>`
+        ? `<li class="empty-state">Nothing here${day ? " on this day" : ""}${expenseFilter !== "all" ? ` in "${expenseFilter}"` : ""}.</li>`
         : shown.map((e) => renderExpenseItem(trip, e)).join("");
-  const foldLabel = expenseFilter === "all"
-    ? `${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`
-    : `${shown.length} ${expenseFilter} of ${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`;
+  /* The summary names whichever narrowings are active, rather than just counting. It
+     briefly lost the "unpaid" word when the day filter was added — but "5 of 22" does
+     not tell you WHY 17 are missing, which is the whole job of this line. */
+  const dayWord = day === "none" ? "with no date" : day ? `on ${(() => { const d = parseISO(day); return d ? `${fmtDow(d)} ${d.getDate()}` : day; })()}` : "";
+  const narrowings = [expenseFilter === "all" ? "" : expenseFilter, dayWord].filter(Boolean).join(" ");
+  const foldLabel = narrowings
+    ? `${shown.length} ${narrowings} of ${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`
+    : `${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`;
+
+  /* Day chips, only when the trip actually has days worth separating. Crucially there is
+     a "No date" chip whenever any expense lacks one: 14 of Isaac's 21 Paris expenses had
+     no date, so a day filter without that chip would silently hide two thirds of the list
+     and read as data loss. Counts sit on every chip so an empty day is visible as empty
+     rather than as a filter that broke. */
+  const dayCounts = new Map();
+  let undated = 0;
+  for (const e of trip.expenses) {
+    if (e.date) dayCounts.set(e.date, (dayCounts.get(e.date) || 0) + 1);
+    else undated++;
+  }
+  const dayChip = (value, label, count) =>
+    `<button type="button" class="daychip daychip--exp ${day === value ? "is-active" : ""}"
+       data-exp-day="${escapeHtml(value)}" data-trip-id="${trip.id}"
+       aria-pressed="${day === value ? "true" : "false"}"
+       aria-label="${escapeHtml(label)}, ${count} expense${count === 1 ? "" : "s"}"
+     ><span class="dc-num">${escapeHtml(label)}</span><span class="filter-chip__count">${count}</span></button>`;
+  const dayRow = dayCounts.size > 1 || (dayCounts.size >= 1 && undated)
+    ? `<div class="expense-days">${
+        dayChip("", "All", trip.expenses.length)
+        + [...dayCounts.keys()].sort().map((iso) => {
+            const d = parseISO(iso);
+            return dayChip(iso, d ? `${fmtDow(d)} ${d.getDate()}` : iso, dayCounts.get(iso));
+          }).join("")
+        + (undated ? dayChip("none", "No date", undated) : "")
+      }</div>`
+    : "";
 
   return `
     <article class="trip-card ${over ? "trip-card--over" : ""}" data-trip-id="${trip.id}">
@@ -3890,6 +3963,7 @@ function renderTripCard(trip) {
         <div><dt>Left in budget</dt><dd class="${remaining < 0 ? "over-badge" : ""}">${formatMoney(remaining)}</dd></div>
       </dl>
       ${totalNote}
+      ${dayRow}
       <details class="expenses-fold" data-trip-fold="${trip.id}" ${window.innerWidth > 900 || trip.expenses.length === 0 || expensesFoldOpen.has(trip.id) ? "open" : ""}>
         <summary>${foldLabel}</summary>
         <ul class="expense-list">${expensesHtml}</ul>
@@ -3924,13 +3998,29 @@ function renderTrips() {
      the next trip too — you book flights weeks ahead — but auto-expanding a list of
      expenses for a trip five days out is noise on a phone. The affordance belongs to
      the trip you are standing in. */
-  if (active && tripTiming(active).state === "travelling") expensesFoldOpen.add(active.id);
+  const travelling = active && tripTiming(active).state === "travelling" ? active : null;
+  if (travelling) expensesFoldOpen.add(travelling.id);
   renderExpenseQuickAdd(active);
+  layoutBudgetForTrip(travelling);
   renderExpenseFilter(trips);
   list.innerHTML = trips.map(renderTripCard).join("");
   bindExpenseRowActions();
   /* v1.15.0: remember which folds are open. Marking an expense paid re-renders the whole list,
      and on the phone (<900px) every fold snapped shut — the one you were working in included. */
+  list.querySelectorAll("[data-exp-day]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const tripId = b.getAttribute("data-trip-id");
+      const value = b.getAttribute("data-exp-day");
+      if (value) expenseDayFilter.set(tripId, value); else expenseDayFilter.delete(tripId);
+      expensesFoldOpen.add(tripId); // narrowing to a day is a reason to see the rows
+      renderTrips();
+    })
+  );
+
+  $("global-panel")?.addEventListener("toggle", function onToggle() {
+    budgetOverviewOpen = this.open;
+  }, { once: false });
+
   list.querySelectorAll("[data-trip-fold]").forEach((d) =>
     d.addEventListener("toggle", () => {
       const id = d.getAttribute("data-trip-fold");
@@ -4415,7 +4505,17 @@ function openExpenseDialog(tripId, expense = null, defaults = {}) {
     expenseFormField(form, "paidDate").value = "";
     if (defaults.label) expenseFormField(form, "label").value = defaults.label;
     if (defaults.category && CATEGORIES.includes(defaults.category)) expenseFormField(form, "category").value = defaults.category;
+    /* Date it TODAY while the trip is running. Of Isaac's 21 Paris expenses only 7 had
+       a date, and all 7 were the ones auto-linked to a booking; everything typed by hand
+       had none, which made "which day did we spend that" unanswerable and a day filter
+       impossible. paidDate is no substitute — 16 of those 21 carry 19 Sept because that
+       is when he reconciled, which describes the bookkeeping rather than the trip.
+       Only inside the trip's own dates: an expense booked months ahead is not "today". */
+    const todayIso = todayLocalISO();
+    const within = trip && getMeta(trip).startDate && getMeta(trip).endDate
+      && todayIso >= getMeta(trip).startDate && todayIso <= getMeta(trip).endDate;
     if (defaults.date) expenseFormField(form, "date").value = defaults.date;
+    else if (within) expenseFormField(form, "date").value = todayIso;
     /* New expenses default to the trip's spend currency — in Paris you are typing
        euros all week and should never have to pick EUR twice. */
     setExpenseCurrency(trip ? trip.spendCurrency : HOME_CURRENCY);
@@ -5717,6 +5817,12 @@ let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let bookingsFilter = "all"; // all | flight | hotel | other
 let expenseFilter = "all";  // all | unpaid | paid | unsettled — Budget expense rows (v1.15.0, v2.0)
+/* Remembered like expensesFoldOpen: re-rendering the Budget screen must not reopen a
+   panel you deliberately folded. Module-level, never synced — it is a view preference. */
+let budgetOverviewOpen = false;
+/* Per-trip day narrowing on the expense list: "" = every day. Keyed by trip id so
+   switching trips does not carry a day that belongs to another one. */
+let expenseDayFilter = new Map();
 /* "Paid" is fully paid; everything else — planned, booked, partly paid — still needs money. */
 /* Takes the trip as a second argument (v2.0 — "unsettled" needs the trip's rates).
    MUST NOT be passed straight to Array.prototype.filter: filter's second argument
@@ -6256,6 +6362,31 @@ function activeExpenseTrip(trips) {
   return live.find((t) => tripTiming(t).state === "travelling")
     || live.find((t) => tripTiming(t).state === "upcoming")
     || null;
+}
+
+/* On day 4 of 4 the live trip IS the screen. The year's funds-vs-committed figure is
+   real but it is background — so while a trip is running the trip list goes first and
+   the overview folds down below it, carrying its headline number on the summary line so
+   folding costs you nothing. Both move back the moment the trip ends; nothing is
+   hidden, and the DOM order change is what carries it on both layouts. */
+function layoutBudgetForTrip(travelling) {
+  const panel = $("global-panel");
+  const trips = document.querySelector(".trips-section");
+  if (!panel || !trips || !trips.parentElement) return;
+  const note = $("global-summary-note");
+  if (travelling) {
+    if (panel.nextElementSibling !== null && trips.nextElementSibling !== panel) {
+      trips.parentElement.insertBefore(panel, trips.nextElementSibling);
+    }
+    panel.open = budgetOverviewOpen;
+    // Folded, the one number worth keeping in view rides on the summary line.
+    const spare = Number(state.currentFunds) - state.trips.reduce((n, t) => n + tripCommitted(t), 0);
+    note.textContent = `${formatMoney(spare)} to spare`;
+  } else {
+    if (trips.previousElementSibling !== panel) trips.parentElement.insertBefore(panel, trips);
+    panel.open = true;
+    note.textContent = "";
+  }
 }
 
 /* A sticky bar rather than the card button alone: on a trip with a dozen expenses

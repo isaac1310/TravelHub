@@ -5047,6 +5047,29 @@
         ? true : "the line art is not underneath the painting";
     });
 
+    check("the cover scrim clears at its far end instead of washing everything", () => {
+      /* The scrim shipped as a full-surface wash and the paintings all but vanished.
+         The cause was measuring ELEMENT boxes rather than glyphs: the hero's text nodes
+         sit in full-width blocks, so sampling across them "found" text at 96% where
+         there is only empty space, and the whole surface got protected. This asserts the
+         gradient still ENDS light — the property that lets the artwork show. */
+      const hero = document.querySelector(".hero .cover__scrim");
+      const card = document.querySelector(".tripcard__cover .cover__scrim");
+      const bad = [];
+      for (const [name, el] of [["hero", hero], ["card", card]]) {
+        if (!el) continue;
+        const css = getComputedStyle(el).backgroundImage;
+        const alphas = [...css.matchAll(/rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\)/g)]
+          .map((m) => Number(m[1]));
+        if (!alphas.length) { bad.push(`${name}: no rgba stops found`); continue; }
+        const last = alphas[alphas.length - 1];
+        if (last > 0.45) bad.push(`${name} ends at alpha ${last} — that is a wash, not a falloff`);
+        if (Math.max(...alphas) - Math.min(...alphas) < 0.3) bad.push(`${name} barely varies: ${alphas.join(", ")}`);
+      }
+      if (!hero && !card) return skip("no cover on this screen");
+      return bad.length ? bad.join("; ") : true;
+    });
+
     check("the cover layers are not caught by the lift-above rule", () => {
       /* .hero > *:not(...) sets position:relative. A cover layer caught by it stops
          being absolutely positioned and lays out as an inset rectangle in the padded
