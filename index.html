@@ -4828,7 +4828,7 @@ function deleteItem(itemId) {
   const trip = state.trips.find((t) => t.id === item.tripId);
   const exp = linkedExpense(item);
   const msg = exp
-    ? `Delete "${item.title}"? Its ${formatMoney(exp.amount)} expense will be deleted too.`
+    ? `Delete "${item.title}"? Its ${formatMoney(exp.amount, exp.currency)} expense will be deleted too.`
     : `Delete "${item.title}"?`;
   appConfirm(msg, (ok) => {
     if (!ok) return;
@@ -7957,7 +7957,7 @@ function renderBookings() {
           const foot = exp
             ? `<div class="booking__foot">
                   <span class="payment-status payment-status--${expenseDisplayStatus(exp)}">${paymentStatusLabel(exp)}</span>
-                  <span class="booking__amount">${formatMoney(exp.amount)}</span>
+                  <span class="booking__amount">${formatMoney(exp.amount, exp.currency)}</span>
                 </div>`
             : `<div class="booking__foot">
                   <button type="button" class="btn btn--small btn--ghost booking__add-expense" data-add-expense="${escapeHtml(it.id)}">Add expense</button>
@@ -8595,7 +8595,7 @@ function diffStates(prevRaw, nextRaw) {
         || Number(p.feePercent) !== Number(t.feePercent)) {
       out.push({ screens: ["budget"], text: `changed currency settings on ${t.name}` });
     }
-    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "currency", "status", "amountPaid", "itemId", "settledHome"],
+    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "currency", "status", "amountPaid", "itemId", "settledHome", "settledDate"],
       (e) => `expense ${e.label}`, ["budget"], out);
   }
   for (const [id, p] of prevTrips) {

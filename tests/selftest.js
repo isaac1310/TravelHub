@@ -4718,6 +4718,44 @@
         ? true : "could not find the wrapped expenseMatchesFilter call in renderTripCard";
     });
 
+    check("no expense amount is ever formatted without its currency", () => {
+      /* The class, not the instance. formatMoney(n) defaults to shekels, which is right
+         for the fund pot and the rollover but silently turns a EUR 50 dinner into
+         "₪50" wherever an expense amount is passed bare. Two sites shipped that way
+         (the delete-booking confirm and the Bookings card footer) and survived a
+         careful read of every call site, so this scans the source instead.
+
+         Exemptions are named rather than pattern-guessed, so each one states why it
+         is already shekels:
+           amount   — a local in the funds / rollover dialogs; the pot is ILS
+           h.amount — a fund or roll history row; the ledger is ILS
+           r.amount — a categoryBreakdown row, already converted by expenseHome()
+         Anything else reaching formatMoney with a bare `.amount` is an expense in
+         its own currency and must pass that currency. */
+      const ILS_BY_CONSTRUCTION = new Set(["amount", "h.amount", "r.amount"]);
+      const src = [...document.querySelectorAll("script:not([src])")].map((x) => x.textContent).join("\n");
+      const bad = [];
+      for (const m of src.matchAll(/formatMoney\(([^()]*)\)/g)) {
+        const arg = m[1].trim();
+        if (arg.includes(",")) continue;                 // a currency was passed
+        if (!/\.amount$|^amount$/.test(arg)) continue;    // not an amount at all
+        if (ILS_BY_CONSTRUCTION.has(arg)) continue;
+        bad.push(m[0]);
+      }
+      return bad.length === 0 ? true : `bare: ${bad.join(" | ")}`;
+    });
+
+    check("correcting only a settlement DATE still shows up in What's new", () => {
+      /* diffCollection works from an allow-list. settledDate usually rides along with
+         a settledHome change, so the gap only bites when the amount was already right
+         and just the statement date is being fixed — it synced, but silently. */
+      const mk = (d) => ({ trips: [{ id: "t", name: "P", year: 2026, budget: 10, expenses: [
+        mkExp({ settledHome: 404, settledDate: d }) ] }],
+        items: [], checklist: [], fundHistory: [], rollHistory: [] });
+      return A.diffStates(mk("2026-05-04"), mk("2026-05-06")).length > 0
+        ? true : "changing only settledDate produced no What's-new entry";
+    });
+
     check("formatMoney still renders shekels when no code is passed", () => {
       const out = A.formatMoney(1234);
       if (!/₪|ILS/.test(out)) return `default render was "${out}"`;
