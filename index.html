@@ -368,7 +368,7 @@ h1, h2, h3, h4, .brand__name {
 .hero {
   position: relative; overflow: hidden;
   border-radius: var(--radius-lg);
-  padding: 2rem 1.8rem;
+  padding: 0;
   /* Charcoal, not white. The salmon behind it is a light surface: white measured 2.06:1 on it,
      charcoal measures 4.97 at the worst stop. Every descendant that used to be explicitly #fff
      now inherits this instead. */
@@ -385,7 +385,16 @@ h1, h2, h3, h4, .brand__name {
    even at the darkest stop and even at the 12.8px kicker, so nothing here needs a size or a
    badge to rescue it. See .hero and .tripcard__cover below for the text colour that depends
    on this; darkening these stops again would invert the problem rather than fix it. */
-.hero, .tripcard__cover { background: linear-gradient(135deg, #f2a08f 0%, #ef8e7f 45%, #e07a86 100%); }
+/* The gradient now sits behind the PAINTING rather than behind the text — it is only
+   ever seen while the image decodes, or when a city has no painting at all. */
+.hero__art, .tripcard__cover { background: linear-gradient(135deg, #f2a08f 0%, #ef8e7f 45%, #e07a86 100%); }
+.hero { background: var(--surface); box-shadow: var(--shadow); }
+.hero__art { position: relative; height: 190px; overflow: hidden; }
+.hero__body { padding: 1.3rem 1.5rem 1.5rem; color: var(--text); }
+@media (max-width: 900px) {
+  .hero__art { height: 150px; }
+  .hero__body { padding: 1.1rem 1.1rem 1.2rem; }
+}
 /* The monument sits behind the text and never intercepts a tap. */
 .cover__art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 /* The hero's lower-left is dense — title, dates, Edit pill, avatars, names — so
@@ -395,7 +404,8 @@ h1, h2, h3, h4, .brand__name {
 /* Height, not width, is what keeps this safe: the Edit pill sits at a fixed
    x in the meta row, so a width-only rule collided again as the viewport
    narrowed. Ending the art above that row clears it at every width. */
-.hero .cover__art { inset: 0 0 auto auto; width: 34%; height: 44%; }
+/* The art band is all art now, so the fallback blueprint fills it too. */
+.hero .cover__art { inset: 0; width: 100%; height: 100%; }
 /* The pastel painting, composited with the gradient rather than replacing it — see
    coverArt(). It sits above .cover__art (so the line art only shows if the image
    fails) and below every text node.
@@ -429,32 +439,11 @@ h1, h2, h3, h4, .brand__name {
    file has always promised, and both are LIGHTER than the first attempt, which measured
    4.88 / 4.61 while hiding far more of the painting — that is the element-box error
    being paid back. */
-/* Barely there. The words sit on .hero__plate now, so the scrim's only job is to stop a
-   very pale sky washing out the plate's own edge — not to carry contrast. */
-.hero .cover__scrim {
-  background: linear-gradient(to bottom, rgba(73,78,71,0.14) 0%, transparent 38%, rgba(73,78,71,0.10) 100%);
-}
+/* Nothing is printed on the hero painting any more, so it needs no scrim at all. */
+.hero .cover__scrim { display: none; }
 .hero .cover__photo { opacity: 1; }
-/* Paper from the gallery palette, and ink rather than the salmon-era heading colour:
-   on a warm painting a near-black reads heavier than the artwork wants. */
-/* 74% paper, not 94%: the plate and the Today card together were covering most of the
-   painting. Measured across all 19 paintings, downsampled to approximate the backdrop
-   blur, the worst composite still gives ink 4.78 — the blur is what makes this safe,
-   since the plate sits over a local average rather than a single bright pixel. */
-.hero__plate {
-  background: color-mix(in srgb, var(--pastel-paper) 74%, transparent);
-  backdrop-filter: blur(14px) saturate(1.08);
-  border: 1px solid color-mix(in srgb, var(--pastel-line) 55%, transparent);
-  border-radius: var(--radius); padding: 1rem 1.1rem; color: var(--pastel-ink);
-  max-width: 30rem;
-}
-/* Ink, NOT muted. --pastel-muted measured 3.37 against this plate even at 94% opacity
-   and never reaches 4.5 at any transparency — it is a colour for solid paper, which is
-   where the gallery uses it. */
-.hero__plate .hero__kicker { color: var(--pastel-ink); }
-.hero__plate .hero__title { color: var(--pastel-ink); }
-.hero__plate .hero__dates { color: var(--pastel-ink); }
-.hero__plate .hero__travellers { margin-top: 0.7rem; color: var(--pastel-ink); }
+.hero__kicker { color: var(--brand-text); }
+.hero__title { color: var(--heading); }
 /* The 96px card's title is right-aligned, so this one runs the other way: the left of
    the card — where the painting is most legible — stays clear. */
 /* No scrim on the card at all. Nothing is printed over the painting any more, so there
@@ -495,23 +484,10 @@ h1, h2, h3, h4, .brand__name {
 .hero__travellers { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
 /* Today card (v1.14.0), inside the hero while travelling. A white panel on the salmon so the
    text can be the normal charcoal-on-white and Maps links stay legible. */
-/* Down to 0.62 — between this and .hero__plate the painting was almost entirely covered.
-   This is the floor, and the floor is set by the card's own text colours rather than by
-   taste: measured over all 19 paintings, --muted bottoms out at 3.19 and --brand-text at
-   3.27 even at 0.70, and NEITHER reaches 4.5 at any transparency worth having. So the
-   text inside goes to --text (rules below) and the card can then drop to 0.62, where
-   --text still measures 6.27. Going further would mean text that fails over a bright sky. */
-.hero__today { margin-top: 1.1rem; background: rgba(255,255,255,0.62); backdrop-filter: blur(16px) saturate(1.08); color: var(--text); border-radius: var(--radius); padding: 0.85rem 0.95rem; display: grid; gap: 0.5rem; }
-/* --muted and --brand-text are colours for an opaque surface. On a translucent card over
-   a painting they are the first things to become unreadable, so inside this card they
-   are not used: weight and letter-spacing carry the hierarchy instead of lightness. */
-.hero__today .today__sub, .hero__today .today__time,
-.hero__today .today__empty, .hero__today .today__also { color: var(--text); }
-.hero__today .today__label, .hero__today .today__maps { color: var(--heading); }
-/* Full-strength --text, no opacity: opacity on text blends it toward the backdrop, which
-   is the same contrast loss as using a lighter colour and undoes the point of the rules
-   above. The uppercase letter-spacing is what marks it as a heading. */
-.today__head { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--text); }
+/* On the solid body now, not over a painting, so it is a plain card again and the
+   muted/brand text colours inside it are safe to use as designed. */
+.hero__today { margin-top: 1.2rem; background: var(--cream, #fdf8f4); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); padding: 0.85rem 0.95rem; display: grid; gap: 0.5rem; }
+.today__head { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--muted); }
 .today__row { display: grid; grid-template-columns: 3.4rem 22px 1fr auto; gap: 0.5rem; align-items: center; min-height: 44px; }
 .today__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--brand-text); }
 .today__icon svg { width: 20px; height: 20px; color: var(--heading); display: block; }
@@ -1149,6 +1125,16 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
   display: inline-block; margin-inline-start: 0.3rem; color: #3f8a63;
   font-weight: 700; font-size: 0.85em; vertical-align: baseline;
 }
+/* Always visible, unlike .act__actions which only appears on hover and is therefore
+   invisible on a phone — where marking a place off as you leave it is the whole point. */
+.act__tick {
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--border-strong, #d9cfc7); background: var(--surface, #fff);
+  color: var(--muted); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+}
+.act__tick svg { width: 18px; height: 18px; }
+.act__tick.is-on { background: #3f8a63; border-color: #3f8a63; color: #fff; }
 /* ---- day sheet ---- */
 .day__sheet {
   border: 0; background: transparent; color: var(--muted); cursor: pointer;
@@ -1280,7 +1266,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
      banner about one trip and nothing you could act on. Tightened on SHORT viewports only, by
      height rather than width: a tall phone has the room to spare and keeps the full hero. */
   @media (max-height: 780px) {
-    .hero { padding: 1.1rem 1.2rem; }
+    /* Padding moved to .hero__body when the art became a full-bleed band. */
+    .hero { padding: 0; }
+    .hero__body { padding: 1.1rem 1.2rem; }
     .hero__title { font-size: 1.35rem; margin: 0.15rem 0 0.35rem; }
     .hero__travellers { margin-top: 0.55rem; }
     .hero::after { display: none; }
@@ -1299,7 +1287,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
      to a 44px hit height and missed these because they are .btn--small, not .icon-btn--small.
      min-height does not affect width, so nothing rewraps; the row is 4px taller. */
   .booking-list, .trip-cards, .trips-grid, .members { grid-template-columns: 1fr; }
-  .hero { padding: 1.5rem 1.2rem; }
+  .hero { padding: 0; }
+  .hero__body { padding: 1.5rem 1.2rem; }
 }
 
 @media (max-width: 380px) {
@@ -4983,11 +4972,7 @@ function handleItemSubmit(e) {
      Target the day explicitly rather than trusting the scroll position to survive. */
   const landedOn = item.date;
   render();
-  if (landedOn) {
-    timelineDayIso = landedOn;
-    dayChosen = true;
-    requestAnimationFrame(() => { markActiveDayChip(landedOn); scrollToDay(landedOn); });
-  }
+  if (landedOn) landOnDay(landedOn, { chosen: true });
   if (item.location.name && item.location.lat === null) {
     geocodeItem(item.id);
   }
@@ -6521,13 +6506,17 @@ function renderTripsScreen() {
     }[timing.state];
     hero.innerHTML = `
       <div class="hero">
-        ${coverArt(trip)}
-        <span class="hero__plane">${ICONS.plane}</span>
-        <!-- The text gets its own surface instead of being laid over the painting. That is
-             how the pastel gallery presents these — a plate of paper under the words — and
-             it is the only way the artwork can be seen whole while the type stays readable
-             at any brightness the painting happens to have there. -->
-        <div class="hero__plate">
+        <!-- The painting gets a band of its own and the words sit BELOW it, which is how
+             the pastel gallery lays these out and what finally made the trip cards work.
+             A translucent plate over the image was still a panel over the image: the art
+             could only be seen through something. Here nothing is on top of it, so the
+             painting is simply visible and the type simply legible — no scrim, no blur,
+             and no contrast that depends on which city you are looking at. -->
+        <div class="hero__art">
+          ${coverArt(trip)}
+          <span class="hero__plane">${ICONS.plane}</span>
+        </div>
+        <div class="hero__body">
           <div class="hero__kicker">${escapeHtml(kicker)}</div>
           <h2 class="hero__title">${nameWithCity(trip)}</h2>
           <div class="hero__meta">
@@ -6535,8 +6524,8 @@ function renderTripsScreen() {
             <button type="button" class="pill" data-edit-trip="${trip.id}">Edit</button>
           </div>
           <div class="hero__travellers">${travellers}<span style="font-weight:600">${escapeHtml((meta.travelers || []).join(", "))}</span></div>
+          ${timing.state === "travelling" ? renderTodayCard(trip, todayLocalISO(), nowMinutes()) : ""}
         </div>
-        ${timing.state === "travelling" ? renderTodayCard(trip, todayLocalISO(), nowMinutes()) : ""}
       </div>`;
     hero.querySelector("[data-edit-trip]")?.addEventListener("click", () => openTripDialog(trip));
     hero.querySelector("[data-today-add]")?.addEventListener("click", () =>
@@ -7037,7 +7026,10 @@ function openTimelineOnToday(isos) {
   if (!isos.includes(today)) return;
   timelineAutoLanded = true;
   timelineDayIso = today;
-  requestAnimationFrame(() => { markActiveDayChip(today); scrollToDay(today); });
+  markActiveDayChip(today);
+  // chosen:false — arriving on today is not the user picking a day, so Maps must not
+  // inherit it as a filter (see activateSubTab).
+  landOnDay(today, { chosen: false });
 }
 
 /* ============================================================
@@ -7226,6 +7218,10 @@ function itemCard({ item, checkout }, stopNo) {
         <span class="act__sub">${subParts.join(" · ")}</span>
       </span>
       ${time ? `<span class="act__time">${escapeHtml(time)}</span>` : ""}
+      ${checkout ? "" : `<button type="button" class="act__tick ${visited ? "is-on" : ""}" data-visit-item="${item.id}"
+          aria-pressed="${visited ? "true" : "false"}" title="${visited ? "Mark not visited" : "Mark visited"}"
+          aria-label="${visited ? "Mark" : "Mark"} ${escapeHtml(item.title)} ${visited ? "not visited" : "visited"}"
+        ><svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4 10-10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`}
       ${checkout ? "" : `<button type="button" class="act__more" data-item-more="${item.id}" aria-label="Actions for ${escapeHtml(item.title)}" title="Actions"><svg viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg></button>`}
       <span class="act__actions">
         ${checkout ? "" : `
@@ -7378,6 +7374,42 @@ function scrollToDay(iso) {
   document.getElementById(`day-${iso}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/* Land on a day and STAY there. scrollToDay alone fires once and hopes: the cover
+   images finish decoding mid-animation, the document grows, and the smooth scroll
+   stops short — leaving the intended day a couple of hundred pixels below the header.
+   The scroll spy then reads the day BEFORE it, which is correct for that position and
+   completely wrong as an answer, and sets dayChosen, which is what leaks into the Maps
+   day filter.
+
+   So: nudge instantly until the day actually sits under the header or the page runs
+   out of scroll, refreshing the spy's guard each pass, and only then assert the day.
+   Instant rather than smooth because this is a correction, not a journey — and because
+   a smooth scroll would be fighting the next correction. */
+function landOnDay(iso, opts) {
+  const chosen = !!(opts && opts.chosen);
+  const settle = (tries) => {
+    const el = document.getElementById(`day-${iso}`);
+    if (!el) return;
+    programmaticScrollUntil = nowMs() + 500; // keep the spy quiet while we converge
+    const line = stickyHeaderHeight() + 8;
+    const delta = el.getBoundingClientRect().top - line;
+    const room = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+    const canMove = delta < 0 ? window.scrollY > 0 : room > 1;
+    if (tries > 0 && Math.abs(delta) > 4 && canMove) {
+      window.scrollBy({ top: delta, behavior: "auto" });
+      requestAnimationFrame(() => settle(tries - 1));
+      return;
+    }
+    /* Assert the day even when the page could not bring it to the line — a short final
+       day never reaches it, and the answer is still "you are on that day". */
+    timelineDayIso = iso;
+    if (chosen) dayChosen = true;
+    markActiveDayChip(iso);
+    programmaticScrollUntil = nowMs() + 250; // outlast the last scroll event
+  };
+  requestAnimationFrame(() => settle(8));
+}
+
 function markActiveDayChip(iso) {
   const slot = document.getElementById("daystrip-slot");
   if (!slot) return;
@@ -7475,6 +7507,12 @@ function bindItemActions(scope, trip) {
     btn.addEventListener("click", () =>
       moveItemInDay(trip, btn.getAttribute("data-move-item"), Number(btn.getAttribute("data-move-dir")))
     )
+  );
+  scope.querySelectorAll("[data-visit-item]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation(); // the card itself is an edit target
+      toggleVisited(btn.getAttribute("data-visit-item"));
+    })
   );
   scope.querySelectorAll("[data-item-more]").forEach((btn) =>
     btn.addEventListener("click", () => openItemActionsSheet(trip, btn.getAttribute("data-item-more")))
@@ -8072,6 +8110,15 @@ function renderMapsTab(trip) {
         ${listHtml}
       </div>
     </div>`;
+
+  /* Same add affordance as the timeline. Standing in front of somewhere you want to keep,
+     the map is as likely to be the screen you are on — and it already knows which day you
+     are filtered to, so it can prefill better than the timeline can. */
+  view.insertAdjacentHTML("beforeend",
+    `<button type="button" class="fab" data-map-add aria-label="Add to day"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`);
+  view.querySelector("[data-map-add]")?.addEventListener("click", () => {
+    openItemDialog(trip.id, null, { date: defaultAddDate(dayIsos) });
+  });
 
   $("btn-geo")?.addEventListener("click", toggleGeo);
 

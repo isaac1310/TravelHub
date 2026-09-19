@@ -3262,23 +3262,31 @@
       return stops.filter((s) => Number((s.match(/-?[\d.]+/g) || [])[3] ?? 1) > 0.5);
     }
 
+    /* v2.0 moved every one of these off the gradient: the hero's words sit on .hero__body
+       and the trip card's title below its cover, because the cover is a painting now. So
+       the check is no longer "does the text survive the gradient" — it is that the text
+       is on an opaque surface at all, and clears 4.5 against it. A gradient behind glyphs
+       would be a REGRESSION here, not something to measure. */
     [
-      { sel: ".hero", label: "hero", minRatio: 4.5 },
-      { sel: ".tripcard__cover h3", label: "trip-card cover title", minRatio: 3 },
-    ].forEach(({ sel, label, minRatio }) => {
-      check(`${label} text clears ${minRatio}:1 on every stop of the coral gradient`, () => {
+      { sel: ".hero__body", label: "hero body" },
+      { sel: ".tripcard__name", label: "trip-card title" },
+    ].forEach(({ sel, label }) => {
+      check(`${label} text sits on an opaque surface and clears 4.5:1`, () => {
         const el = document.querySelector(sel);
         if (!el) return skip(`no ${label} on screen`);
-        // The gradient is painted by .hero / .tripcard__cover, which may be an ancestor.
-        const painted = el.closest(".hero, .tripcard__cover");
-        const stops = gradientStops(painted);
-        if (!stops.length) return `no gradient stops found behind the ${label}`;
-        const colour = getComputedStyle(el).color;
-        const bad = stops
-          .map((s) => ({ s, r: ratio(colour, s) }))
-          .filter((x) => x.r < minRatio)
-          .map((x) => `${x.s}=${x.r.toFixed(2)}`);
-        return bad.length ? `${label} text ${colour} fails on ${bad.join(", ")}` : true;
+        if (el.closest(".hero__art, .tripcard__cover")) return `${label} is inside the painting band`;
+        // Walk up for the first element that actually paints a background.
+        let bg = null, n = el;
+        while (n && n !== document.documentElement) {
+          const c = getComputedStyle(n).backgroundColor;
+          const a = Number((c.match(/-?[\d.]+/g) || [])[3] ?? 1);
+          if (a > 0.95) { bg = c; break; }
+          if (gradientStops(n).length) return `${label} sits on a gradient — it should be on a flat surface`;
+          n = n.parentElement;
+        }
+        if (!bg) return `${label} has no opaque surface behind it`;
+        const r = ratio(getComputedStyle(el).color, bg);
+        return r >= 4.5 ? true : `${label} ${getComputedStyle(el).color} on ${bg} = ${r.toFixed(2)}`;
       });
     });
 
@@ -4920,8 +4928,8 @@
 
     check("adding a stop returns the view to the day it landed on", () => {
       const src = String(handleItemSubmit);
-      return /scrollToDay\(landedOn\)/.test(src)
-        ? true : "handleItemSubmit does not scroll back to the item's day";
+      return /landOnDay\(landedOn/.test(src)
+        ? true : "handleItemSubmit does not return the view to the item's day";
     });
 
     check("repeated map renders never leak a second geolocation watcher", () => {
@@ -5054,16 +5062,16 @@
          surface and the words get theirs. So the invariant is not "the scrim is light" —
          it is that no bare text is laid over the image at all. */
       const bad = [];
-      for (const sel of [".hero", ".tripcard__cover"]) {
+      // Only the bands that actually hold a painting — .hero__body is a flat surface.
+      for (const sel of [".hero__art", ".tripcard__cover"]) {
         const el = document.querySelector(sel);
         if (!el || !el.querySelector(".cover__photo")) continue;
         const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
         let n;
         while ((n = w.nextNode())) {
           if (!n.nodeValue.trim()) continue;
-          const p = n.parentElement;
-          // Anything with its own backing (plate, Today card, tags, pills) is fine.
-          if (p.closest(".hero__plate, .hero__today, .tag, .pill, .btn, .avatar")) continue;
+          // Chips and pills carry their own opaque backgrounds.
+          if (n.parentElement.closest(".tag, .pill, .btn, .avatar")) continue;
           bad.push(`${sel}: "${n.nodeValue.trim().slice(0, 24)}" sits directly on the painting`);
         }
       }
@@ -5079,13 +5087,15 @@
       if (!hero) return skip("no featured trip on this screen");
       const photo = hero.querySelector(".cover__photo");
       const scrim = hero.querySelector(".cover__scrim");
-      if (!photo || !scrim) return skip("cover layers not rendered here");
-      for (const [name, el] of [["photo", photo], ["scrim", scrim]]) {
-        if (getComputedStyle(el).position !== "absolute") return `the ${name} is not absolutely positioned`;
-      }
-      const hb = hero.getBoundingClientRect(), pb = photo.getBoundingClientRect();
-      return Math.abs(pb.width - hb.width) < 2 && Math.abs(pb.height - hb.height) < 2
-        ? true : `the painting is ${Math.round(pb.width)}x${Math.round(pb.height)} inside a ${Math.round(hb.width)}x${Math.round(hb.height)} hero`;
+      if (!photo) return skip("cover layers not rendered here");
+      if (scrim && getComputedStyle(scrim).display !== "none"
+          && getComputedStyle(scrim).position !== "absolute") return "the scrim is not absolutely positioned";
+      if (getComputedStyle(photo).position !== "absolute") return "the photo is not absolutely positioned";
+      // It fills its own band now, not the whole hero — the text lives below the band.
+      const band = photo.closest(".hero__art") || hero;
+      const bb = band.getBoundingClientRect(), pb = photo.getBoundingClientRect();
+      return Math.abs(pb.width - bb.width) < 2 && Math.abs(pb.height - bb.height) < 2
+        ? true : `the painting is ${Math.round(pb.width)}x${Math.round(pb.height)} inside a ${Math.round(bb.width)}x${Math.round(bb.height)} band`;
     });
 
     check("the day sheet escapes every field that comes from user text", () => {
