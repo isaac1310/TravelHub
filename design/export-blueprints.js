@@ -32,7 +32,9 @@ const LABELS = {
   vienna: ["Vienna", "St. Stephen's · Riesenrad"],
   athens: ["Athens", "Parthenon · Acropolis rock · olive tree"],
   newyork: ["New York", "Empire State · midtown block"],
-  telaviv: ["Tel Aviv", "Azrieli towers · palm · shoreline"],
+  // Reconciled with pastel/artworks.json — the painting was re-generated for Dizengoff
+  // Square, and the two catalogs had drifted apart on this one city.
+  telaviv: ["Tel Aviv", "Dizengoff Square · Fire and Water Fountain · Cinema Hotel"],
   jerusalem: ["Jerusalem", "Dome of the Rock · Old City wall"],
   budapest: ["Budapest", "Parliament dome · Chain Bridge"],
   berlin: ["Berlin", "Fernsehturm · Brandenburg Gate"],

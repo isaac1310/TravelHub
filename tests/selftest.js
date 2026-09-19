@@ -2818,7 +2818,8 @@
         const dlg = document.getElementById("dialog-item");
         if (!dlg.open) return "nothing opened";
         const title = document.getElementById("item-dialog-title").textContent;
-        return /Add booking/.test(title) ? true : `the dialog is titled "${title}"`;
+        // v2.0 renamed this: a stop can be a landmark or an attraction, not only a booking.
+        return /Add to day/.test(title) ? true : `the dialog is titled "${title}"`;
       }));
 
     check("Bookings asks which trip, since it spans all of them", () =>
@@ -3261,23 +3262,31 @@
       return stops.filter((s) => Number((s.match(/-?[\d.]+/g) || [])[3] ?? 1) > 0.5);
     }
 
+    /* v2.0 moved every one of these off the gradient: the hero's words sit on .hero__body
+       and the trip card's title below its cover, because the cover is a painting now. So
+       the check is no longer "does the text survive the gradient" — it is that the text
+       is on an opaque surface at all, and clears 4.5 against it. A gradient behind glyphs
+       would be a REGRESSION here, not something to measure. */
     [
-      { sel: ".hero", label: "hero", minRatio: 4.5 },
-      { sel: ".tripcard__cover h3", label: "trip-card cover title", minRatio: 3 },
-    ].forEach(({ sel, label, minRatio }) => {
-      check(`${label} text clears ${minRatio}:1 on every stop of the coral gradient`, () => {
+      { sel: ".hero__body", label: "hero body" },
+      { sel: ".tripcard__name", label: "trip-card title" },
+    ].forEach(({ sel, label }) => {
+      check(`${label} text sits on an opaque surface and clears 4.5:1`, () => {
         const el = document.querySelector(sel);
         if (!el) return skip(`no ${label} on screen`);
-        // The gradient is painted by .hero / .tripcard__cover, which may be an ancestor.
-        const painted = el.closest(".hero, .tripcard__cover");
-        const stops = gradientStops(painted);
-        if (!stops.length) return `no gradient stops found behind the ${label}`;
-        const colour = getComputedStyle(el).color;
-        const bad = stops
-          .map((s) => ({ s, r: ratio(colour, s) }))
-          .filter((x) => x.r < minRatio)
-          .map((x) => `${x.s}=${x.r.toFixed(2)}`);
-        return bad.length ? `${label} text ${colour} fails on ${bad.join(", ")}` : true;
+        if (el.closest(".hero__art, .tripcard__cover")) return `${label} is inside the painting band`;
+        // Walk up for the first element that actually paints a background.
+        let bg = null, n = el;
+        while (n && n !== document.documentElement) {
+          const c = getComputedStyle(n).backgroundColor;
+          const a = Number((c.match(/-?[\d.]+/g) || [])[3] ?? 1);
+          if (a > 0.95) { bg = c; break; }
+          if (gradientStops(n).length) return `${label} sits on a gradient — it should be on a flat surface`;
+          n = n.parentElement;
+        }
+        if (!bg) return `${label} has no opaque surface behind it`;
+        const r = ratio(getComputedStyle(el).color, bg);
+        return r >= 4.5 ? true : `${label} ${getComputedStyle(el).color} on ${bg} = ${r.toFixed(2)}`;
       });
     });
 
@@ -3371,8 +3380,8 @@
       const add = document.getElementById("btn-appbar-add");
       if (!add) return "btn-appbar-add missing";
       const expected = {
-        trips: "New trip", itinerary: "Add booking", budget: "Add funds",
-        bookings: "Add booking", family: "Add checklist item",
+        trips: "New trip", itinerary: "Add to day", budget: "Add funds",
+        bookings: "Add to day", family: "Add checklist item",
       };
       const startHash = location.hash;
       const wrong = [];
@@ -4217,7 +4226,10 @@
       openItemDialog(tripId);
       const title = document.getElementById("item-dialog-title").textContent;
       closeDialog(document.getElementById("dialog-item"));
-      if (title !== "Add booking") r.push(`dialog title "${title}"`);
+      /* The SCREEN is still Bookings — that word was the point of v1.15.0 and has not
+         changed. The dialog is what got renamed in v2.0, because what you add to a day
+         is as often a landmark or a viewpoint as a booking. */
+      if (title !== "Add to day") r.push(`dialog title "${title}"`);
       const nav = [...document.querySelectorAll("[data-nav] span")].map((s) => s.textContent);
       if (!nav.includes("Bookings")) r.push(`nav: ${nav.join(",")}`);
       return r.length ? r.join("; ") : true;
@@ -4569,6 +4581,606 @@
   /* ===== 2. Trust boundary — everything a shared payload controls ===== */
 
   function trustBoundary() {
+    group("v2.0-money");
+
+    /* A trip built from scratch so the assertions never depend on the real data
+       that happens to be in localStorage on this origin. */
+    const A = window.VacationApp;
+    const mkTrip = (over) => A.normalizeState({
+      trips: [Object.assign({
+        id: "t1", name: "Paris", year: 2026, budget: 10000,
+        spendCurrency: "EUR", rates: { EUR: 4 }, feePercent: 1,
+        expenses: [],
+      }, over || {})],
+      items: [], checklist: [], fundHistory: [], rollHistory: [],
+    }).trips[0];
+    const mkExp = (over) => Object.assign({
+      id: "e1", label: "Dinner", category: "Food", amount: 100, currency: "EUR",
+      status: "paid", amountPaid: 100, paidDate: "2026-05-02", settledHome: null, settledDate: "",
+    }, over || {});
+
+    check("migration stamps ILS and changes no number", () => {
+      // A v1.15.3-shaped payload: expenses carry a bare amount and no currency.
+      const legacy = {
+        trips: [{ id: "t", name: "Rome", year: 2025, budget: 5000, expenses: [
+          { id: "a", label: "Hotel", category: "Hotel", amount: 3116, status: "paid", amountPaid: 3116 },
+          { id: "b", label: "Food", category: "Food", amount: 240, status: "booked", amountPaid: 0 },
+        ] }],
+        items: [], checklist: [], fundHistory: [], rollHistory: [],
+      };
+      const out = A.normalizeState(structuredClone(legacy));
+      const t = out.trips[0];
+      if (t.budget !== 5000) return `budget changed to ${t.budget}`;
+      if (t.expenses.some((e) => e.currency !== "ILS")) return "an expense was not stamped ILS";
+      if (t.expenses[0].amount !== 3116 || t.expenses[1].amount !== 240) return "an amount changed";
+      // Totals must be identical to the pre-migration arithmetic.
+      if (A.tripCommitted(t) !== 3356) return `committed ${A.tripCommitted(t)}, expected 3356`;
+      if (A.tripPaid(t) !== 3116) return `paid ${A.tripPaid(t)}, expected 3116`;
+      return true;
+    });
+
+    check("migration is idempotent — a second pass changes nothing", () => {
+      const legacy = { trips: [{ id: "t", name: "Rome", year: 2025, budget: 5000,
+        expenses: [{ id: "a", label: "Hotel", category: "Hotel", amount: 3116, status: "paid", amountPaid: 3116 }] }],
+        items: [], checklist: [], fundHistory: [], rollHistory: [] };
+      const once = A.normalizeState(structuredClone(legacy));
+      const twice = A.normalizeState(structuredClone(once));
+      return JSON.stringify(once) === JSON.stringify(twice) ? true : "second pass differed";
+    });
+
+    check("migration repairs an entity even when the version already looks current", () => {
+      /* merge3 sets version = Math.max(...), so a document can carry the new version
+         while still holding a row that arrived without a currency. Guarding on the
+         version instead of the entity would skip exactly that row. */
+      const doc = { version: 99, trips: [{ id: "t", name: "X", year: 2026, budget: 10,
+        expenses: [{ id: "a", label: "L", category: "Food", amount: 5 }] }],
+        items: [], checklist: [], fundHistory: [], rollHistory: [] };
+      return A.normalizeState(doc).trips[0].expenses[0].currency === "ILS"
+        ? true : "a bare expense under a current version was left unstamped";
+    });
+
+    check("an unknown rate is 0, never 1", () => {
+      const t = mkTrip({ rates: {} });
+      if (A.rateFor(t, "EUR") !== 0) return `rateFor returned ${A.rateFor(t, "EUR")}`;
+      const h = A.expenseHome(t, mkExp());
+      return h.known === false ? true : "expenseHome claimed to know an unset rate";
+    });
+
+    check("unrated rows are EXCLUDED from totals, not summed as zero", () => {
+      /* The dangerous direction: summing value 0 would show a EUR trip with no rate
+         as "nothing committed, whole budget left". */
+      const t = mkTrip({ rates: {}, expenses: [mkExp()] });
+      const agg = A.tripCommittedHome(t);
+      if (agg.unrated !== 1) return `unrated count ${agg.unrated}, expected 1`;
+      if (agg.value !== 0) return `value ${agg.value} — an unrated row leaked into the total`;
+      // and the count must be available to disclose, which is the whole point
+      return true;
+    });
+
+    check("malformed rates are treated as unknown, not as a scale factor", () => {
+      for (const bad of [0, -3, "abc", null, undefined, NaN, Infinity]) {
+        const t = mkTrip({ rates: { EUR: bad } });
+        if (A.rateFor(t, "EUR") !== 0) return `rate ${String(bad)} produced ${A.rateFor(t, "EUR")}`;
+      }
+      return true;
+    });
+
+    check("a foreign expense converts with the card fee", () => {
+      const t = mkTrip({ expenses: [mkExp()] });        // 100 EUR, rate 4, fee 1%
+      const h = A.expenseHome(t, t.expenses[0]);
+      return h.known && !h.settled && Math.abs(h.value - 404) < 1e-9
+        ? true : `got ${h.value}, expected 404`;
+    });
+
+    check("settling replaces the estimate and nothing else", () => {
+      const t = mkTrip({ expenses: [mkExp()] });
+      const before = A.tripCommitted(t);
+      t.expenses[0].settledHome = 412.5;
+      const h = A.expenseHome(t, t.expenses[0]);
+      if (!h.settled || h.value !== 412.5) return "settled value not used";
+      if (A.tripCommitted(t) !== 412.5) return `total ${A.tripCommitted(t)}, expected 412.5`;
+      return before === 404 ? true : `estimate was ${before}`;
+    });
+
+    check("settledHome of 0 is not 'settled'", () => {
+      const e = A.normalizeExpense(mkExp({ settledHome: 0 }));
+      return e.settledHome === null && e.settledDate === "" ? true : "zero was accepted as a settlement";
+    });
+
+    check("settlement never pro-rata: a partly-paid expense keeps the estimate path", () => {
+      /* Settlement is all-or-nothing — settledHome is the charge for the WHOLE
+         expense, so it may only stand in for "paid" once the expense is fully paid. */
+      const t = mkTrip({ expenses: [mkExp({ status: "booked", amountPaid: 40, settledHome: 412.5 })] });
+      const paid = A.expensePaidHome(t, t.expenses[0]);
+      return !paid.settled && Math.abs(paid.value - 40 * 4 * 1.01) < 1e-9
+        ? true : `paid-home was ${paid.value} (settled=${paid.settled})`;
+    });
+
+    check("settled/unsettled is independent of paid/unpaid in both directions", () => {
+      const t = mkTrip({ rates: { EUR: 4 } });
+      // paid but not settled -> needs settling
+      const a = mkExp({ status: "paid", amountPaid: 100, settledHome: null });
+      // planned, nothing paid -> no statement line to wait for
+      const b = mkExp({ status: "planned", amountPaid: 0, settledHome: null });
+      // paid AND settled -> done
+      const c = mkExp({ status: "paid", amountPaid: 100, settledHome: 400 });
+      if (!A.expenseNeedsSettling(t, a)) return "a paid foreign expense was not flagged";
+      if (A.expenseNeedsSettling(t, b)) return "an unpaid planned expense was flagged";
+      if (A.expenseNeedsSettling(t, c)) return "an already-settled expense was flagged";
+      // and an ILS expense never needs settling, whatever its status
+      if (A.expenseNeedsSettling(t, mkExp({ currency: "ILS" }))) return "a shekel expense was flagged";
+      return true;
+    });
+
+    check("expenseMatchesFilter is never used as a raw filter callback", () => {
+      /* Array.prototype.filter passes the INDEX as its second argument, so
+         `.filter(expenseMatchesFilter)` hands a number in where `trip` belongs.
+         Asserted at the SOURCE, not by comparing results: today the unsettled
+         predicate happens not to read `trip`, so both forms agree by luck and a
+         behavioural test would pass while the bug sat there waiting for the first
+         rate-dependent filter. */
+      const src = String(renderTripCard);
+      const m = src.match(/\.filter\(\s*expenseMatchesFilter\s*\)/);
+      if (m) return "renderTripCard passes expenseMatchesFilter straight to .filter";
+      return /\.filter\(\s*\(\s*e\s*\)\s*=>\s*expenseMatchesFilter\(\s*e\s*,\s*trip\s*\)\s*\)/.test(src)
+        ? true : "could not find the wrapped expenseMatchesFilter call in renderTripCard";
+    });
+
+    check("no expense amount is ever formatted without its currency", () => {
+      /* The class, not the instance. formatMoney(n) defaults to shekels, which is right
+         for the fund pot and the rollover but silently turns a EUR 50 dinner into
+         "₪50" wherever an expense amount is passed bare. Two sites shipped that way
+         (the delete-booking confirm and the Bookings card footer) and survived a
+         careful read of every call site, so this scans the source instead.
+
+         Exemptions are named rather than pattern-guessed, so each one states why it
+         is already shekels:
+           amount   — a local in the funds / rollover dialogs; the pot is ILS
+           h.amount — a fund or roll history row; the ledger is ILS
+           r.amount — a categoryBreakdown row, already converted by expenseHome()
+         Anything else reaching formatMoney with a bare `.amount` is an expense in
+         its own currency and must pass that currency. */
+      const ILS_BY_CONSTRUCTION = new Set(["amount", "h.amount", "r.amount"]);
+      const src = [...document.querySelectorAll("script:not([src])")].map((x) => x.textContent).join("\n");
+      const bad = [];
+      for (const m of src.matchAll(/formatMoney\(([^()]*)\)/g)) {
+        const arg = m[1].trim();
+        if (arg.includes(",")) continue;                 // a currency was passed
+        if (!/\.amount$|^amount$/.test(arg)) continue;    // not an amount at all
+        if (ILS_BY_CONSTRUCTION.has(arg)) continue;
+        bad.push(m[0]);
+      }
+      return bad.length === 0 ? true : `bare: ${bad.join(" | ")}`;
+    });
+
+    check("correcting only a settlement DATE still shows up in What's new", () => {
+      /* diffCollection works from an allow-list. settledDate usually rides along with
+         a settledHome change, so the gap only bites when the amount was already right
+         and just the statement date is being fixed — it synced, but silently. */
+      const mk = (d) => ({ trips: [{ id: "t", name: "P", year: 2026, budget: 10, expenses: [
+        mkExp({ settledHome: 404, settledDate: d }) ] }],
+        items: [], checklist: [], fundHistory: [], rollHistory: [] });
+      return A.diffStates(mk("2026-05-04"), mk("2026-05-06")).length > 0
+        ? true : "changing only settledDate produced no What's-new entry";
+    });
+
+    check("a shekel trip still shows how to reach an exchange rate", () => {
+      /* Shipped with the rate, fee AND hint all hidden until the currency had already
+         been changed, behind a bare "ILS" pill that did not look pressable — so there
+         was no visible path to a rate and the feature could not be found. */
+      const trip = state.trips[0];
+      if (!trip) return skip("no trip to open");
+      openTripDialog(trip);
+      try {
+        setTripCurrency("ILS");
+        const hint = document.getElementById("trip-rate-hint");
+        const btn = document.getElementById("trip-currency-btn");
+        if (hint.hidden || !hint.textContent.trim()) return "the hint is hidden on a shekel trip";
+        if (!/currency/i.test(hint.textContent)) return `hint does not name the next step: "${hint.textContent}"`;
+        if (btn.tagName !== "BUTTON") return "the currency control is not a button";
+        // and picking a foreign currency must reveal the rate
+        setTripCurrency("EUR");
+        const rate = document.getElementById("form-trip").rate;
+        if (rate.hidden) return "the rate field stayed hidden on a foreign trip";
+        return /EUR/.test(hint.textContent) ? true : `hint did not name the currency: "${hint.textContent}"`;
+      } finally {
+        setTripCurrency(trip.spendCurrency || "ILS");
+        closeDialog(document.getElementById("dialog-trip"));
+      }
+    });
+
+    check("formatMoney still renders shekels when no code is passed", () => {
+      const out = A.formatMoney(1234);
+      if (!/₪|ILS/.test(out)) return `default render was "${out}"`;
+      const eur = A.formatMoney(1234, "EUR");
+      return /€|EUR/.test(eur) ? true : `EUR render was "${eur}"`;
+    });
+
+    check("category bars use the same units and filter as their denominator", () => {
+      /* Numerator and denominator must move together: a raw-amount numerator over a
+         converted denominator gives bars that are wrong but plausibly shaped. */
+      const t = mkTrip({ expenses: [
+        mkExp({ id: "e1", category: "Food", amount: 100, currency: "EUR" }),
+        mkExp({ id: "e2", category: "Gifts", amount: 404, currency: "ILS" }),
+      ] });
+      const rows = A.categoryBreakdown(t);
+      const food = rows.find((r) => r.category === "Food");
+      const gifts = rows.find((r) => r.category === "Gifts");
+      if (!food || !gifts) return "a category row is missing";
+      if (Math.abs(food.amount - 404) > 1e-9) return `Food summed to ${food.amount}, expected 404`;
+      if (Math.abs(food.percent - 50) > 0.001) return `Food was ${food.percent}%, expected 50`;
+      return true;
+    });
+
+    check("unrated rows are excluded from the category bars too", () => {
+      const t = mkTrip({ rates: {}, expenses: [mkExp({ category: "Food" })] });
+      return A.categoryBreakdown(t).length === 0
+        ? true : "an unrated row produced a category bar";
+    });
+
+    check("Groceries and Gifts are real categories, not folded into Other", () => {
+      for (const c of ["Groceries", "Gifts"]) {
+        if (A.normalizeExpense({ id: "x", category: c, amount: 1 }).category !== c) return `${c} normalised away`;
+        const opt = document.querySelector(`#form-expense select[name="category"] option[value="${c}"]`);
+        if (!opt) return `${c} missing from the dialog's option list`;
+      }
+      return true;
+    });
+
+    check("changing the spend currency leaves every existing expense untouched", () => {
+      const t = mkTrip({ expenses: [mkExp(), mkExp({ id: "e2", currency: "ILS", amount: 50 })] });
+      const before = JSON.stringify(t.expenses);
+      t.spendCurrency = "USD";
+      A.normalizeState({ trips: [t], items: [], checklist: [], fundHistory: [], rollHistory: [] });
+      return JSON.stringify(t.expenses) === before ? true : "an expense changed";
+    });
+
+    check("visitedAt survives normalize and is a timestamp, not a boolean", () => {
+      const it = A.normalizeItem({ id: "i1", tripId: "t1", type: "attraction", title: "Louvre",
+        date: "2026-05-02", visitedAt: "2026-05-02T10:00:00.000Z" });
+      if (it.visitedAt !== "2026-05-02T10:00:00.000Z") return "visitedAt was dropped";
+      // a boolean from a hostile/old payload must not survive as one
+      return A.normalizeItem({ id: "i2", tripId: "t1", type: "attraction", title: "X",
+        date: "2026-05-02", visitedAt: true }).visitedAt === "" ? true : "a boolean was kept";
+    });
+
+    check("What's-new reports the new money fields", () => {
+      /* diffCollection works from an allow-list: a field missing there syncs fine but
+         never appears in What's new, which reads as the sync having dropped it. */
+      const base = { trips: [{ id: "t", name: "P", year: 2026, budget: 10,
+        expenses: [mkExp({ settledHome: null })] }], items: [], checklist: [], fundHistory: [], rollHistory: [] };
+      const next = structuredClone(base);
+      next.trips[0].expenses[0].settledHome = 404;
+      const out = A.diffStates(base, next);
+      return out.length > 0 ? true : "settling an expense produced no change entry";
+    });
+
+    group("v2.0-timeline");
+
+    check("editing an item preserves visitedAt, exactly like sortIndex", () => {
+      /* The form carries neither field, so Object.assign resets both unless they are
+         copied forward. sortIndex already shipped this bug once (see the comment in
+         handleItemSubmit); visitedAt is the same shape. */
+      const src = String(handleItemSubmit);
+      return /item\.visitedAt\s*=\s*existing\.visitedAt/.test(src)
+        ? true : "handleItemSubmit does not carry visitedAt forward";
+    });
+
+    check("the Position picker is actually read on submit", () => {
+      // An unread picker is decoration: the item would keep its time-derived slot.
+      const src = String(handleItemSubmit);
+      return /afterItem/.test(src) && /placeItemAfter\(/.test(src)
+        ? true : "handleItemSubmit never reads form.afterItem";
+    });
+
+    check("placeItemAfter indexes the same list placeItemAtIndex does", () => {
+      /* placeItemAtIndex counts checkout pseudo-entries as positions and works on
+         the day minus the moving item. Resolving the anchor in a differently
+         filtered list puts the stop one slot out whenever a hotel checks out. */
+      /* Ids are prefixed because placeItemAtIndex resolves the item from state.items
+         globally and then works in ITS date — so a fixture id that collides with a
+         real item silently reorders the wrong day. Real ids come from uid() and do
+         not collide; test fixtures have to earn the same guarantee. */
+      const TID = "probe-order-trip";
+      const t = { id: TID, name: "P", year: 2026, budget: 0, expenses: [] };
+      state.trips.push(t);
+      const mk = (id, title, time) => ({ id: `probe-order-${id}`, tripId: TID, type: "attraction", title,
+        date: "2026-05-02", startTime: time, location: { name: "x", lat: null, lng: null, url: "" },
+        endDate: "", endTime: "", details: "", flightNo: "", departAirport: "", arrivalAirport: "",
+        confirmation: "", notes: "", sortIndex: 0, visitedAt: "" });
+      state.items.push(mk("a", "A", "09:00"), mk("b", "B", "10:00"), mk("c", "C", ""));
+      try {
+        placeItemAfter(TID, "2026-05-02", "probe-order-c", "probe-order-a");   // C after A
+        const order = itemsForDay(t, "2026-05-02").map((e) => e.item.id.replace("probe-order-", ""));
+        return JSON.stringify(order) === JSON.stringify(["a", "c", "b"])
+          ? true : `order was ${order.join(",")}`;
+      } finally {
+        state.items = state.items.filter((i) => i.tripId !== TID);
+        state.trips = state.trips.filter((x) => x.id !== TID);
+      }
+    });
+
+    check("toggling visited stamps a time and clears to empty", () => {
+      const it = { id: "probe-visited-item", tripId: "probe-visited-trip", type: "attraction", title: "Louvre",
+        date: "2026-05-02", startTime: "", endTime: "", endDate: "", details: "",
+        flightNo: "", departAirport: "", arrivalAirport: "",
+        location: { name: "", lat: null, lng: null, url: "" },
+        confirmation: "", notes: "", sortIndex: 0, visitedAt: "" };
+      state.items.push(it);
+      try {
+        toggleVisited("probe-visited-item");
+        if (!/^\d{4}-\d{2}-\d{2}T/.test(it.visitedAt)) return `visitedAt was "${it.visitedAt}"`;
+        toggleVisited("probe-visited-item");
+        return it.visitedAt === "" ? true : "un-visiting left a value";
+      } finally { state.items = state.items.filter((i) => i.id !== "probe-visited-item"); }
+    });
+
+    check("the timeline lands on today only until you navigate yourself", () => {
+      /* It must not yank you back to today every re-render after you have
+         deliberately scrolled to another day. */
+      const src = String(openTimelineOnToday);
+      if (!/dayChosen\s*\|\|\s*timelineAutoLanded/.test(src)) return "openTimelineOnToday does not guard on dayChosen";
+      /* And it must not SET dayChosen: Maps reads that flag as a day filter, so
+         claiming the user chose today silently filters the map to today. */
+      return !/dayChosen\s*=\s*true/.test(src)
+        ? true : "openTimelineOnToday sets dayChosen, which leaks into the Maps day filter";
+    });
+
+    check("adding a stop returns the view to the day it landed on", () => {
+      const src = String(handleItemSubmit);
+      return /landOnDay\(landedOn/.test(src)
+        ? true : "handleItemSubmit does not return the view to the item's day";
+    });
+
+    check("repeated map renders never leak a second geolocation watcher", () => {
+      /* renderMapsTab destroys and rebuilds the Leaflet map on every day-chip tap.
+         A watch started against the old map holds layers on a dead object, and an
+         uncleared one means several live GPS subscriptions at once. */
+      if (typeof L === "undefined") return skip("Leaflet CDN blocked");
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip to open the map on");
+      const realGeo = navigator.geolocation;
+      let watches = 0, cleared = 0, nextId = 1;
+      Object.defineProperty(navigator, "geolocation", {
+        configurable: true,
+        value: { watchPosition: () => { watches++; return nextId++; }, clearWatch: () => { cleared++; }, getCurrentPosition: () => {} },
+      });
+      const wasWanted = geoWanted, wasSub = itinerarySubTab, wasTrip = itineraryTripId;
+      try {
+        setItineraryTrip(trip.id);
+        itinerarySubTab = "maps";
+        renderItinerary();
+        if (!document.getElementById("btn-geo")) return skip("map canvas not rendered here");
+        toggleGeo();                       // user asks to be located
+        if (watches !== 1) return `first locate started ${watches} watches`;
+        renderItinerary(); renderItinerary(); renderItinerary();
+        const live = watches - cleared;
+        if (live !== 1) return `${watches} watches, ${cleared} cleared — ${live} left running`;
+        // and leaving the map must leave none
+        itinerarySubTab = "timeline";
+        renderItinerary();
+        return watches - cleared === 0
+          ? true : `${watches - cleared} watch(es) still running on the timeline`;
+      } finally {
+        geoWanted = false; stopGeoWatch();
+        Object.defineProperty(navigator, "geolocation", { configurable: true, value: realGeo });
+        itinerarySubTab = wasSub; if (wasTrip) setItineraryTrip(wasTrip);
+        geoWanted = wasWanted;
+      }
+    });
+
+    check("switching locating off removes the dot, not just the reference", () => {
+      /* Nulling the layer references left the blue dot on the map: a position that no
+         longer updates but still looks live, which is worse than showing nothing. */
+      if (typeof L === "undefined") return skip("Leaflet CDN blocked");
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip to open the map on");
+      const realGeo = navigator.geolocation;
+      Object.defineProperty(navigator, "geolocation", { configurable: true, value: {
+        watchPosition: (ok) => { ok({ coords: { latitude: 48.8583, longitude: 2.3375, accuracy: 30 } }); return 1; },
+        clearWatch: () => {}, getCurrentPosition: () => {},
+      }});
+      const wasWanted = geoWanted, wasSub = itinerarySubTab, wasTrip = itineraryTripId;
+      try {
+        setItineraryTrip(trip.id);
+        itinerarySubTab = "maps";
+        geoWanted = false;
+        renderItinerary();
+        if (!document.getElementById("btn-geo")) return skip("map canvas not rendered here");
+        toggleGeo();
+        if (!document.querySelector(".map-me")) return skip("no fix rendered to clear");
+        toggleGeo();
+        if (document.querySelector(".map-me")) return "the dot survived switching locating off";
+        return geoLastFix === null ? true : "a stale fix was kept and still feeds the distance line";
+      } finally {
+        geoWanted = false; stopGeoWatch();
+        Object.defineProperty(navigator, "geolocation", { configurable: true, value: realGeo });
+        itinerarySubTab = wasSub; if (wasTrip) setItineraryTrip(wasTrip);
+        geoWanted = wasWanted;
+      }
+    });
+
+    check("locating is never asked for without a tap", () => {
+      /* A permission prompt that fires because a screen opened gets denied once and
+         is then awkward to undo. Behavioural, not a source grep: open the map with a
+         stubbed geolocation and assert nothing asks until the button is pressed. */
+      if (typeof L === "undefined") return skip("Leaflet CDN blocked");
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip to open the map on");
+      const realGeo = navigator.geolocation;
+      let asked = 0;
+      Object.defineProperty(navigator, "geolocation", {
+        configurable: true,
+        value: { watchPosition: () => { asked++; return 1; }, clearWatch: () => {}, getCurrentPosition: () => { asked++; } },
+      });
+      const wasWanted = geoWanted, wasSub = itinerarySubTab, wasTrip = itineraryTripId;
+      geoWanted = false;
+      try {
+        setItineraryTrip(trip.id);
+        itinerarySubTab = "maps";
+        renderItinerary(); renderItinerary();
+        if (!document.getElementById("btn-geo")) return skip("map canvas not rendered here");
+        if (asked !== 0) return `opening the map asked for a position ${asked} time(s)`;
+        toggleGeo();
+        return asked === 1 ? true : `the button produced ${asked} requests`;
+      } finally {
+        geoWanted = false; stopGeoWatch();
+        Object.defineProperty(navigator, "geolocation", { configurable: true, value: realGeo });
+        itinerarySubTab = wasSub; if (wasTrip) setItineraryTrip(wasTrip);
+        geoWanted = wasWanted;
+      }
+    });
+
+    check("the painting and the line art resolve to the same city", () => {
+      /* One alias table drives both, so a trip can never get Rome's painting under
+         Paris's blueprint. */
+      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
+      for (const [dest, key] of [["Paris, France", "paris"], ["Pressburg", "bratislava"],
+                                 ["Nowhere, Atlantis", "generic"]]) {
+        if (monumentKeyFor(t(dest)) !== key) return `${dest} resolved to ${monumentKeyFor(t(dest))}`;
+        const art = coverArt(t(dest));
+        if (!art.includes(`assets/covers/${key}.jpg`)) return `${dest} did not load ${key}.jpg`;
+        if (monumentFor(t(dest)) !== MONUMENTS[key]) return `${dest} line art disagrees with the painting`;
+      }
+      return true;
+    });
+
+    check("a missing painting falls back to the line art instead of a hole", () => {
+      /* An unbuilt cover must degrade to exactly what v1.15.3 shipped: the blueprint,
+         the plain gradient, no empty box and no doubled scrim. */
+      const art = coverArt({ name: "x", destinations: ["Paris, France"] });
+      if (!/onerror=/.test(art)) return "the cover image has no fallback path";
+      if (!/cover--nophoto/.test(art)) return "the fallback does not disable the scrim";
+      return /<svg/.test(art) && /<path /.test(art)
+        ? true : "the line art is not underneath the painting";
+    });
+
+    check("nothing is printed straight onto the painting", () => {
+      /* The artwork was first shown under a scrim heavy enough to hide it, because text
+         sat directly on the image and had to be made readable there. The fix was
+         structural, the way the pastel gallery lays these out: the painting gets its own
+         surface and the words get theirs. So the invariant is not "the scrim is light" —
+         it is that no bare text is laid over the image at all. */
+      const bad = [];
+      // Only the bands that actually hold a painting — .hero__body is a flat surface.
+      for (const sel of [".hero__art", ".tripcard__cover"]) {
+        const el = document.querySelector(sel);
+        if (!el || !el.querySelector(".cover__photo")) continue;
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let n;
+        while ((n = w.nextNode())) {
+          if (!n.nodeValue.trim()) continue;
+          // Chips and pills carry their own opaque backgrounds.
+          if (n.parentElement.closest(".tag, .pill, .btn, .avatar")) continue;
+          bad.push(`${sel}: "${n.nodeValue.trim().slice(0, 24)}" sits directly on the painting`);
+        }
+      }
+      if (!document.querySelector(".cover__photo")) return skip("no painting on this screen");
+      return bad.length ? bad.join("; ") : true;
+    });
+
+    check("the cover layers are not caught by the lift-above rule", () => {
+      /* .hero > *:not(...) sets position:relative. A cover layer caught by it stops
+         being absolutely positioned and lays out as an inset rectangle in the padded
+         flow instead of filling the card — which is exactly what happened. */
+      const hero = document.querySelector(".hero");
+      if (!hero) return skip("no featured trip on this screen");
+      const photo = hero.querySelector(".cover__photo");
+      const scrim = hero.querySelector(".cover__scrim");
+      if (!photo) return skip("cover layers not rendered here");
+      if (scrim && getComputedStyle(scrim).display !== "none"
+          && getComputedStyle(scrim).position !== "absolute") return "the scrim is not absolutely positioned";
+      if (getComputedStyle(photo).position !== "absolute") return "the photo is not absolutely positioned";
+      // It fills its own band now, not the whole hero — the text lives below the band.
+      const band = photo.closest(".hero__art") || hero;
+      const bb = band.getBoundingClientRect(), pb = photo.getBoundingClientRect();
+      return Math.abs(pb.width - bb.width) < 2 && Math.abs(pb.height - bb.height) < 2
+        ? true : `the painting is ${Math.round(pb.width)}x${Math.round(pb.height)} inside a ${Math.round(bb.width)}x${Math.round(bb.height)} band`;
+    });
+
+    check("the day sheet escapes every field that comes from user text", () => {
+      /* Notes, addresses and confirmations land in generated markup. A trip name with
+         a < in it must not become an element. */
+      const TID = "probe-sheet-trip";
+      const trip = { id: TID, name: "<img src=x onerror=1>", year: 2026, budget: 0, expenses: [],
+        destinations: [], travelers: [], startDate: "2026-05-02", endDate: "2026-05-02" };
+      state.trips.push(trip);
+      state.items.push({ id: "probe-sheet-i", tripId: TID, type: "attraction",
+        title: "<script>x</script>", date: "2026-05-02", startTime: "10:00", endTime: "", endDate: "",
+        location: { name: "<b>addr</b>", lat: null, lng: null, url: "" },
+        confirmation: "<i>C1</i>", notes: "<em>note</em>", details: "", flightNo: "",
+        departAirport: "", arrivalAirport: "", sortIndex: 0, visitedAt: "" });
+      try {
+        openDaySheet(trip, "2026-05-02");
+        const body = document.getElementById("daysheet-body");
+        const bad = body.querySelector("script, img, b, i, em");
+        const txt = body.textContent;
+        closeDialog(document.getElementById("dialog-daysheet"));
+        if (bad) return `user text became a <${bad.tagName.toLowerCase()}> element`;
+        // and it must still SHOW the text, not swallow it
+        return txt.includes("<em>note</em>") && txt.includes("<i>C1</i>")
+          ? true : "escaped fields were not rendered as text";
+      } finally {
+        state.items = state.items.filter((i) => i.tripId !== TID);
+        state.trips = state.trips.filter((t) => t.id !== TID);
+      }
+    });
+
+    check("the day sheet numbers its stops the same way the map does", () => {
+      /* It is generated from stopNumbers and legLabel rather than its own walk of the
+         day, so the sheet in your pocket cannot disagree with the pins on screen. */
+      const src = String(openDaySheet);
+      return /stopNumbers\(/.test(src) && /legLabel\(/.test(src)
+        ? true : "openDaySheet re-derives stop order instead of reusing stopNumbers/legLabel";
+    });
+
+    check("the print rule can actually isolate the day sheet", () => {
+      /* The @media print rule hides `body > *:not(#dialog-daysheet)`. If the dialog
+         were ever moved inside a wrapper that selector would silently stop matching
+         and printing would produce the whole app. */
+      const dlg = document.getElementById("dialog-daysheet");
+      return dlg && dlg.parentElement === document.body
+        ? true : "the day sheet dialog is no longer a direct child of <body>";
+    });
+
+    check("the day sheet does not claim the app works offline", () => {
+      const intro = document.getElementById("daysheet-intro").textContent.toLowerCase();
+      // It must describe the SAVED copy, not the app.
+      return /saved copy/.test(intro) && !/works offline\b(?!.*saved)/.test(intro)
+        ? true : `intro reads "${intro}"`;
+    });
+
+    check("the map list shows notes and the confirmation, not just the address", () => {
+      const src = String(renderMapsTab);
+      return /e\.item\.notes/.test(src) && /e\.item\.confirmation/.test(src)
+        ? true : "renderMapsTab still omits notes/confirmation";
+    });
+
+    check("only the trip being travelled has its expenses unfolded", () => {
+      /* The quick-add bar targets an upcoming trip too, but unfolding a list of
+         expenses for a trip five days out is noise — and it would break the
+         "a fold you opened stays open" guarantee for every non-active trip. */
+      const src = String(renderTrips);
+      return /tripTiming\(active\)\.state\s*===\s*"travelling"/.test(src)
+        ? true : "renderTrips unfolds any active trip, not only the one being travelled";
+    });
+
+    check("the quick-add bar targets the trip you are on, else the next one", () => {
+      const mk = (id, start, end, extra) => Object.assign(
+        { id, name: id, year: 2026, budget: 0, expenses: [], startDate: start, endDate: end }, extra || {});
+      const today = todayLocalISO();
+      const past = mk("past", "2020-01-01", "2020-01-05");
+      const soon = mk("soon", "2099-01-01", "2099-01-05");
+      const now = mk("now", today, today);
+      if (activeExpenseTrip([past, soon])?.id !== "soon") return "did not fall through to the upcoming trip";
+      if (activeExpenseTrip([past, soon, now])?.id !== "now") return "did not prefer the trip being travelled";
+      // a cancelled trip is not one you are spending on
+      if (activeExpenseTrip([mk("x", today, today, { cancelled: true })]) !== null) return "picked a cancelled trip";
+      // inclusive end date — the last day of a trip is still the trip
+      const ends = mk("ends", "2020-01-01", today);
+      return activeExpenseTrip([ends])?.id === "ends" ? true : "the final day was treated as past";
+    });
+
     group("trust-boundary");
 
     check("ids are restricted to a safe charset", () =>

@@ -8,3 +8,4 @@ archive/
 supabase-schema.sql
 .github/
 .DS_Store
+design/

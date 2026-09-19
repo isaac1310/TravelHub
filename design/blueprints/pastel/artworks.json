@@ -1,0 +1,121 @@
+{
+  "style": "pastel-vintage-travel",
+  "aspectRatio": "2.1:1",
+  "generator": "built-in image_gen",
+  "cities": [
+    {
+      "key": "paris",
+      "label": "Paris",
+      "src": "paris.png",
+      "landmark": "Eiffel Tower \u00b7 Haussmann rooftops"
+    },
+    {
+      "key": "bratislava",
+      "label": "Bratislava",
+      "src": "bratislava.png",
+      "landmark": "Castle \u00b7 UFO bridge over the Danube"
+    },
+    {
+      "key": "london",
+      "label": "London",
+      "src": "london.png",
+      "landmark": "Elizabeth Tower \u00b7 Parliament \u00b7 Tower Bridge"
+    },
+    {
+      "key": "rome",
+      "label": "Rome",
+      "src": "rome.png",
+      "landmark": "Colosseum \u00b7 triumphal arch \u00b7 cypress"
+    },
+    {
+      "key": "barcelona",
+      "label": "Barcelona",
+      "src": "barcelona.png",
+      "landmark": "Sagrada Fam\u00edlia \u00b7 Gaud\u00ed roofline"
+    },
+    {
+      "key": "amsterdam",
+      "label": "Amsterdam",
+      "src": "amsterdam.png",
+      "landmark": "Canal houses \u00b7 bridge \u00b7 water"
+    },
+    {
+      "key": "prague",
+      "label": "Prague",
+      "src": "prague.png",
+      "landmark": "Charles Bridge tower \u00b7 castle spires"
+    },
+    {
+      "key": "vienna",
+      "label": "Vienna",
+      "src": "vienna.png",
+      "landmark": "St. Stephen's \u00b7 Riesenrad"
+    },
+    {
+      "key": "athens",
+      "label": "Athens",
+      "src": "athens.png",
+      "landmark": "Parthenon \u00b7 Acropolis rock \u00b7 olive tree"
+    },
+    {
+      "key": "newyork",
+      "label": "New York",
+      "src": "newyork.png",
+      "landmark": "Empire State \u00b7 midtown block"
+    },
+    {
+      "key": "telaviv",
+      "label": "Tel Aviv",
+      "src": "telaviv.png",
+      "landmark": "Dizengoff Square \u00b7 Fire and Water Fountain \u00b7 Cinema Hotel"
+    },
+    {
+      "key": "jerusalem",
+      "label": "Jerusalem",
+      "src": "jerusalem.png",
+      "landmark": "Dome of the Rock \u00b7 Old City wall"
+    },
+    {
+      "key": "budapest",
+      "label": "Budapest",
+      "src": "budapest.png",
+      "landmark": "Parliament dome \u00b7 Chain Bridge"
+    },
+    {
+      "key": "berlin",
+      "label": "Berlin",
+      "src": "berlin.png",
+      "landmark": "Fernsehturm \u00b7 Brandenburg Gate"
+    },
+    {
+      "key": "lisbon",
+      "label": "Lisbon",
+      "src": "lisbon.png",
+      "landmark": "Tram 28 \u00b7 hillside houses \u00b7 25 de Abril"
+    },
+    {
+      "key": "madrid",
+      "label": "Madrid",
+      "src": "madrid.png",
+      "landmark": "Puerta de Alcal\u00e1 \u00b7 Metr\u00f3polis dome"
+    },
+    {
+      "key": "tokyo",
+      "label": "Tokyo",
+      "src": "tokyo.png",
+      "landmark": "Tokyo Tower \u00b7 pagoda \u00b7 Fuji"
+    },
+    {
+      "key": "bangkok",
+      "label": "Bangkok",
+      "src": "bangkok.png",
+      "landmark": "Wat Arun prang \u00b7 temple roofs \u00b7 river boat"
+    },
+    {
+      "key": "generic",
+      "label": "Generic skyline",
+      "src": "generic.png",
+      "landmark": "fallback for unmapped destinations"
+    }
+  ]
+}

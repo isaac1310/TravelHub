@@ -18,9 +18,15 @@ Open `index.html` in a browser — no build step. Data is saved in
   on a trip, the hero shows a **Today** card: what is happening now, what comes next, where
   you sleep tonight, with confirmation numbers and Maps links, and a **Full day** button
   into today's timeline.
-- **Itinerary → Timeline** — day-by-day reservations. "Add reservation" opens a
-  modal supporting flight / hotel / attraction / transport / other, with dates,
-  times, location, and confirmation number. Edit/delete on each card.
+- **Itinerary → Timeline** — day-by-day stops. **"Add to day"** opens a modal
+  supporting flight / hotel / attraction / transport / other, with dates, times,
+  location, confirmation number, and a **Position in the day** picker for stops that
+  should not simply sort by time. Edit/delete on each card, and **Mark visited** on the
+  ⋯ sheet (dimmed with a tick; the stop number stays, because that is what ties a row
+  to its map pin). Mid-trip the timeline opens on **today** rather than day one.
+  **Day sheet** on any day header produces a self-contained page — stops, times,
+  addresses, notes, confirmations, walking legs — to save, share or print. Generate it
+  while you have signal; the saved copy is what works without.
 - **Itinerary → Maps** — Leaflet + OpenStreetMap view with lettered pins per
   day (day chips 16 | 17 | … | All). Locations autocomplete via **Photon**
   (OpenStreetMap) and are geocoded on save. **Import a place from Google Maps:**
@@ -32,12 +38,23 @@ Open `index.html` in a browser — no build step. Data is saved in
   if that is unreachable the sheet asks you to paste the full URL. Every stop has an
   "open in Google Maps" link, which doubles as the fallback when the map
   library or coordinates are unavailable. Flights are not pinned on the map.
+  The stop rows carry the booking's **notes and confirmation** alongside the address,
+  and a **locate button** puts you on the map with an accuracy circle and the walking
+  distance to your next unvisited stop. It only ever asks for a position when you
+  press it.
 - **Bookings** — every booking across trips, one collapsible group per trip (the trip you are
   on opens first), filter chips by type, notes on the card, and **Add expense** on a booking
   that has none yet — prefilled from the booking and linked to it, so the card then shows
   its payment status. Deleting a booking deletes its linked expense too (with Undo).
-- **Budget** — funds, per-trip budgets, expenses (Hotel · Flight · Food · Transport ·
-  Activities · Shopping · Other), rollovers, JSON export/import. The overview leads with
+- **Budget** — funds, per-trip budgets, expenses (Hotel · Flight · Food · Groceries ·
+  Transport · Activities · Shopping · Gifts · Other), rollovers, JSON export/import.
+  **Shekels are the only accounting currency** — every budget and total is in ₪. A trip
+  can set a *spending currency* and a rough rate, and an expense records the amount in
+  the currency it was actually paid in, showing an estimated ₪ figure (plus a card-fee
+  %) beside it. When the statement arrives, **Settle** replaces that estimate with the
+  real charge; the **Unsettled** filter chip is the worklist. An expense with no rate
+  set still saves — it says "rate needed" and is left out of the totals, which disclose
+  how many they left out rather than quietly under-counting. The overview leads with
   *Funds vs committed* — "₪X to spare" or "₪X short".
 - **Sharing (optional)** — with Supabase configured, the Share button creates a
   link (`?room=…&key=…`). Anyone with the link sees and edits the same data,

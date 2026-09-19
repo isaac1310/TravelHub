@@ -45,6 +45,16 @@
   --surface: #ffffff;
   --text: #33302e;          /* charcoal */
   --heading: #2c2a28;
+  /* Palette lifted from design/blueprints/pastel/index.html — the gallery the paintings
+     were art-directed for. Used by the cover surfaces so the artwork sits on colours
+     drawn from it rather than fighting the brand salmon. */
+  --pastel-paper: #f7f2e9;
+  --pastel-ink: #494e47;
+  --pastel-line: #ded7cb;
+  --pastel-muted: #807c73;
+  --pastel-blush: #d9a6a2;
+  --pastel-apricot: #e9bc94;
+  --pastel-cream: #ece1ca;
   /* #9a9089 measured 2.79-3.12:1 against the four surfaces — below the 4.5:1 needed for
      normal text. #6f6660 is the LIGHTEST value that clears it everywhere (5.61 on --surface,
      5.26 on --bg, 5.03 on --cream-2, 4.67 on --cream), chosen over a darker, safer grey to
@@ -358,7 +368,7 @@ h1, h2, h3, h4, .brand__name {
 .hero {
   position: relative; overflow: hidden;
   border-radius: var(--radius-lg);
-  padding: 2rem 1.8rem;
+  padding: 0;
   /* Charcoal, not white. The salmon behind it is a light surface: white measured 2.06:1 on it,
      charcoal measures 4.97 at the worst stop. Every descendant that used to be explicitly #fff
      now inherits this instead. */
@@ -375,7 +385,16 @@ h1, h2, h3, h4, .brand__name {
    even at the darkest stop and even at the 12.8px kicker, so nothing here needs a size or a
    badge to rescue it. See .hero and .tripcard__cover below for the text colour that depends
    on this; darkening these stops again would invert the problem rather than fix it. */
-.hero, .tripcard__cover { background: linear-gradient(135deg, #f2a08f 0%, #ef8e7f 45%, #e07a86 100%); }
+/* The gradient now sits behind the PAINTING rather than behind the text — it is only
+   ever seen while the image decodes, or when a city has no painting at all. */
+.hero__art, .tripcard__cover { background: linear-gradient(135deg, #f2a08f 0%, #ef8e7f 45%, #e07a86 100%); }
+.hero { background: var(--surface); box-shadow: var(--shadow); }
+.hero__art { position: relative; height: 190px; overflow: hidden; }
+.hero__body { padding: 1.3rem 1.5rem 1.5rem; color: var(--text); }
+@media (max-width: 900px) {
+  .hero__art { height: 150px; }
+  .hero__body { padding: 1.1rem 1.1rem 1.2rem; }
+}
 /* The monument sits behind the text and never intercepts a tap. */
 .cover__art { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 /* The hero's lower-left is dense — title, dates, Edit pill, avatars, names — so
@@ -385,8 +404,66 @@ h1, h2, h3, h4, .brand__name {
 /* Height, not width, is what keeps this safe: the Edit pill sits at a fixed
    x in the meta row, so a width-only rule collided again as the viewport
    narrowed. Ending the art above that row clears it at every width. */
-.hero .cover__art { inset: 0 0 auto auto; width: 34%; height: 44%; }
-.hero > *:not(.cover__art), .tripcard__cover > *:not(.cover__art) { position: relative; z-index: 1; }
+/* The art band is all art now, so the fallback blueprint fills it too. */
+.hero .cover__art { inset: 0; width: 100%; height: 100%; }
+/* The pastel painting, composited with the gradient rather than replacing it — see
+   coverArt(). It sits above .cover__art (so the line art only shows if the image
+   fails) and below every text node.
+
+   A scrim, not a mask on the image, and no blend mode. Masking left a visible
+   straight edge where the painting stopped; `mix-blend-mode: luminosity` drained the
+   pastels to monochrome salmon, which is the one thing this artwork exists to
+   provide. So the painting keeps its colour at full bleed and the brand gradient is
+   laid back OVER it — near-opaque where the text is dense (the hero's lower-left:
+   title, dates, Edit pill, traveller names) and clearing toward the upper right
+   where only the short kicker sits. The contrast floor is then set by a known
+   colour rather than by whatever the painting happens to show there, which is what
+   keeps the measured ratios above honest. */
+.cover__photo {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; object-position: center 40%;
+  pointer-events: none;
+}
+.cover__scrim { position: absolute; inset: 0; pointer-events: none; }
+/* The scrim is anchored to where the TEXT is, not spread over the whole surface.
+
+   The first version washed everything evenly and the paintings all but vanished. That
+   came from measuring ELEMENT boxes: .hero__kicker and friends are full-width blocks,
+   so sampling across them "found" text out at 96% where there is only empty space.
+   Measuring real glyph rectangles (Range.getClientRects) shows the hero's glyphs stop
+   at 36% on desktop, and the trip card's title is RIGHT-aligned — opposite sides, which
+   is why they now get opposite gradients.
+
+   Numbers below are measured against all 19 paintings, sampling only actual glyphs:
+   hero 5.69 (worst: Paris), trip card 4.59 (worst: Jerusalem). Both clear the 4.5 this
+   file has always promised, and both are LIGHTER than the first attempt, which measured
+   4.88 / 4.61 while hiding far more of the painting — that is the element-box error
+   being paid back. */
+/* Nothing is printed on the hero painting any more, so it needs no scrim at all. */
+.hero .cover__scrim { display: none; }
+.hero .cover__photo { opacity: 1; }
+.hero__kicker { color: var(--brand-text); }
+.hero__title { color: var(--heading); }
+/* The 96px card's title is right-aligned, so this one runs the other way: the left of
+   the card — where the painting is most legible — stays clear. */
+/* No scrim on the card at all. Nothing is printed over the painting any more, so there
+   is nothing to protect — only a whisper at the very top so the year/timing chips keep
+   their edge against a bright sky. */
+.tripcard__cover .cover__scrim {
+  background: linear-gradient(to bottom, rgba(73,78,71,0.20) 0%, rgba(73,78,71,0.06) 22%, transparent 45%);
+}
+.tripcard__cover .cover__photo { opacity: 1; }
+/* Without a photo the scrim would just double the gradient and darken the card. */
+.cover--nophoto .cover__scrim { display: none; }
+/* Every child EXCEPT the cover layers is lifted above them. The exclusion list has to
+   name each layer: this rule sets position:relative, so a .cover__photo caught by it
+   stops being absolutely positioned and lays itself out in the padded flow as an
+   inset rectangle instead of filling the card. */
+.hero > *:not(.cover__art):not(.cover__photo):not(.cover__scrim),
+.tripcard__cover > *:not(.cover__art):not(.cover__photo):not(.cover__scrim) { position: relative; z-index: 1; }
+/* The hero is a painting now, so its own salmon gradient would show through wherever the
+   image has not covered — and the ::after highlight was tuned for that gradient. */
+.hero::after { display: none; }
 .hero::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background:
@@ -407,7 +484,9 @@ h1, h2, h3, h4, .brand__name {
 .hero__travellers { display: flex; align-items: center; gap: 0.5rem; margin-top: 1rem; }
 /* Today card (v1.14.0), inside the hero while travelling. A white panel on the salmon so the
    text can be the normal charcoal-on-white and Maps links stay legible. */
-.hero__today { margin-top: 1.1rem; background: rgba(255,255,255,0.93); color: var(--text); border-radius: var(--radius); padding: 0.85rem 0.95rem; display: grid; gap: 0.5rem; }
+/* On the solid body now, not over a painting, so it is a plain card again and the
+   muted/brand text colours inside it are safe to use as designed. */
+.hero__today { margin-top: 1.2rem; background: var(--cream, #fdf8f4); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); padding: 0.85rem 0.95rem; display: grid; gap: 0.5rem; }
 .today__head { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 700; color: var(--muted); }
 .today__row { display: grid; grid-template-columns: 3.4rem 22px 1fr auto; gap: 0.5rem; align-items: center; min-height: 44px; }
 .today__label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; color: var(--brand-text); }
@@ -461,7 +540,9 @@ h1, h2, h3, h4, .brand__name {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 @media (hover: hover) { .tripcard:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); } }
-.tripcard__cover { height: 96px; position: relative; color: var(--heading); padding: 0.8rem 1rem; display: flex; align-items: flex-end; }
+/* Taller now that it is purely a painting rather than a strip with a title on it —
+   96px cropped these to a band; 132px lets a landmark actually read. */
+.tripcard__cover { height: 132px; position: relative; color: var(--heading); padding: 0.8rem 1rem; display: flex; align-items: flex-end; }
 .tripcard__cover .tag { position: absolute; top: 0.7rem; right: 0.8rem; background: rgba(255,255,255,0.85); color: var(--brand-text); border-radius: var(--radius-pill); padding: 0.15rem 0.6rem; font-size: 0.72rem; font-weight: 700; }
 /* The timing badge sits opposite the year so the two never stack (both are absolute).
    Travelling gets a solid fill because "you are on this trip now" is the one state worth
@@ -510,7 +591,10 @@ h1, h2, h3, h4, .brand__name {
 .booking-group[open] > summary { margin-bottom: 0.9rem; }
 .booking-group .booking-group__title .booking__add-expense { margin-left: 0; }
 .booking__foot .btn--small { min-height: 36px; padding: 0.3rem 0.7rem; }
+/* The name lives in the body now (see renderTripOverviewCard); this keeps the old
+   selector working if anything still renders one inside the cover. */
 .tripcard__cover h3 { margin: 0; color: var(--heading); font-size: 1.25rem; }
+.tripcard__name { margin: 0 0 0.15rem; font-size: 1.25rem; color: var(--heading); }
 .tripcard__body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; }
 .tripcard__row { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.86rem; }
 .tripcard__row svg { width: 16px; height: 16px; flex: none; }
@@ -895,9 +979,11 @@ h1, h2, h3, .hero h1, .hero p {
 .category-tag[data-category="Hotel"]      { --cat-bg: #f0e6fb; --cat-fg: #7c4fc4; }
 .category-tag[data-category="Flight"]     { --cat-bg: #dcf1f4; --cat-fg: #2f8a9b; }
 .category-tag[data-category="Food"]       { --cat-bg: #fce8d8; --cat-fg: #c26a33; }
+.category-tag[data-category="Groceries"]  { --cat-bg: #e9f0d8; --cat-fg: #6b8c33; }
 .category-tag[data-category="Transport"]  { --cat-bg: #dff0e6; --cat-fg: #3f8a63; }
 .category-tag[data-category="Activities"] { --cat-bg: #fbeecf; --cat-fg: #b9852f; }
 .category-tag[data-category="Shopping"]   { --cat-bg: #fbe3ea; --cat-fg: #b0456a; }
+.category-tag[data-category="Gifts"]      { --cat-bg: #fae0dd; --cat-fg: #c05a4a; }
 .category-tag[data-category="Other"]      { --cat-bg: #efe9e3; --cat-fg: #8a7f74; }
 
 .category-breakdown { padding: 0.7rem 0; border-top: 1px solid var(--border); }
@@ -907,9 +993,11 @@ h1, h2, h3, .hero h1, .hero p {
 .category-breakdown__segment[data-category="Hotel"]      { --cat-bar: #a884e0; }
 .category-breakdown__segment[data-category="Flight"]     { --cat-bar: #5cb8c6; }
 .category-breakdown__segment[data-category="Food"]       { --cat-bar: #eb9160; }
+.category-breakdown__segment[data-category="Groceries"]  { --cat-bar: #9cba5c; }
 .category-breakdown__segment[data-category="Transport"]  { --cat-bar: #63b585; }
 .category-breakdown__segment[data-category="Activities"] { --cat-bar: #e0b552; }
 .category-breakdown__segment[data-category="Shopping"]   { --cat-bar: #e08aa6; }
+.category-breakdown__segment[data-category="Gifts"]      { --cat-bar: #e0806e; }
 .category-breakdown__segment[data-category="Other"]      { --cat-bar: #b7a99a; }
 .category-breakdown__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .category-breakdown__row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem; align-items: center; font-size: 0.8rem; }
@@ -963,9 +1051,153 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .dialog--wide { max-width: 480px; }
 .dialog__hint { margin: 0 0 1rem; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
 .field__hint { display: block; margin-top: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+
+/* ---- v2.0 money controls ---- */
+.amount-row { display: flex; gap: 0.5rem; align-items: stretch; }
+.amount-row input[type="number"] { flex: 1; min-width: 0; }
+/* 44px minimum, same as every other tap target on this dialog. */
+.currency-btn {
+  flex: 0 0 4.2rem; min-height: 44px; border: 1px solid var(--border-strong, #d9cfc7);
+  border-radius: 10px; background: var(--cream, #fdf8f4); color: var(--text);
+  font: inherit; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.02em; cursor: pointer;
+}
+.currency-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+/* A lone three-letter pill reads as a badge, not a button. The chevron and the split
+   layout are what make it obviously pressable. */
+.currency-btn--wide { display: flex; align-items: center; justify-content: space-between; gap: 0.35rem; padding: 0 0.7rem; }
+.currency-btn__chev { font-size: 0.7em; opacity: 0.65; }
+.settled-line__row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+/* The estimate is muted and always prefixed "≈" — it must never read as settled money. */
+.fx-est { color: var(--muted); }
+.fx-settled { color: #3f8a63; font-weight: 600; }
+.fx-norate { color: #b0456a; font-weight: 600; }
+.trip-card__fxnote { margin: -0.2rem 0 0.5rem; font-size: 0.78rem; color: var(--muted); }
+.trip-card__fold { display: flex; align-items: center; gap: 0.5rem; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: inherit; text-align: start; }
+/* One chevron treatment for every fold on this screen, always on the LEFT of its label.
+   They were 0.8rem and on opposite sides — the trip cards' on the left, the Overview's
+   on the right — which read as two unrelated controls and was barely visible at all.
+   Left rather than right because the trip cards carry Edit/Delete on the right. */
+.trip-card__chev {
+  color: var(--brand-text); font-size: 1rem; line-height: 1; width: 1.1rem;
+  display: inline-block; text-align: center; flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+.trip-card__glance { display: block; margin-top: 0.2rem; font-size: 0.8rem; color: var(--muted); }
+.trip-card--collapsed { padding-bottom: 0.7rem; }
+.quickadd {
+  position: sticky; bottom: 0; z-index: 30; display: flex; align-items: center; gap: 0.75rem;
+  margin: 0.5rem -0.25rem 0; padding: 0.6rem 0.75rem calc(0.6rem + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--cream, #fdf8f4) 92%, transparent);
+  backdrop-filter: blur(8px); border-top: 1px solid var(--border); border-radius: 12px 12px 0 0;
+}
+.quickadd__trip { font-size: 0.82rem; font-weight: 600; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quickadd__btn { margin-inline-start: auto; flex: 0 0 auto; }
+/* The overview panel is a <details> now; its heading is the summary row. */
+#global-panel > summary { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; list-style: none; }
+#global-panel > summary::-webkit-details-marker { display: none; }
+/* ::before, so it sits to the LEFT of "Overview" like the trip cards' chevron. */
+#global-panel > summary::before {
+  content: "\25B8"; order: -1; color: var(--brand-text); font-size: 1rem; line-height: 1;
+  width: 1.1rem; display: inline-block; text-align: center; flex: 0 0 auto;
+  transition: transform 0.15s ease;
+}
+#global-panel[open] > summary::before { transform: rotate(90deg); }
+#global-panel > summary::after { content: none; }
+.panel__summary-note { margin-inline-start: auto; }
+.panel__summary-note { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+/* The chips themselves are .filter-chip, shared with the Unpaid/Paid row so the font,
+   size and weight cannot drift apart. Only the row's own spacing lives here, and it has
+   to scroll sideways — a week-long trip would otherwise push the list off the screen. */
+.expense-days { display: flex; gap: 0.45rem; overflow-x: auto; padding: 0.1rem 0 0.6rem; scrollbar-width: none; }
+.expense-days::-webkit-scrollbar { display: none; }
+#global-panel[open] .panel__summary-note { display: none; }
+/* Visited: dimmed with a tick, never struck through or hidden — you look back at
+   what you did as often as forward at what is left.
+
+   The STOP NUMBER is deliberately left alone. It is the only thing tying a row in
+   the list to a pin on the map, so swapping it for a tick means standing in Paris
+   looking at pin 2 with no row that says 2. The tick goes beside the title instead,
+   and the pin just changes colour. */
+.act--visited { opacity: 0.62; }
+.act--visited .act__title { text-decoration: none; }
+.act__stopno--visited { background: #3f8a63; color: #fff; }
+.visited-tick {
+  display: inline-block; margin-inline-start: 0.3rem; color: #3f8a63;
+  font-weight: 700; font-size: 0.85em; vertical-align: baseline;
+}
+/* Always visible, unlike .act__actions which only appears on hover and is therefore
+   invisible on a phone — where marking a place off as you leave it is the whole point. */
+.act__tick {
+  flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--border-strong, #d9cfc7); background: var(--surface, #fff);
+  color: var(--muted); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+}
+.act__tick svg { width: 18px; height: 18px; }
+.act__tick.is-on { background: #3f8a63; border-color: #3f8a63; color: #fff; }
+/* ---- day sheet ---- */
+.day__sheet {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  padding: 0; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+}
+.day__sheet svg { width: 18px; height: 18px; }
+.day__sheet:hover { color: var(--brand); }
+.daysheet { margin: 0.4rem 0; }
+.ds-head { border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; margin-bottom: 0.6rem; }
+.ds-head__trip { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; }
+.ds-head__day { font-size: 1.15rem; font-weight: 700; }
+.ds-row { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.45rem 0; border-bottom: 1px solid var(--border); }
+.ds-row--visited { opacity: 0.6; }
+.ds-row__no {
+  flex: 0 0 22px; height: 22px; border-radius: 50%; background: var(--text); color: #fff;
+  font-size: 0.72rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+}
+.ds-row__body { flex: 1; min-width: 0; }
+.ds-row__title { font-weight: 600; }
+.ds-row__sub { font-size: 0.8rem; color: var(--muted); }
+.ds-row__notes { font-size: 0.8rem; margin-top: 0.15rem; }
+.ds-row__time { font-variant-numeric: tabular-nums; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.ds-leg { font-size: 0.74rem; color: var(--muted); padding-inline-start: 30px; }
+.daysheet__privacy:empty { display: none; }
+
+/* The app has never had a print path. Printing the dialog means printing ONLY the
+   sheet — everything else, including the dialog's own buttons, is furniture. */
+@media print {
+  body > *:not(#dialog-daysheet) { display: none !important; }
+  #dialog-daysheet {
+    display: block !important; position: static !important; border: 0; box-shadow: none;
+    max-width: none; width: auto; padding: 0; background: #fff; color: #000;
+  }
+  #dialog-daysheet::backdrop { display: none; }
+  #daysheet-intro, .dialog__actions { display: none !important; }
+  #dialog-daysheet .dialog__pad { padding: 0 !important; }
+  .ds-row--visited { opacity: 1; }
+  .ds-row__no { background: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+/* Sits over the Leaflet canvas, so it has to clear Leaflet's own control panes (z 400+). */
+.map-locate {
+  position: absolute; right: 10px; bottom: 10px; z-index: 500;
+  width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-strong, #d9cfc7);
+  background: rgba(255,255,255,0.94); color: #5b5148; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(70,45,30,0.18);
+}
+.map-locate svg { width: 21px; height: 21px; }
+.map-locate.is-on { color: #2f6fd0; border-color: #2f6fd0; }
+.map-locate.is-busy { opacity: 0.6; }
+.map-me {
+  display: block; width: 18px; height: 18px; border-radius: 50%;
+  background: #2f6fd0; border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(47,111,208,0.5);
+}
+.map-me-dist { margin: 0 0 0.5rem; font-size: 0.82rem; color: var(--muted); }
+.mapstop__note {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; color: var(--muted); font-size: 0.74rem; margin-top: 0.1rem;
+}
 .field input[readonly] { background: var(--cream); color: var(--muted); }
 .dialog::backdrop { background: rgba(60, 42, 30, 0.4); backdrop-filter: blur(2px); }
-.dialog form { padding: 1.4rem; }
+/* .dialog__pad is for dialogs whose body is not a <form> (the day sheet):
+   same padding contract, one place to change it. */
+.dialog form, .dialog__pad { padding: 1.4rem; }
 .dialog__title { margin: 0 0 1rem; font-size: 1.15rem; }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem; }
 
@@ -999,6 +1231,14 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
   .appbar__title { display: none; }
   .content { padding: 1.1rem 1rem calc(80px + env(safe-area-inset-bottom)); }
 
+  /* Clear the fixed tab bar, the same 76px the itinerary FAB offsets by — otherwise
+     the quick-add sits underneath it and the button cannot be tapped at all. */
+  .quickadd {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    padding-bottom: 0.6rem;
+  }
+  #screen-budget { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+
   .tabbar {
     display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
     background: rgba(255,255,255,0.92); backdrop-filter: blur(10px);
@@ -1026,7 +1266,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
      banner about one trip and nothing you could act on. Tightened on SHORT viewports only, by
      height rather than width: a tall phone has the room to spare and keeps the full hero. */
   @media (max-height: 780px) {
-    .hero { padding: 1.1rem 1.2rem; }
+    /* Padding moved to .hero__body when the art became a full-bleed band. */
+    .hero { padding: 0; }
+    .hero__body { padding: 1.1rem 1.2rem; }
     .hero__title { font-size: 1.35rem; margin: 0.15rem 0 0.35rem; }
     .hero__travellers { margin-top: 0.55rem; }
     .hero::after { display: none; }
@@ -1045,7 +1287,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
      to a 44px hit height and missed these because they are .btn--small, not .icon-btn--small.
      min-height does not affect width, so nothing rewraps; the row is 4px taller. */
   .booking-list, .trip-cards, .trips-grid, .members { grid-template-columns: 1fr; }
-  .hero { padding: 1.5rem 1.2rem; }
+  .hero { padding: 0; }
+  .hero__body { padding: 1.5rem 1.2rem; }
 }
 
 @media (max-width: 380px) {
@@ -1373,7 +1616,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           content: ""; display: block; width: 40px; height: 4px; border-radius: 2px;
           background: var(--border-strong); margin: 10px auto 0;
         }
-        .dialog form, .dialog > h3 { padding-top: 0.9rem; }
+        .dialog form, .dialog__pad, .dialog > h3 { padding-top: 0.9rem; }
         .dialog__actions {
           position: sticky; bottom: 0; background: var(--surface);
           padding: 0.7rem 0 calc(0.4rem + env(safe-area-inset-bottom));
@@ -1384,7 +1627,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
            its centre returned the Save button, so tapping the select submitted the form
            and closed the dialog. Reserve its height so every field can scroll clear;
            scrollFieldClearOfActions() handles the field you're actually reaching for. */
-        .dialog form { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
+        .dialog form, .dialog__pad { padding-bottom: calc(4.6rem + env(safe-area-inset-bottom)); }
         /* The dialog is the scroll container here, so scroll-padding keeps the browser's
            own scroll-into-view (focus, tabbing, find-in-page) clear of the bar too. */
         .dialog { scroll-padding-bottom: calc(5.2rem + env(safe-area-inset-bottom)); }
@@ -1699,11 +1942,17 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
               </div>
             </div>
 
-            <section class="panel panel--global" aria-labelledby="global-heading">
-              <h2 id="global-heading" class="panel__heading">Overview</h2>
+            <!-- Mid-trip this is background: on day 4 of 4 the live trip is the whole job,
+                 and the year's funds-vs-committed figure is not what you open the app for.
+                 renderTrips moves this below the trip list and folds it while travelling. -->
+            <details class="panel panel--global" id="global-panel" open>
+              <summary class="panel__heading" id="global-heading">
+                <span>Overview</span>
+                <span class="panel__summary-note" id="global-summary-note"></span>
+              </summary>
               <div id="global-answer"></div>
               <div id="global-stats" class="stats-grid"></div>
-            </section>
+            </details>
 
             <section class="trips-section" aria-labelledby="trips-heading">
               <div class="trips-section__head">
@@ -1725,6 +1974,13 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
                 No money added yet — use “Add funds” to record what’s in the pot.
               </p>
             </section>
+
+            <!-- Sticky while a trip is on: logging a coffee should never mean scrolling
+                 past the whole expense list and the category breakdown first. -->
+            <div id="budget-quickadd" class="quickadd" hidden>
+              <span class="quickadd__trip" data-quickadd-trip></span>
+              <button type="button" class="btn btn--primary quickadd__btn" data-quickadd-btn>+ Add expense</button>
+            </div>
           </section>
 
           <!-- ===== BOOKINGS & DOCUMENTS ===== -->
@@ -1890,6 +2146,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg>
           Open in Google Maps
         </button>
+        <button type="button" class="sheet-item" data-item-action="visited">
+          <svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4 10-10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span data-visited-label>Mark visited</span>
+        </button>
         <button type="button" class="sheet-item" data-item-action="expense">
           <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="6" width="17" height="12" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 10h17M8 14.5h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <span data-item-action-label>Add expense</span>
@@ -1965,9 +2225,37 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <input type="number" name="year" min="2000" max="2100" required />
           <span class="field__hint" id="trip-year-hint" hidden>Taken from the start date</span>
         </label>
+        <!-- Budget is ALWAYS in shekels, on every trip. A foreign currency is only how
+             an expense is entered at the till; it is never a unit of account. That is
+             what keeps this label static and the rollover untouched. -->
         <label class="field">
           <span class="field__label">Budget (₪)</span>
           <input type="number" name="budget" min="0" step="0.01" required />
+        </label>
+        <!-- The whole point of this control is that a rate exists behind it, so it has to
+             LOOK like a control. Shipped first as a bare "ILS" pill with the rate, fee and
+             hint all hidden until the currency had already been changed — which meant there
+             was no visible path to a rate at all, and Isaac could not find one. The hint now
+             always shows and names the next step. -->
+        <div class="field">
+          <span class="field__label">Spending currency</span>
+          <div class="amount-row">
+            <input type="hidden" name="spendCurrency" value="ILS" />
+            <button type="button" class="currency-btn currency-btn--wide" id="trip-currency-btn"
+                    style="flex:0 0 7rem" aria-label="Change the spending currency">
+              <span data-trip-currency-code>ILS</span><span class="currency-btn__chev" aria-hidden="true">▾</span>
+            </button>
+            <input type="number" name="rate" min="0" step="0.0001" inputmode="decimal"
+                   placeholder="rate" aria-labelledby="trip-rate-hint" style="flex:1" />
+          </div>
+          <!-- One field, not a rate table. The shekel figure it produces is a placeholder
+               that the card statement later overwrites, so it does not need to be exact —
+               it needs to exist before you are standing at a till. -->
+          <span class="field__hint" id="trip-rate-hint"></span>
+        </div>
+        <label class="field" id="trip-fee-field" hidden>
+          <span class="field__label">Card fee (%)</span>
+          <input type="number" name="feePercent" min="0" max="20" step="0.1" inputmode="decimal" />
         </label>
         <div class="roll-years">
           <label class="field">
@@ -2067,17 +2355,30 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <option value="Hotel">Hotel</option>
             <option value="Flight">Flight</option>
             <option value="Food">Food</option>
+            <option value="Groceries">Groceries</option>
             <option value="Transport">Transport</option>
             <option value="Activities">Activities</option>
             <option value="Shopping">Shopping</option>
+            <option value="Gifts">Gifts</option>
             <option value="Other">Other</option>
           </select>
         </label>
         <input type="hidden" name="itemId" />
-        <label class="field">
-          <span class="field__label">Amount (₪)</span>
-          <input type="number" name="amount" id="expense-amount" min="0.01" step="0.01" required />
-        </label>
+        <!-- Amount + currency. The currency is a BUTTON plus a hidden input, never a
+             <select> — see the payment-status comment below for why a native option
+             list is not usable on this dialog. The hidden input keeps the form
+             contract (`name="currency"`) identical for FormData. -->
+        <div class="field">
+          <span class="field__label" id="expense-amount-label">Amount</span>
+          <div class="amount-row">
+            <input type="number" name="amount" id="expense-amount" min="0.01" step="0.01" required
+                   inputmode="decimal" aria-labelledby="expense-amount-label" />
+            <input type="hidden" name="currency" value="ILS" />
+            <button type="button" class="currency-btn" id="expense-currency-btn"
+                    aria-label="Currency">ILS</button>
+          </div>
+          <p class="field__hint" id="expense-estimate" hidden></p>
+        </div>
         <!-- Three tap targets, not a <select>. Twice now a fix for "picking Paid closes the
              sheet" has failed on a real Android phone: v1.10.4 timed a window from touching the
              select, v1.10.5 keyed off the select holding focus. Both were guesses about how the
@@ -2094,20 +2395,81 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <button type="button" data-status="paid">Paid</button>
           </div>
         </div>
+        <!-- No value="0": an amount field that starts at zero has to be cleared before
+             it can be typed into. Empty means zero, handled in buildExpenseFromForm. -->
         <label class="field">
-          <span class="field__label">Amount paid (₪)</span>
-          <input type="number" name="amountPaid" min="0" step="0.01" value="0" />
+          <span class="field__label" id="expense-paid-label">Amount paid</span>
+          <input type="number" name="amountPaid" min="0" step="0.01" inputmode="decimal" />
         </label>
         <label class="field" id="expense-paid-date-wrap" hidden>
           <span class="field__label">Paid date (optional)</span>
           <input type="date" name="paidDate" />
         </label>
         <label class="field">
-          <span class="field__label">Booking date (optional)</span>
+          <!-- "Booking date" was wrong for the common case: on a trip this is the day you
+               spent the money, which is what the day filter groups by. -->
+          <span class="field__label">Date spent (optional)</span>
           <input type="date" name="date" />
         </label>
+        <!-- Read-only: settling is its own flow (the Settle sheet), because it happens
+             days later from the card statement, not while editing the expense. This is
+             here only so a mistake can be seen and cleared. -->
+        <div class="field settled-line" id="expense-settled-line" hidden>
+          <span class="field__label">Settled</span>
+          <div class="settled-line__row">
+            <span id="expense-settled-text"></span>
+            <button type="button" class="btn btn--ghost btn--small" id="expense-settled-clear">Clear</button>
+          </div>
+        </div>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
+          <button type="submit" class="btn btn--primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- ===== Currency picker (see the amount field) ===== -->
+    <dialog id="dialog-currency" class="dialog" aria-labelledby="currency-title">
+      <div style="padding: 0.9rem 1.2rem 0.4rem">
+        <h3 class="dialog__title" id="currency-title" style="margin-bottom:0.6rem">Currency</h3>
+        <div id="currency-list"></div>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close style="flex:1;justify-content:center">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ===== Day sheet: generate online, save, read offline ===== -->
+    <dialog id="dialog-daysheet" class="dialog" aria-labelledby="daysheet-title">
+      <div class="dialog__pad">
+        <h3 class="dialog__title" id="daysheet-title">Day sheet</h3>
+        <p class="field__hint" id="daysheet-intro">Save, share or screenshot this now — the saved copy is what works without signal.</p>
+        <div id="daysheet-body" class="daysheet"></div>
+        <p class="field__hint daysheet__privacy" id="daysheet-privacy"></p>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>Close</button>
+          <button type="button" class="btn btn--primary" id="daysheet-print">Save or print</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ===== Settle: the real ILS charge from the card statement ===== -->
+    <dialog id="dialog-settle" class="dialog" aria-labelledby="settle-title">
+      <form id="form-settle" method="dialog">
+        <h3 class="dialog__title" id="settle-title">Settle from statement</h3>
+        <input type="hidden" name="tripId" />
+        <input type="hidden" name="expenseId" />
+        <p class="field__hint" id="settle-context"></p>
+        <label class="field">
+          <span class="field__label">Actual charge (₪)</span>
+          <input type="number" name="settledHome" min="0.01" step="0.01" required inputmode="decimal" id="settle-amount" />
+        </label>
+        <label class="field">
+          <span class="field__label">Statement date</span>
+          <input type="date" name="settledDate" />
+        </label>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>Not yet</button>
           <button type="submit" class="btn btn--primary">Save</button>
         </div>
       </form>
@@ -2116,7 +2478,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
     <!-- ===== Itinerary reservation dialog ===== -->
     <dialog id="dialog-item" class="dialog dialog--wide" aria-labelledby="item-dialog-title">
       <form id="form-item" method="dialog">
-        <h3 class="dialog__title" id="item-dialog-title">Add booking</h3>
+        <h3 class="dialog__title" id="item-dialog-title">Add to day</h3>
         <input type="hidden" name="itemId" />
         <input type="hidden" name="tripId" />
         <!-- Buttons, not a select: opened from Bookings there is no trip context to inherit, and
@@ -2174,6 +2536,18 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <input type="time" name="startTime" />
           </label>
         </div>
+        <!-- Position within the day. Buttons everywhere else on this dialog for the
+             Android popup reason, but this list is rebuilt per day and can be long,
+             so it stays a select — it is not in the path that ever misbehaved (that
+             was the dialog closing on option-dismiss for status/type, both of which
+             sit above the fold and are tapped far more often). Hidden until the day
+             actually has something to be positioned against. -->
+        <label class="field" id="item-position-field" hidden>
+          <span class="field__label">Position in the day</span>
+          <select name="afterItem">
+            <option value="">Sort by time</option>
+          </select>
+        </label>
         <div class="roll-years">
           <label class="field" data-item-field="endDate">
             <span class="field__label" id="item-enddate-label">End date</span>
@@ -2217,7 +2591,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v1.15.3";
+const APP_VERSION = "v2.0.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -2231,9 +2605,90 @@ function pendingBackup() {
   return imp ? { kind: "import", data: imp } : null;
 }
 
-const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Shopping", "Other"];
+const CATEGORIES = ["Hotel", "Flight", "Food", "Groceries", "Transport", "Activities", "Shopping", "Gifts", "Other"];
 
 const PAYMENT_STATUSES = ["planned", "booked", "paid"];
+
+/* ============================================================
+   MONEY (v2.0) — ILS is the only accounting currency
+   ============================================================
+
+   A foreign currency is how an expense was ENTERED at the till, never a unit of
+   account. Every budget, every total, the fund pot and the rollover stay in ILS
+   exactly as they always were, which is why trip.budget needs no conversion and
+   formatMoney's ~30 existing call sites keep rendering the shekel untouched.
+
+   Two INDEPENDENT axes that must never be conflated:
+     payment    — status/amountPaid/paidDate, denominated in the expense's own currency
+     settlement — settledHome, the real ILS the card was charged. Always ILS. */
+const HOME_CURRENCY = "ILS";
+const COMMON_CURRENCIES = ["ILS", "EUR", "USD", "GBP", "CHF", "CZK", "HUF", "PLN", "TRY", "THB", "JPY", "AED"];
+/* Any ISO-shaped code Intl can format is allowed — deliberately not a fixed registry,
+   so a currency we never listed still works. The regex alone would accept an invented
+   code; normalizeCurrency uppercases FIRST so "eur" is not treated as one. */
+const CURRENCY_RE = /^[A-Z]{3}$/;
+
+function normalizeCurrency(code) {
+  const up = String(code || "").trim().toUpperCase();
+  return CURRENCY_RE.test(up) ? up : "";
+}
+
+/* ILS per 1 unit of `code`. One direction only — no reciprocals anywhere, and the
+   number is typed the way it is read ("1 EUR = 3.85 ILS").
+
+   Returns 0 for UNKNOWN, NEVER 1. A 1:1 fallback would render a EUR 420 dinner as
+   ILS 420; every caller must branch on `known` instead. */
+function rateFor(trip, code) {
+  const cur = normalizeCurrency(code);
+  if (!cur || cur === HOME_CURRENCY) return 1;
+  const r = Number(trip && trip.rates ? trip.rates[cur] : 0);
+  return Number.isFinite(r) && r > 0 ? r : 0;
+}
+
+function tripFeeMultiplier(trip) {
+  const f = Number(trip && trip.feePercent);
+  return 1 + (Number.isFinite(f) && f >= 0 ? f : 0) / 100;
+}
+
+function expenseNeedsRate(trip, e) {
+  return rateFor(trip, e.currency) === 0;
+}
+
+function isFullyPaid(e) {
+  return Number(e.amount) > 0 && Number(e.amountPaid) >= Number(e.amount);
+}
+
+/* The ILS value of an expense: settled truth when the statement has landed,
+   otherwise the fee-loaded estimate. `known` is false when no rate is set —
+   callers must EXCLUDE those rows from totals rather than adding value 0, or a
+   EUR trip with no rate reads as "nothing spent, full budget left". */
+function expenseHome(trip, e) {
+  if (e.settledHome != null) return { value: Number(e.settledHome), settled: true, known: true };
+  const r = rateFor(trip, e.currency);
+  const fee = e.currency === HOME_CURRENCY ? 1 : tripFeeMultiplier(trip);
+  return { value: Number(e.amount) * r * fee, settled: false, known: r > 0 };
+}
+
+/* Paid-so-far in ILS. Settlement is ALL-OR-NOTHING: settledHome is the charge for
+   the whole expense, so it may only stand in for "paid" once the expense is fully
+   paid. A deposit plus a balance is two expenses. Never pro-rata settledHome. */
+function expensePaidHome(trip, e) {
+  if (e.settledHome != null && isFullyPaid(e)) {
+    return { value: Number(e.settledHome), settled: true, known: true };
+  }
+  const r = rateFor(trip, e.currency);
+  const fee = e.currency === HOME_CURRENCY ? 1 : tripFeeMultiplier(trip);
+  return { value: Number(e.amountPaid) * r * fee, settled: false, known: r > 0 };
+}
+
+/* All spend is card spend (confirmed with Isaac — there is no cash path), so every
+   foreign expense will eventually get a statement line. Settlement is a different
+   axis from payment: this asks "has the real charge landed?", not "did we pay?". */
+function expenseNeedsSettling(trip, e) {
+  if (e.settledHome != null) return false;
+  if (normalizeCurrency(e.currency) === HOME_CURRENCY) return false;
+  return Number(e.amountPaid) > 0 || isFullyPaid(e);
+}
 
 function normalizeCategory(category) {
   const match = CATEGORIES.find(
@@ -2247,10 +2702,16 @@ function categoryDataAttr(category) {
 }
 
 function categoryBreakdown(trip) {
+  /* Numerator and denominator MUST change together. tripSpent() below now converts
+     to ILS and drops unrated rows; summing raw e.amount here would mix a EUR 38
+     into a shekel total and produce bars that are wrong but still plausibly
+     shaped — the kind of bug that survives review. Same filter, same units. */
   const totals = {};
   for (const e of trip.expenses) {
+    const h = expenseHome(trip, e);
+    if (!h.known) continue;
     const cat = normalizeCategory(e.category);
-    totals[cat] = (totals[cat] || 0) + Number(e.amount);
+    totals[cat] = (totals[cat] || 0) + h.value;
   }
   const spent = tripSpent(trip);
   return Object.entries(totals)
@@ -2382,6 +2843,12 @@ function normalizeItem(it) {
     /* Manual position within its day; 0 = "sort me by time". Set by the
        timeline ↑/↓ buttons (minutes-scale float, so timed items interleave). */
     sortIndex: Number(it.sortIndex) > 0 ? Number(it.sortIndex) : 0,
+    /* v2.0. A TIMESTAMP, not a boolean: under the merge's remote-wins rule two
+       devices toggling a bare flag can resurrect or erase a tick depending on
+       edit order, whereas the later stamp always wins. "" = not visited.
+       Like sortIndex, the form does not carry it — handleItemSubmit must copy it
+       forward explicitly or every edit silently un-visits the place. */
+    visitedAt: typeof it.visitedAt === "string" ? it.visitedAt : "",
   };
 }
 
@@ -2411,6 +2878,27 @@ function normalizeTripMeta(trip) {
   /* v1.14.0. Strict — shared payloads are the trust boundary, and !!"false" is true. The flag
      names the fact (the trip is not happening); "archived" is derived from it and the dates. */
   trip.cancelled = trip.cancelled === true;
+
+  /* v2.0 money. trip.budget is deliberately NOT touched: budgets are always ILS,
+     which is the whole reason this feature needs no budget conversion and no
+     re-basing. spendCurrency only picks the DEFAULT currency for the next expense
+     — changing it never rewrites an existing one.
+
+     Note these live on the trip rather than the expense precisely because this
+     function MUTATES in place: unlike normalizeExpense, which rebuilds from a
+     literal and drops unknown keys, trip-level additions survive an older client. */
+  trip.spendCurrency = normalizeCurrency(trip.spendCurrency) || HOME_CURRENCY;
+  trip.rates = trip.rates && typeof trip.rates === "object" && !Array.isArray(trip.rates) ? trip.rates : {};
+  for (const [code, v] of Object.entries(trip.rates)) {
+    const cur = normalizeCurrency(code);
+    const n = Number(v);
+    delete trip.rates[code];
+    // 0/NaN/negative are all "no rate" — dropped, so rateFor() reports unknown
+    // rather than letting a malformed payload quietly scale a total.
+    if (cur && cur !== HOME_CURRENCY && Number.isFinite(n) && n > 0) trip.rates[cur] = n;
+  }
+  const fee = Number(trip.feePercent);
+  trip.feePercent = Number.isFinite(fee) && fee >= 0 ? fee : 1;
 }
 
 /* v2: promote hardcoded trip meta + booking refs into persisted state */
@@ -2460,6 +2948,8 @@ function safeId(id) {
 
 function normalizeExpense(exp) {
   const amount = Math.max(0, Number(exp.amount) || 0);
+  const settledRaw = Number(exp.settledHome);
+  const settled = Number.isFinite(settledRaw) && settledRaw > 0 ? settledRaw : null;
   let amountPaid = Math.min(amount, Math.max(0, Number(exp.amountPaid) || 0));
   let status = PAYMENT_STATUSES.includes(exp.status) ? exp.status : "booked";
   let paidDate = exp.paidDate || "";
@@ -2489,6 +2979,17 @@ function normalizeExpense(exp) {
     amountPaid,
     paidDate,
     itemId: exp.itemId ? String(exp.itemId) : "", // v1.15.0: the booking this expense pays for
+
+    /* v2.0. Defaults to "" and NOT to ILS on purpose: deciding that a bare legacy
+       amount is shekels belongs to migrateToV3, which is the one place that reasons
+       about pre-v2.0 data. rateFor() already treats "" as 1:1, so an unmigrated row
+       still renders correctly in the meantime.
+
+       settledHome is the real ILS the card was charged — always ILS, never the
+       expense's own currency. It must be finite and > 0; zero is NOT settled. */
+    currency: normalizeCurrency(exp.currency),
+    settledHome: settled,
+    settledDate: settled != null ? (exp.settledDate || "") : "",
   };
 }
 
@@ -2781,6 +3282,40 @@ function normalizeState(data) {
      deterministic, so two devices migrating independently agree and merge3 sees
      no conflict. */
   migrateUntimedOrder(data);
+  /* Same reasoning as migrateUntimedOrder: runs on every load AND on every incoming
+     shared payload, not just once at startup. */
+  migrateToV3(data);
+  return data;
+}
+
+/* ============================================================
+   migrateToV3 (v2.0) — stamp ILS, convert nothing
+   ============================================================
+
+   Every pre-v2.0 amount was rendered by a formatMoney() that hardcoded
+   currency:"ILS", so ILS is what those numbers ARE. Recording that fact is the
+   entire migration: no value is converted, no currency is inferred, and because
+   budgets stay ILS forever there is nothing else to touch. Choosing a trip's
+   spendCurrency later is a user action that changes only the default for the NEXT
+   expense — it never reinterprets an existing one.
+
+   IDEMPOTENT BY CONSTRUCTION: every write is guarded by "this field is missing or
+   invalid", so a second pass writes nothing. There are no clocks, ids or ordering
+   involved, so two devices migrating independently produce byte-identical results
+   and merge3 sees no conflict — the property migrateUntimedOrder relies on too.
+
+   Guarded per ENTITY rather than on data.version, deliberately. merge3 sets
+   version = Math.max(base, local, remote), so a document can carry the new version
+   while still holding an expense that arrived without a currency; gating on the
+   version alone would skip exactly the rows that need help. That is also why there
+   is no SCHEMA_VERSION constant — nothing would read it. */
+function migrateToV3(data) {
+  for (const trip of data.trips) {
+    // normalizeTripMeta has already defaulted spendCurrency/rates/feePercent.
+    for (const exp of trip.expenses) {
+      if (!exp.currency) exp.currency = HOME_CURRENCY;
+    }
+  }
   return data;
 }
 
@@ -2867,28 +3402,59 @@ function saveState() {
 let state = loadState();
 let selectedYear = "all";
 
-function formatMoney(n) {
-  return new Intl.NumberFormat("en-IL", {
+/* v2.0: widened, not changed. The code parameter DEFAULTS to ILS so all ~30
+   existing call sites keep rendering shekels untouched — every one of them is a
+   genuine ILS figure (budget, committed, paid, the fund pot, rollover, cross-trip
+   stats). Only the expense row itself ever passes a foreign code. */
+function formatMoney(n, code) {
+  const cur = normalizeCurrency(code) || HOME_CURRENCY;
+  // en-IL renders a non-shekel currency oddly; en-GB is neutral for everything else.
+  return new Intl.NumberFormat(cur === HOME_CURRENCY ? "en-IL" : "en-GB", {
     style: "currency",
-    currency: "ILS",
+    currency: cur,
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(n);
 }
 
-function tripCommitted(trip) {
-  return trip.expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+/* Sum an expense-derived ILS value, EXCLUDING rows whose rate is unknown.
+   Returning {value, unrated} rather than a bare number is the point: a naive
+   sum of expenseHome().value would add 0 for every unrated row, so a EUR trip
+   with no rate set would read as "nothing committed, whole budget left" — as
+   wrong as a 1:1 fallback and in the more dangerous direction. Callers render
+   the unrated count beside the number so the total is never silently partial. */
+function sumHome(trip, pick) {
+  let value = 0, unrated = 0;
+  for (const e of trip.expenses) {
+    const h = pick(trip, e);
+    if (h.known) value += h.value;
+    else unrated++;
+  }
+  return { value, unrated };
 }
+function tripCommittedHome(trip) { return sumHome(trip, expenseHome); }
+function tripPaidHome(trip) { return sumHome(trip, expensePaidHome); }
+function tripDueHome(trip) {
+  let value = 0, unrated = 0;
+  for (const e of trip.expenses) {
+    const full = expenseHome(trip, e), paid = expensePaidHome(trip, e);
+    if (full.known && paid.known) value += Math.max(0, full.value - paid.value);
+    else unrated++;
+  }
+  return { value, unrated };
+}
+function tripUnsettledCount(trip) {
+  return trip.expenses.filter((e) => expenseNeedsSettling(trip, e)).length;
+}
+
+/* v2.0: these still return a plain ILS number, so every existing caller and every
+   formatMoney(...) around them is unchanged — but they now CONVERT, because an
+   expense's amount is in its own currency. Unrated rows are excluded, not counted
+   as 0; use the *Home variants when the count needs to be disclosed. */
+function tripCommitted(trip) { return tripCommittedHome(trip).value; }
 function tripSpent(trip) { return tripCommitted(trip); }
-function tripPaid(trip) {
-  return trip.expenses.reduce((sum, e) => sum + Number(e.amountPaid), 0);
-}
-function tripDue(trip) {
-  return trip.expenses.reduce(
-    (sum, e) => sum + Math.max(0, Number(e.amount) - Number(e.amountPaid)),
-    0
-  );
-}
+function tripPaid(trip) { return tripPaidHome(trip).value; }
+function tripDue(trip) { return tripDueHome(trip).value; }
 
 function expenseDisplayStatus(exp) {
   const amount = Number(exp.amount);
@@ -2910,15 +3476,15 @@ function expenseFormField(form, name) { return form.elements[name]; }
 
 function buildExpenseFromForm(form) {
   const amount = Number(expenseFormField(form, "amount").value);
+  const currency = normalizeCurrency(expenseFormField(form, "currency").value) || HOME_CURRENCY;
   const label = expenseFormField(form, "label").value.trim();
   const category = expenseFormField(form, "category").value;
   const date = expenseFormField(form, "date").value;
   const itemId = expenseFormField(form, "itemId").value; // the booking this pays for, if any
   let status = expenseFormField(form, "status").value;
-  let amountPaid = Math.min(
-    amount,
-    Math.max(0, Number(expenseFormField(form, "amountPaid").value) || 0)
-  );
+  // Empty is zero — the field no longer starts at "0" (it had to be cleared before typing).
+  const paidRaw = expenseFormField(form, "amountPaid").value.trim();
+  let amountPaid = Math.min(amount, Math.max(0, paidRaw === "" ? 0 : Number(paidRaw) || 0));
   let paidDate = expenseFormField(form, "paidDate").value;
 
   if (!label || !CATEGORIES.includes(category) || amount <= 0) return null;
@@ -2942,8 +3508,13 @@ function buildExpenseFromForm(form) {
      An expense with an empty id is unreachable: every row action carries data-expense-id=""
      and bails. Drop the id here; both call sites own it. */
   const { id: _noId, ...fields } = normalizeExpense({
-    label, category, amount, date, status, amountPaid, paidDate, itemId,
+    label, category, amount, currency, date, status, amountPaid, paidDate, itemId,
   });
+  /* Settlement is NOT a form field — it is owned by the Settle sheet. Leaving the
+     keys out here means the caller's `{ ...exp, ...payload }` spread preserves an
+     existing settlement instead of clearing it on every unrelated edit. */
+  delete fields.settledHome;
+  delete fields.settledDate;
   return fields;
 }
 
@@ -3299,10 +3870,23 @@ function renderExpenseItem(trip, e) {
   const isPaid = display === "paid";
   const isPartial = display === "partial";
   const statusClass = `payment-status payment-status--${display}`;
+  const cur = e.currency || HOME_CURRENCY;
   const partialLine =
     isPartial || (paid > 0 && !isPaid)
-      ? `<div class="expense-item__paid-line">${formatMoney(paid)} / ${formatMoney(amount)} paid</div>`
+      ? `<div class="expense-item__paid-line">${formatMoney(paid, cur)} / ${formatMoney(amount, cur)} paid</div>`
       : "";
+
+  /* The second money line. Only foreign expenses have one — an ILS expense already
+     IS its shekel figure. Three states, visually distinct on purpose: an estimate is
+     muted and prefixed "≈" so it never reads as reconciled, a settled figure is the
+     bank's truth, and a missing rate says so rather than silently converting 1:1. */
+  const home = expenseHome(trip, e);
+  const homeLine = cur === HOME_CURRENCY ? ""
+    : !home.known
+      ? `<div class="expense-item__paid-line"><span class="fx-norate">Rate needed</span></div>`
+      : home.settled
+        ? `<div class="expense-item__paid-line"><span class="fx-settled">${formatMoney(home.value)} ✓</span></div>`
+        : `<div class="expense-item__paid-line"><span class="fx-est">≈ ${formatMoney(home.value)}</span></div>`;
 
   return `
         <li class="expense-item ${isPaid ? "expense-item--paid" : ""}">
@@ -3315,8 +3899,9 @@ function renderExpenseItem(trip, e) {
                 ${e.date ? ` · ${escapeHtml(e.date)}` : ""}
               </div>
               ${partialLine}
+              ${homeLine}
             </div>
-            <span class="expense-item__amount">${formatMoney(e.amount)}</span>
+            <span class="expense-item__amount">${formatMoney(e.amount, cur)}</span>
           </div>
           <div class="expense-item__actions">
             ${
@@ -3324,6 +3909,9 @@ function renderExpenseItem(trip, e) {
                 ? `<button type="button" class="btn btn--small btn--ghost btn-mark-unpaid" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="Mark ${escapeHtml(e.label)} unpaid">Mark unpaid</button>`
                 : `<button type="button" class="btn btn--small btn--ghost btn-mark-paid" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="Mark ${escapeHtml(e.label)} paid">Mark paid</button>`
             }
+            ${expenseNeedsSettling(trip, e) || e.settledHome != null
+              ? `<button type="button" class="btn btn--small btn--ghost btn-settle-expense" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="${e.settledHome != null ? "Re-settle" : "Settle"} ${escapeHtml(e.label)} from the statement">${e.settledHome != null ? "Re-settle" : "Settle"}</button>`
+              : ""}
             <button type="button" class="btn btn--small btn--ghost btn-edit-expense" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="Edit ${escapeHtml(e.label)}">Edit</button>
             <button type="button" class="btn btn--small btn--danger btn-delete-expense" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="Delete ${escapeHtml(e.label)}">Delete</button>
           </div>
@@ -3331,37 +3919,97 @@ function renderExpenseItem(trip, e) {
 }
 
 function renderTripCard(trip) {
-  const committed = tripCommitted(trip);
+  const committedAgg = tripCommittedHome(trip);
+  const committed = committedAgg.value;
+  const unsettled = tripUnsettledCount(trip);
   const paid = tripPaid(trip);
   const due = tripDue(trip);
+  /* An excluded row must be VISIBLE in the number it was excluded from. Totals here
+     drop expenses whose rate is unknown — correct, because converting them 1:1 would
+     be a lie — but silently dropping them reads as "nothing spent, budget intact",
+     which is the more dangerous lie. Same for estimates: a total built partly from
+     guesses says so, next to the figure rather than in a chip somewhere else. */
+  const notes = [
+    committedAgg.unrated ? `${committedAgg.unrated} awaiting rate${committedAgg.unrated === 1 ? "" : "s"}` : "",
+    unsettled ? `${unsettled} unsettled` : "",
+  ].filter(Boolean);
+  const totalNote = notes.length
+    ? `<p class="trip-card__fxnote">${notes.map((n) => escapeHtml(n)).join(" · ")}</p>` : "";
   const budget = Number(trip.budget);
   const remaining = budget - committed;
   const over = committed > budget;
   const pct = budget > 0 ? Math.min(100, (committed / budget) * 100) : committed > 0 ? 100 : 0;
-  const shown = trip.expenses.filter(expenseMatchesFilter);
+  const day = expenseDayFilter.get(trip.id) || "";
+  const shown = trip.expenses
+    .filter((e) => expenseMatchesFilter(e, trip))
+    .filter((e) => !day || (day === "none" ? !e.date : e.date === day));
   const expensesHtml =
     trip.expenses.length === 0
       ? `<li class="empty-state">Nothing booked yet — add an expense to start tracking this budget.</li>`
       : shown.length === 0
-        ? `<li class="empty-state">No ${expenseFilter} expenses on this trip.</li>`
+        ? `<li class="empty-state">Nothing here${day ? " on this day" : ""}${expenseFilter !== "all" ? ` in "${expenseFilter}"` : ""}.</li>`
         : shown.map((e) => renderExpenseItem(trip, e)).join("");
-  const foldLabel = expenseFilter === "all"
-    ? `${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`
-    : `${shown.length} ${expenseFilter} of ${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`;
+  /* The summary names whichever narrowings are active, rather than just counting. It
+     briefly lost the "unpaid" word when the day filter was added — but "5 of 22" does
+     not tell you WHY 17 are missing, which is the whole job of this line. */
+  const dayWord = day === "none" ? "with no date" : day ? `on ${fmtDayMonth(day)}` : "";
+  const narrowings = [expenseFilter === "all" ? "" : expenseFilter, dayWord].filter(Boolean).join(" ");
+  const foldLabel = narrowings
+    ? `${shown.length} ${narrowings} of ${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`
+    : `${trip.expenses.length} expense${trip.expenses.length === 1 ? "" : "s"}`;
 
+  /* Day chips, only when the trip actually has days worth separating. Crucially there is
+     a "No date" chip whenever any expense lacks one: 14 of Isaac's 21 Paris expenses had
+     no date, so a day filter without that chip would silently hide two thirds of the list
+     and read as data loss. Counts sit on every chip so an empty day is visible as empty
+     rather than as a filter that broke. */
+  const dayCounts = new Map();
+  let undated = 0;
+  for (const e of trip.expenses) {
+    if (e.date) dayCounts.set(e.date, (dayCounts.get(e.date) || 0) + 1);
+    else undated++;
+  }
+  /* Same classes as the Unpaid/Paid chips above, not a lookalike: those styles live only
+     inside the <=900px block, so anything that copied their values would match on a phone
+     and diverge everywhere else. Sharing the class means they cannot drift. */
+  const dayChip = (value, label, count) =>
+    `<button type="button" class="filter-chip ${day === value ? "is-active" : ""}"
+       data-exp-day="${escapeHtml(value)}" data-trip-id="${trip.id}"
+       aria-pressed="${day === value ? "true" : "false"}"
+       aria-label="${escapeHtml(label)}, ${count} expense${count === 1 ? "" : "s"}"
+     >${escapeHtml(label)}<span class="filter-chip__count">${count}</span></button>`;
+  const dayRow = dayCounts.size > 1 || (dayCounts.size >= 1 && undated)
+    ? `<div class="filter-chips expense-days">${
+        dayChip("", "All", trip.expenses.length)
+        + [...dayCounts.keys()].sort().map((iso) => dayChip(iso, fmtDayMonth(iso), dayCounts.get(iso))).join("")
+        + (undated ? dayChip("none", "No date", undated) : "")
+      }</div>`
+    : "";
+
+  /* The whole card collapses, not just its expense list: with four or five trips in a
+     year the screen is mostly cards you are not spending on. Collapsed it keeps the one
+     line that says whether the trip is in trouble. Travelling trips start open. */
+  const collapsed = tripCardCollapsed.has(trip.id);
   return `
-    <article class="trip-card ${over ? "trip-card--over" : ""}" data-trip-id="${trip.id}">
+    <article class="trip-card ${over ? "trip-card--over" : ""} ${collapsed ? "trip-card--collapsed" : ""}" data-trip-id="${trip.id}">
       <div class="trip-card__head">
         <div>
-          <h3 class="trip-card__title">${escapeHtml(trip.name)}</h3>
+          <button type="button" class="trip-card__fold" data-trip-collapse="${trip.id}"
+                  aria-expanded="${collapsed ? "false" : "true"}"
+                  aria-label="${collapsed ? "Expand" : "Collapse"} ${escapeHtml(trip.name)}">
+            <span class="trip-card__chev" aria-hidden="true" style="transform:rotate(${collapsed ? 0 : 90}deg)">▸</span>
+            <h3 class="trip-card__title">${escapeHtml(trip.name)}</h3>
+          </button>
           <span class="trip-card__year">${trip.year}</span>
           ${over ? '<span class="over-badge">Over budget</span>' : ""}
+          ${collapsed ? `<span class="trip-card__glance">${formatMoney(committed)} of ${formatMoney(budget)}${unsettled ? ` · ${unsettled} unsettled` : ""}</span>` : ""}
         </div>
         <div class="trip-card__actions">
           <button type="button" class="btn btn--small btn--ghost btn-edit-trip" data-trip-id="${trip.id}">Edit</button>
           <button type="button" class="btn btn--small btn--danger btn-delete-trip" data-trip-id="${trip.id}">Delete</button>
         </div>
       </div>
+      <div class="trip-card__rest" ${collapsed ? "hidden" : ""}>
       <div class="progress" title="${pct.toFixed(0)}% of budget committed">
         <div class="progress__bar ${over ? "progress__bar--over" : ""}" style="width: ${pct}%"></div>
       </div>
@@ -3372,12 +4020,15 @@ function renderTripCard(trip) {
         <div><dt>Still to pay</dt><dd class="${due > 0 ? "trip-metrics__due" : ""}">${formatMoney(due)}</dd></div>
         <div><dt>Left in budget</dt><dd class="${remaining < 0 ? "over-badge" : ""}">${formatMoney(remaining)}</dd></div>
       </dl>
+      ${totalNote}
+      ${dayRow}
       <details class="expenses-fold" data-trip-fold="${trip.id}" ${window.innerWidth > 900 || trip.expenses.length === 0 || expensesFoldOpen.has(trip.id) ? "open" : ""}>
         <summary>${foldLabel}</summary>
         <ul class="expense-list">${expensesHtml}</ul>
       </details>
       <button type="button" class="btn btn--secondary btn-add-expense btn-add-expense--card" data-trip-id="${trip.id}">Add expense</button>
       ${renderCategoryBreakdown(trip, committed)}
+      </div>
     </article>
   `;
 }
@@ -3392,15 +4043,58 @@ function renderTrips() {
     list.innerHTML = "";
     empty.hidden = false;
     $("expense-filter").hidden = true;
+    renderExpenseQuickAdd(null);
     return;
   }
 
   empty.hidden = true;
+  /* The sort already puts the trip you are ON first (sortTripsByUpcoming ranks
+     travelling: 0), so nothing here re-orders anything. What was missing in Paris
+     is that its expenses were still folded shut on the phone, and the only way to
+     add one was a button past the whole list. */
+  const active = activeExpenseTrip(trips);
+  /* Only unfold the trip actually being TRAVELLED. The quick-add bar happily targets
+     the next trip too — you book flights weeks ahead — but auto-expanding a list of
+     expenses for a trip five days out is noise on a phone. The affordance belongs to
+     the trip you are standing in. */
+  const travelling = active && tripTiming(active).state === "travelling" ? active : null;
+  if (travelling) expensesFoldOpen.add(travelling.id);
+  /* First render of a travelling year: fold the trips you are not on. Only once — after
+     that the Set is whatever you last chose, so a re-render never re-folds a card you
+     opened. */
+  if (travelling && !tripCardsDefaulted) {
+    tripCardsDefaulted = true;
+    trips.forEach((t) => { if (t.id !== travelling.id) tripCardCollapsed.add(t.id); });
+  }
+  renderExpenseQuickAdd(active);
+  layoutBudgetForTrip(travelling);
   renderExpenseFilter(trips);
   list.innerHTML = trips.map(renderTripCard).join("");
   bindExpenseRowActions();
   /* v1.15.0: remember which folds are open. Marking an expense paid re-renders the whole list,
      and on the phone (<900px) every fold snapped shut — the one you were working in included. */
+  list.querySelectorAll("[data-trip-collapse]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const id = b.getAttribute("data-trip-collapse");
+      if (tripCardCollapsed.has(id)) tripCardCollapsed.delete(id); else tripCardCollapsed.add(id);
+      renderTrips();
+    })
+  );
+
+  list.querySelectorAll("[data-exp-day]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const tripId = b.getAttribute("data-trip-id");
+      const value = b.getAttribute("data-exp-day");
+      if (value) expenseDayFilter.set(tripId, value); else expenseDayFilter.delete(tripId);
+      expensesFoldOpen.add(tripId); // narrowing to a day is a reason to see the rows
+      renderTrips();
+    })
+  );
+
+  $("global-panel")?.addEventListener("toggle", function onToggle() {
+    budgetOverviewOpen = this.open;
+  }, { once: false });
+
   list.querySelectorAll("[data-trip-fold]").forEach((d) =>
     d.addEventListener("toggle", () => {
       const id = d.getAttribute("data-trip-fold");
@@ -3419,7 +4113,10 @@ function renderExpenseFilter(trips) {
   if (!row) return;
   const all = trips.flatMap((t) => t.expenses);
   const paid = all.filter((e) => expenseDisplayStatus(e) === "paid").length;
-  const counts = { all: all.length, unpaid: all.length - paid, paid };
+  /* Unsettled needs each expense's OWN trip for its rates, so it cannot be counted
+     off the flattened list the way paid is. */
+  const unsettled = trips.reduce((n, t) => n + tripUnsettledCount(t), 0);
+  const counts = { all: all.length, unpaid: all.length - paid, paid, unsettled };
   if (expenseFilter !== "all" && !counts[expenseFilter]) expenseFilter = "all";
   row.hidden = all.length === 0;
   const chip = (value, label) => counts[value] === 0 && value !== "all" ? "" :
@@ -3427,7 +4124,7 @@ function renderExpenseFilter(trips) {
        data-expense-filter="${value}" aria-pressed="${expenseFilter === value ? "true" : "false"}"
        aria-label="${label}, ${counts[value]} expense${counts[value] === 1 ? "" : "s"}"
      >${label} <span class="filter-chip__count">${counts[value]}</span></button>`;
-  row.innerHTML = chip("all", "All") + chip("unpaid", "Unpaid") + chip("paid", "Paid");
+  row.innerHTML = chip("all", "All") + chip("unpaid", "Unpaid") + chip("paid", "Paid") + chip("unsettled", "Unsettled");
   row.querySelectorAll("[data-expense-filter]").forEach((b) =>
     b.addEventListener("click", () => {
       expenseFilter = b.getAttribute("data-expense-filter");
@@ -3443,7 +4140,7 @@ function bindExpenseRowActions() {
   if (!tripsList) return;
 
   tripsList
-    .querySelectorAll(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense")
+    .querySelectorAll(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense, .btn-settle-expense")
     .forEach((btn) => {
       btn.onclick = (e) => {
         e.preventDefault();
@@ -3460,6 +4157,8 @@ function bindExpenseRowActions() {
           const trip = state.trips.find((t) => t.id === tripId);
           const exp = trip?.expenses.find((x) => x.id === expenseId);
           if (trip && exp) openExpenseDialog(trip.id, exp);
+        } else if (btn.classList.contains("btn-settle-expense")) {
+          openSettleDialog(tripId, expenseId);
         } else if (btn.classList.contains("btn-delete-expense")) {
           deleteExpense(tripId, expenseId);
         }
@@ -3756,6 +4455,9 @@ function openTripDialog(trip = null) {
     form.cancelled.checked = trip.cancelled === true;
     $("trip-cancelled-field").hidden = false;
     $("trip-delete-row").hidden = false;
+    setTripCurrency(trip.spendCurrency || HOME_CURRENCY);
+    form.rate.value = trip.rates?.[trip.spendCurrency] ?? "";
+    form.feePercent.value = trip.feePercent ?? 1;
   } else {
     $("trip-delete-row").hidden = true;
     title.textContent = "New trip";
@@ -3764,10 +4466,55 @@ function openTripDialog(trip = null) {
     form.budget.value = "";
     renderDestRows([]);
     $("trip-cancelled-field").hidden = true; // you do not create a trip already cancelled
+    setTripCurrency(HOME_CURRENCY);
+    form.rate.value = "";
+    form.feePercent.value = 1;
   }
   syncTripYearField(form);
 
   openDialog($("dialog-trip"));
+}
+
+/* The rate and fee only mean anything once the trip spends in something other than
+   shekels, so they stay out of the way until then. */
+function setTripCurrency(code) {
+  const form = $("form-trip");
+  const cur = normalizeCurrency(code) || HOME_CURRENCY;
+  form.spendCurrency.value = cur;
+  $("trip-currency-btn").querySelector("[data-trip-currency-code]").textContent = cur;
+  const foreign = cur !== HOME_CURRENCY;
+  $("trip-fee-field").hidden = !foreign;
+  form.rate.hidden = !foreign;
+  /* The hint is never hidden. On a shekel trip it is the ONLY thing that says a rate
+     exists and how to reach it — hiding it is what made the feature undiscoverable. */
+  $("trip-rate-hint").textContent = foreign
+    ? `What one ${cur} costs in shekels. Rough is fine — the statement replaces it.`
+    : "Spending abroad? Change the currency to set an exchange rate for this trip.";
+}
+
+function openTripCurrencyPicker() {
+  const form = $("form-trip");
+  const active = normalizeCurrency(form.spendCurrency.value) || HOME_CURRENCY;
+  const order = [];
+  const seen = new Set();
+  for (const c of [HOME_CURRENCY, ...COMMON_CURRENCIES]) {
+    const cur = normalizeCurrency(c);
+    if (cur && !seen.has(cur)) { seen.add(cur); order.push(cur); }
+  }
+  $("currency-list").innerHTML = order.map((cur) => `
+    <button type="button" class="sheet-item" data-currency="${escapeHtml(cur)}"
+            aria-pressed="${cur === active ? "true" : "false"}">
+      <strong style="min-width:2.6rem">${escapeHtml(cur)}</strong>
+      <span>${escapeHtml(currencySymbol(cur))}</span>
+      ${cur === active ? '<span style="margin-inline-start:auto">✓</span>' : ""}
+    </button>`).join("");
+  $("currency-list").querySelectorAll("[data-currency]").forEach((b) =>
+    b.addEventListener("click", () => {
+      setTripCurrency(b.getAttribute("data-currency"));
+      closeDialog($("dialog-currency"));
+    })
+  );
+  openDialog($("dialog-currency"));
 }
 
 /* One input per destination. Always renders at least one row so the field never
@@ -3814,6 +4561,7 @@ function openExpenseDialog(tripId, expense = null, defaults = {}) {
   expenseFormField(form, "itemId").value = expense ? (expense.itemId || "") : (defaults.itemId || "");
   title.textContent = expense ? "Edit expense" : "Add expense";
 
+  const trip = state.trips.find((t) => t.id === tripId) || null;
   const normalized = expense ? normalizeExpense(expense) : null;
   if (normalized) {
     expenseFormField(form, "label").value = normalized.label;
@@ -3823,19 +4571,136 @@ function openExpenseDialog(tripId, expense = null, defaults = {}) {
     setExpenseStatus(normalized.status, true); // reflect only — the values are already coherent
     expenseFormField(form, "amountPaid").value = normalized.amountPaid;
     expenseFormField(form, "paidDate").value = normalized.paidDate || "";
+    setExpenseCurrency(normalized.currency || HOME_CURRENCY);
   } else {
     setExpenseStatus("booked", true);
-    expenseFormField(form, "amountPaid").value = 0;
+    // No default 0 in amountPaid — empty reads as zero and saves a tap to clear it.
+    expenseFormField(form, "amountPaid").value = "";
     expenseFormField(form, "paidDate").value = "";
     if (defaults.label) expenseFormField(form, "label").value = defaults.label;
     if (defaults.category && CATEGORIES.includes(defaults.category)) expenseFormField(form, "category").value = defaults.category;
+    /* Date it TODAY while the trip is running. Of Isaac's 21 Paris expenses only 7 had
+       a date, and all 7 were the ones auto-linked to a booking; everything typed by hand
+       had none, which made "which day did we spend that" unanswerable and a day filter
+       impossible. paidDate is no substitute — 16 of those 21 carry 19 Sept because that
+       is when he reconciled, which describes the bookkeeping rather than the trip.
+       Only inside the trip's own dates: an expense booked months ahead is not "today". */
+    const todayIso = todayLocalISO();
+    const within = trip && getMeta(trip).startDate && getMeta(trip).endDate
+      && todayIso >= getMeta(trip).startDate && todayIso <= getMeta(trip).endDate;
     if (defaults.date) expenseFormField(form, "date").value = defaults.date;
+    else if (within) expenseFormField(form, "date").value = todayIso;
+    /* New expenses default to the trip's spend currency — in Paris you are typing
+       euros all week and should never have to pick EUR twice. */
+    setExpenseCurrency(trip ? trip.spendCurrency : HOME_CURRENCY);
   }
 
+  renderSettledLine(trip, normalized);
   syncExpensePaidDateVisibility();
+  syncExpenseEstimate();
   openDialog($("dialog-expense"));
   // Prefilled from a booking: the only thing left to type is the amount.
   if (!expense && defaults.label) expenseFormField(form, "amount").focus();
+}
+
+/* ---- currency picker + live estimate (v2.0) ---------------------------------
+
+   The picker is a button and a bottom sheet rather than a <select>, for exactly the
+   reason documented on the payment-status control: a native option list on this
+   dialog has twice shipped a bug where dismissing it also dismissed the dialog. */
+function setExpenseCurrency(code) {
+  const form = $("form-expense");
+  const cur = normalizeCurrency(code) || HOME_CURRENCY;
+  expenseFormField(form, "currency").value = cur;
+  const btn = $("expense-currency-btn");
+  if (btn) btn.textContent = cur;
+  syncExpenseCurrencyLabels(cur);
+  syncExpenseEstimate();
+}
+
+/* Both amount fields are denominated in the expense's own currency, so both labels
+   follow the picker. settledHome is the only always-ILS money field. */
+function syncExpenseCurrencyLabels(cur) {
+  const sym = currencySymbol(cur);
+  const a = $("expense-amount-label"), p = $("expense-paid-label");
+  if (a) a.textContent = `Amount (${sym})`;
+  if (p) p.textContent = `Amount paid (${sym})`;
+}
+
+function currencySymbol(code) {
+  const cur = normalizeCurrency(code) || HOME_CURRENCY;
+  try {
+    // "narrowSymbol" gives ₪/€/$ rather than ILS/EUR/USD; not everywhere, hence the guard.
+    const parts = new Intl.NumberFormat("en-GB", { style: "currency", currency: cur, currencyDisplay: "narrowSymbol" }).formatToParts(0);
+    return (parts.find((x) => x.type === "currency") || {}).value || cur;
+  } catch { return cur; }
+}
+
+/* The ILS figure under the amount is a PLACEHOLDER — it exists so you know roughly
+   what a €38 dinner cost until the statement replaces it. Always muted, always
+   prefixed "≈", never presented as money that has been reconciled. */
+function syncExpenseEstimate() {
+  const hint = $("expense-estimate");
+  if (!hint) return;
+  const form = $("form-expense");
+  const trip = state.trips.find((t) => t.id === expenseFormField(form, "tripId").value);
+  const cur = normalizeCurrency(expenseFormField(form, "currency").value) || HOME_CURRENCY;
+  const amount = Number(expenseFormField(form, "amount").value);
+  if (!trip || cur === HOME_CURRENCY || !(amount > 0)) { hint.hidden = true; return; }
+  const rate = rateFor(trip, cur);
+  hint.hidden = false;
+  if (!rate) {
+    hint.innerHTML = `<span class="fx-norate">No rate for ${escapeHtml(cur)} yet</span> — saves anyway, set it on the trip.`;
+    return;
+  }
+  const fee = Number(trip.feePercent) || 0;
+  hint.innerHTML = `<span class="fx-est">≈ ${escapeHtml(formatMoney(amount * rate * tripFeeMultiplier(trip)))}</span>`
+    + (fee ? ` est. (incl. ${fee}% fee)` : " est.");
+}
+
+function renderSettledLine(trip, normalized) {
+  const wrap = $("expense-settled-line");
+  if (!wrap) return;
+  const settled = normalized && normalized.settledHome != null;
+  wrap.hidden = !settled;
+  if (!settled) return;
+  const when = normalized.settledDate ? ` on ${fmtHistoryDate(normalized.settledDate)}` : "";
+  $("expense-settled-text").innerHTML =
+    `<span class="fx-settled">${escapeHtml(formatMoney(normalized.settledHome))}</span>${escapeHtml(when)}`;
+}
+
+function openCurrencyPicker() {
+  const form = $("form-expense");
+  const trip = state.trips.find((t) => t.id === expenseFormField(form, "tripId").value);
+  const active = normalizeCurrency(expenseFormField(form, "currency").value) || HOME_CURRENCY;
+  /* Ordered by how likely it is to be wanted: this trip's spend currency, then any
+     code that already has a rate on the trip, then the common list. */
+  const seen = new Set();
+  const order = [];
+  const push = (c, note) => {
+    const cur = normalizeCurrency(c);
+    if (!cur || seen.has(cur)) return;
+    seen.add(cur); order.push({ cur, note });
+  };
+  if (trip) push(trip.spendCurrency, "trip currency");
+  push(HOME_CURRENCY, "home");
+  if (trip) Object.keys(trip.rates || {}).forEach((c) => push(c, "rate set"));
+  COMMON_CURRENCIES.forEach((c) => push(c, ""));
+
+  $("currency-list").innerHTML = order.map(({ cur, note }) => `
+    <button type="button" class="sheet-item" data-currency="${escapeHtml(cur)}"
+            aria-pressed="${cur === active ? "true" : "false"}">
+      <strong style="min-width:2.6rem">${escapeHtml(cur)}</strong>
+      <span>${escapeHtml(currencySymbol(cur))}${note ? ` · ${escapeHtml(note)}` : ""}</span>
+      ${cur === active ? '<span style="margin-inline-start:auto">✓</span>' : ""}
+    </button>`).join("");
+  $("currency-list").querySelectorAll("[data-currency]").forEach((b) =>
+    b.addEventListener("click", () => {
+      setExpenseCurrency(b.getAttribute("data-currency"));
+      closeDialog($("dialog-currency"));
+    })
+  );
+  openDialog($("dialog-currency"));
 }
 
 /* "Add expense" from a booking: everything but the amount comes from the booking itself. */
@@ -3918,7 +4783,7 @@ function openItemDialog(tripId, item = null, defaults = {}) {
   form.reset();
   form.tripId.value = tripId;
   form.itemId.value = item ? item.id : "";
-  $("item-dialog-title").textContent = item ? "Edit booking" : "Add booking";
+  $("item-dialog-title").textContent = item ? "Edit" : "Add to day";
   // Disclosure: open on desktop or when editing an item that uses those fields
   const more = $("item-more");
   // Open when adding (notes are usually the point), on desktop, or when editing
@@ -3949,10 +4814,47 @@ function openItemDialog(tripId, item = null, defaults = {}) {
 
   buildTripChoice(defaults.chooseTrip ? tripId : null);
   syncItemTypeFields();
+  buildPositionChoices(tripId, form.date.value, item ? item.id : "");
+  /* The day can change while the dialog is open, and the positions belong to the
+     day you are actually filing this under. */
+  form.date.addEventListener("change", onItemDateChangedForPosition);
   openDialog($("dialog-item"));
   /* showModal() lands on the first focusable control — Flight — so editing a Hotel had the
      keyboard on the wrong chip while Hotel was the one highlighted. */
   $("type-grid").querySelector(".type-grid__opt.is-active")?.focus();
+}
+
+function onItemDateChangedForPosition(e) {
+  const form = e.target.form;
+  buildPositionChoices(form.tripId.value, form.date.value, form.itemId.value);
+}
+
+/* "Sort by time" stays the default and the first option: most stops have a time and
+   should order by it. The picker exists for the ones that do not — a market, a walk,
+   a place you just want third — which previously landed in an arbitrary order
+   decided by a localeCompare on a random id. */
+function buildPositionChoices(tripId, iso, selfId) {
+  const field = $("item-position-field");
+  const sel = $("form-item").afterItem;
+  if (!field || !sel) return;
+  const trip = state.trips.find((t) => t.id === tripId);
+  const entries = trip && iso
+    ? itemsForDay(trip, iso).filter((e) => !e.checkout && e.item.id !== selfId)
+    : [];
+  // Nothing to be positioned relative to — the control would be a decision about nothing.
+  field.hidden = entries.length === 0;
+  /* The default option must describe what leaving it alone actually DOES. An item
+     that already carries a manual sortIndex keeps it, so calling that "Sort by time"
+     would promise a reset the submit path does not perform. */
+  const self = selfId ? state.items.find((i) => i.id === selfId) : null;
+  const keeps = self && Number(self.sortIndex) > 0;
+  const opts = [
+    `<option value="">${keeps ? "Keep current position" : "Sort by time"}</option>`,
+    `<option value="__first">First in the day</option>`,
+  ].concat(entries.map((e) =>
+      `<option value="${escapeHtml(e.item.id)}">After ${escapeHtml(e.item.title || "(untitled)")}</option>`));
+  sel.innerHTML = opts.join("");
+  sel.value = "";
 }
 
 /* Shown only when the dialog is opened from a screen that spans every trip — Bookings. From the
@@ -4049,16 +4951,56 @@ function handleItemSubmit(e) {
      arbitrarily and adding a third could reshuffle the first two. */
   else if (!item.startTime) item.sortIndex = nextDayPosition(tripId, item.date);
 
+  /* v2.0: exactly the same hazard as sortIndex above — the form does not carry
+     visitedAt, so without this every edit silently un-visits the place. */
+  if (existing) item.visitedAt = existing.visitedAt;
+
   if (existing) Object.assign(existing, item);
   else state.items.push(item);
   bookingsGroupOpen.set(tripId, true); // what you just added or edited must be visible on Bookings
 
+  /* The Position picker. Applied AFTER the item is in state.items, because
+     placeItemAtIndex reads the day's rendered order to work out the new
+     sortIndex — an item that is not in the list yet cannot be placed within it. */
+  const pos = form.afterItem ? form.afterItem.value : "";
+  if (pos) placeItemAfter(tripId, item.date, item.id, pos === "__first" ? "" : pos);
+
   saveState();
   closeDialog($("dialog-item"));
+  /* render() rebuilds the whole timeline with no scroll restoration, so adding a
+     stop on day 4 dropped you back at day 1 with no sign of what you just added.
+     Target the day explicitly rather than trusting the scroll position to survive. */
+  const landedOn = item.date;
   render();
+  if (landedOn) landOnDay(landedOn, { chosen: true });
   if (item.location.name && item.location.lat === null) {
     geocodeItem(item.id);
   }
+}
+
+/* Put `itemId` immediately after `afterId` within its day. "" means "first".
+   Works in terms of the day's ordered entries, the same list the ↑/↓ buttons and
+   the drag handler operate on, so all three agree about what "after" means.
+
+   Hotel checkout entries are skipped as targets: they are rendered pseudo-entries
+   derived from a hotel's endDate, not items of their own, so there is no position
+   to sit after — itemsForDay emits one per hotel and it always belongs at the time
+   its endTime says. */
+function placeItemAfter(tripId, iso, itemId, afterId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  if (!trip) return;
+  /* placeItemAtIndex indexes into the day's entries WITH the moving item removed,
+     and counts checkout pseudo-entries as positions — so the anchor is resolved in
+     exactly that list rather than a filtered one, or "after the 3rd stop" lands a
+     slot out on any day a hotel checks out. */
+  const entries = itemsForDay(trip, iso);
+  const from = entries.findIndex((e) => !e.checkout && e.item.id === itemId);
+  if (from < 0) return;
+  const rest = entries.filter((_, i) => i !== from);
+  if (afterId === "") return void placeItemAtIndex(trip, itemId, 0);
+  const anchor = rest.findIndex((e) => !e.checkout && e.item.id === afterId);
+  if (anchor < 0) return; // the anchor is gone; leave the time-derived slot alone
+  placeItemAtIndex(trip, itemId, anchor + 1);
 }
 
 /* Deleting a booking also deletes the expense linked to it (v1.15.0, Isaac's call) — one way:
@@ -4070,7 +5012,7 @@ function deleteItem(itemId) {
   const trip = state.trips.find((t) => t.id === item.tripId);
   const exp = linkedExpense(item);
   const msg = exp
-    ? `Delete "${item.title}"? Its ${formatMoney(exp.amount)} expense will be deleted too.`
+    ? `Delete "${item.title}"? Its ${formatMoney(exp.amount, exp.currency)} expense will be deleted too.`
     : `Delete "${item.title}"?`;
   appConfirm(msg, (ok) => {
     if (!ok) return;
@@ -4529,17 +5471,37 @@ function handleTripSubmit(e) {
   const year = tripYearFor(startDate, form.year.value);
   const travelers = form.travelers.value.split(",").map((s) => s.trim()).filter(Boolean);
   const cancelled = form.cancelled.checked;
+  /* Money settings. Changing spendCurrency only picks the default for the NEXT
+     expense — no existing expense is ever rewritten, so this is always reversible.
+     A blank or non-positive rate DELETES the entry rather than storing 0, so
+     rateFor() reports "unknown" and the totals disclose it instead of converting. */
+  const spendCurrency = normalizeCurrency(form.spendCurrency.value) || HOME_CURRENCY;
+  const rateRaw = Number(form.rate.value);
+  const feeRaw = Number(form.feePercent.value);
+  const feePercent = Number.isFinite(feeRaw) && feeRaw >= 0 ? feeRaw : 1;
+
   if (startDate && endDate && endDate < startDate) {
     alert("End date must be after the start date.");
     return;
   }
 
+  const applyRate = (trip) => {
+    trip.rates = trip.rates || {};
+    if (spendCurrency === HOME_CURRENCY) return;
+    if (Number.isFinite(rateRaw) && rateRaw > 0) trip.rates[spendCurrency] = rateRaw;
+    else delete trip.rates[spendCurrency];
+  };
+
   if (id) {
     const trip = state.trips.find((t) => t.id === id);
-    if (trip) Object.assign(trip, { name, year, budget, destination, destinations, startDate, endDate, travelers, cancelled });
+    if (trip) {
+      Object.assign(trip, { name, year, budget, destination, destinations, startDate, endDate, travelers, cancelled, spendCurrency, feePercent });
+      applyRate(trip);
+    }
   } else {
     // The literal enumerates fields, so a new one has to be added here too or it is undefined.
-    const trip = { id: uid("trip"), name, year, budget, expenses: [], destination, destinations, startDate, endDate, travelers, cancelled };
+    const trip = { id: uid("trip"), name, year, budget, expenses: [], destination, destinations, startDate, endDate, travelers, cancelled, spendCurrency, feePercent, rates: {} };
+    applyRate(trip);
     normalizeTripMeta(trip);
     state.trips.push(trip);
   }
@@ -4562,7 +5524,22 @@ function handleExpenseSubmit(e) {
 
   if (expenseId) {
     const exp = trip.expenses.find((x) => x.id === expenseId);
-    if (exp) Object.assign(exp, normalizeExpense({ ...exp, ...payload }));
+    if (exp) {
+      /* settledHome is an ABSOLUTE shekel figure, not a rate — if the amount or the
+         currency changes it no longer describes this expense, so it is dropped
+         rather than left to quietly misreport the total. The undo restores it,
+         because the usual reason to edit a settled expense is a typo in the label. */
+      const stale = exp.settledHome != null
+        && (Number(exp.amount) !== Number(payload.amount) || exp.currency !== payload.currency);
+      const prev = { settledHome: exp.settledHome, settledDate: exp.settledDate };
+      Object.assign(exp, normalizeExpense({ ...exp, ...payload }));
+      if (stale) {
+        exp.settledHome = null;
+        exp.settledDate = "";
+        undoAction = () => restoreSettlement(tripId, expenseId, prev);
+        showToast("Settled amount cleared — the amount changed.", "undo");
+      }
+    }
   } else {
     trip.expenses.push(normalizeExpense({ id: uid("exp"), ...payload }));
   }
@@ -4571,6 +5548,71 @@ function handleExpenseSubmit(e) {
   saveState();
   render();
   closeDialog($("dialog-expense"));
+}
+
+/* ---- settlement (v2.0) ------------------------------------------------------
+
+   Settling happens days after the expense, on the couch, working down the card
+   statement — a different task from editing an expense, which is why it has its
+   own one-field sheet rather than living in the edit dialog. */
+function openSettleDialog(tripId, expenseId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  const exp = trip && trip.expenses.find((x) => x.id === expenseId);
+  if (!exp) return;
+  const form = $("form-settle");
+  form.reset();
+  expenseFormField(form, "tripId").value = tripId;
+  expenseFormField(form, "expenseId").value = expenseId;
+  const home = expenseHome(trip, exp);
+  $("settle-context").textContent =
+    `${exp.label} · ${formatMoney(exp.amount, exp.currency)}`
+    + (home.known && !home.settled ? ` · estimated ${formatMoney(home.value)}` : "");
+  // Prefilled with the estimate: when the bank agrees it is two taps to accept.
+  expenseFormField(form, "settledHome").value =
+    exp.settledHome != null ? exp.settledHome : (home.known ? Math.round(home.value * 100) / 100 : "");
+  expenseFormField(form, "settledDate").value = exp.settledDate || todayISO();
+  openDialog($("dialog-settle"));
+  $("settle-amount").focus();
+}
+
+function handleSettleSubmit(e) {
+  e.preventDefault();
+  const form = e.target;
+  const trip = state.trips.find((t) => t.id === expenseFormField(form, "tripId").value);
+  const exp = trip && trip.expenses.find((x) => x.id === expenseFormField(form, "expenseId").value);
+  if (!exp) return;
+  const amount = Number(expenseFormField(form, "settledHome").value);
+  if (!Number.isFinite(amount) || amount <= 0) return; // zero is not "settled", it is empty
+  exp.settledHome = amount;
+  exp.settledDate = expenseFormField(form, "settledDate").value || todayISO();
+  saveState();
+  render();
+  closeDialog($("dialog-settle"));
+}
+
+function clearSettlement(tripId, expenseId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  const exp = trip && trip.expenses.find((x) => x.id === expenseId);
+  if (!exp || exp.settledHome == null) return;
+  const prev = { settledHome: exp.settledHome, settledDate: exp.settledDate };
+  exp.settledHome = null;
+  exp.settledDate = "";
+  saveState();
+  render();
+  undoAction = () => restoreSettlement(tripId, expenseId, prev);
+  showToast("Settlement cleared", "undo");
+}
+
+/* Reconciling is slow, manual work read off a statement — losing it to a typo fix
+   on the label would be the kind of small betrayal that stops you trusting the app. */
+function restoreSettlement(tripId, expenseId, prev) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  const exp = trip && trip.expenses.find((x) => x.id === expenseId);
+  if (!exp) return;
+  exp.settledHome = prev.settledHome;
+  exp.settledDate = prev.settledDate;
+  saveState();
+  render();
 }
 
 /* `onDeleted` runs only after a confirmed delete — the Edit dialog closes itself from it, and
@@ -4694,6 +5736,7 @@ function bindEvents() {
     $("form-trip").startDate.addEventListener(ev, () => syncTripYearField($("form-trip")))
   );
   $("dest-add").addEventListener("click", () => renderDestRows([...readDestRows(), ""]));
+  $("trip-currency-btn").addEventListener("click", openTripCurrencyPicker);
   $("form-expense").addEventListener("submit", handleExpenseSubmit);
   $("form-item").addEventListener("submit", handleItemSubmit);
   $("form-item").type.addEventListener("change", syncItemTypeFields);
@@ -4756,18 +5799,27 @@ function bindEvents() {
     }
     // Status is a segmented control now; its reconciliation lives in setExpenseStatus.
     syncExpensePaidDateVisibility();
+    if (e.target.name === "amount") syncExpenseEstimate();
   });
 
   $("expense-status").querySelectorAll("[data-status]").forEach((b) =>
     b.addEventListener("click", () => setExpenseStatus(b.getAttribute("data-status")))
   );
 
+  $("expense-currency-btn").addEventListener("click", openCurrencyPicker);
+  $("expense-settled-clear").addEventListener("click", () => {
+    const form = $("form-expense");
+    clearSettlement(expenseFormField(form, "tripId").value, expenseFormField(form, "expenseId").value);
+    $("expense-settled-line").hidden = true;
+  });
+  $("form-settle").addEventListener("submit", handleSettleSubmit);
+
   $("form-expense").addEventListener("change", (e) => {
     if (e.target.form?.id === "form-expense") syncExpensePaidDateVisibility();
   });
 
   $("trips-list").addEventListener("click", (e) => {
-    if (e.target.closest(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense")) {
+    if (e.target.closest(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense, .btn-settle-expense")) {
       return;
     }
 
@@ -4834,10 +5886,24 @@ let itineraryTripId = null;
 let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let bookingsFilter = "all"; // all | flight | hotel | other
-let expenseFilter = "all";  // all | unpaid | paid — Budget expense rows (v1.15.0)
+let expenseFilter = "all";  // all | unpaid | paid | unsettled — Budget expense rows (v1.15.0, v2.0)
+/* Remembered like expensesFoldOpen: re-rendering the Budget screen must not reopen a
+   panel you deliberately folded. Module-level, never synced — it is a view preference. */
+let budgetOverviewOpen = false;
+/* Which Budget trip cards are folded shut. Module-level like expensesFoldOpen and
+   deliberately not synced — how you have arranged your own screen is not trip data. */
+let tripCardCollapsed = new Set();
+let tripCardsDefaulted = false;
+/* Per-trip day narrowing on the expense list: "" = every day. Keyed by trip id so
+   switching trips does not carry a day that belongs to another one. */
+let expenseDayFilter = new Map();
 /* "Paid" is fully paid; everything else — planned, booked, partly paid — still needs money. */
-function expenseMatchesFilter(e) {
+/* Takes the trip as a second argument (v2.0 — "unsettled" needs the trip's rates).
+   MUST NOT be passed straight to Array.prototype.filter: filter's second argument
+   is the INDEX, which would arrive here as `trip`. Always wrap in an arrow. */
+function expenseMatchesFilter(e, trip) {
   if (expenseFilter === "all") return true;
+  if (expenseFilter === "unsettled") return expenseNeedsSettling(trip, e);
   const paid = expenseDisplayStatus(e) === "paid";
   return expenseFilter === "paid" ? paid : !paid;
 }
@@ -4859,10 +5925,13 @@ let timelineDayIso = null;
    without this the map would open filtered to day 1 and you could never reach it on the whole
    trip in one tap. */
 let dayChosen = false;
+/* One-shot per trip: the timeline lands on today the first time it renders, and
+   never again fights a scroll you performed yourself. Reset by setItineraryTrip. */
+let timelineAutoLanded = false;
 
 /* Switching trips clears the folds — the ISO keys belong to the old trip's dates. */
 function setItineraryTrip(id) {
-  if (itineraryTripId !== id) { collapsedDays = new Set(); timelineDayIso = null; dayChosen = false; }
+  if (itineraryTripId !== id) { collapsedDays = new Set(); timelineDayIso = null; dayChosen = false; timelineAutoLanded = false; }
   itineraryTripId = id;
 }
 
@@ -5051,12 +6120,19 @@ const MONUMENT_ALIASES = {
 };
 
 function monumentFor(trip) {
+  return MONUMENTS[monumentKeyFor(trip)] || MONUMENTS.generic;
+}
+
+/* The key, not the paths — the painting filenames are keyed the same way, so one
+   alias table drives both and a city can never resolve to one city's line art and
+   another's painting. */
+function monumentKeyFor(trip) {
   const dest = (getMeta(trip).destinations || [])[0] || getMeta(trip).destination || trip.name || "";
   const s = String(dest).toLowerCase();
   for (const [key, names] of Object.entries(MONUMENT_ALIASES)) {
-    if (names.some((n) => s.includes(n))) return MONUMENTS[key];
+    if (names.some((n) => s.includes(n))) return key;
   }
-  return MONUMENTS.generic;
+  return "generic";
 }
 
 /* One SVG for both crops. `xMaxYMax meet` keeps the monument right-aligned and
@@ -5070,15 +6146,32 @@ function monumentFor(trip) {
 const COVER_INK = "rgba(38,24,18,.62)";
 const COVER_INK_SOFT = "rgba(38,24,18,.30)";
 
+/* The pastel painting AND the line art, deliberately both.
+
+   The paintings are opaque, and the comment above .hero records measured contrast
+   ratios (6.94 / 6.02 / 4.97) for #2c2a28 text against the salmon gradient. Dropping
+   a photograph in as the background throws all three away and makes legibility a
+   per-image, per-region accident. So the painting composites OVER the gradient at
+   partial opacity instead: the gradient still sets the floor, the painting supplies
+   the character, and the numbers stay in the range they were measured in.
+
+   The <svg> stays underneath as the fallback. If the image 404s (an unbuilt cover, a
+   city with no painting) onerror drops the <img> and the line art is simply there —
+   no empty box, no layout shift, and the app degrades to exactly what it shipped
+   with in v1.15.3. */
 function coverArt(trip, opts) {
   const o = opts || {};
   const mon = monumentFor(trip);
+  const key = monumentKeyFor(trip);
   return `
     <svg class="cover__art" viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"
          fill="none" stroke-linecap="round" stroke-linejoin="round">
       <path d="${mon.bg}" stroke="${o.bg || COVER_INK_SOFT}" stroke-width="1.2"/>
       <path d="${mon.fg}" stroke="${o.fg || COVER_INK}" stroke-width="2.2"/>
-    </svg>`;
+    </svg>
+    <img class="cover__photo" src="assets/covers/${encodeURIComponent(key)}.jpg" alt="" aria-hidden="true"
+         loading="lazy" decoding="async" onerror="this.closest('.hero,.tripcard__cover')?.classList.add('cover--nophoto'); this.remove();">
+    <span class="cover__scrim" aria-hidden="true"></span>`;
 }
 
 function cityOf(trip) { return (getMeta(trip).destination || "").split(",")[0].trim(); }
@@ -5094,6 +6187,15 @@ function parseISO(s) {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
+/* dd/mm — the chips sit in a tight scrolling row, and "Wed 16" costs a third more width
+   than "16/09" while saying less about which month you are looking at on a trip that
+   crosses one. */
+function fmtDayMonth(iso) {
+  const d = parseISO(iso);
+  if (!d) return iso || "";
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function fmtDay(date) {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
@@ -5231,8 +6333,8 @@ function router() {
   const ADD_LABEL = {
     budget: "Add funds",
     family: "Add checklist item",
-    itinerary: "Add booking",
-    bookings: "Add booking",
+    itinerary: "Add to day",
+    bookings: "Add to day",
   };
   const addLabel = ADD_LABEL[id] || "New trip";
   addBtn.setAttribute("aria-label", addLabel);
@@ -5252,10 +6354,15 @@ function router() {
      so its day nodes survive with all-zero rects — every day then reads as "above the header",
      the last day wins, and scrolling an unrelated screen would rewrite timelineDayIso (which
      is what the FAB pre-fills) and smooth-scroll a hidden chip. renderItinerary re-arms it. */
-  if (id !== "itinerary") teardownDayScrollSpy();
+  if (id !== "itinerary") { teardownDayScrollSpy(); stopGeoWatch(); }
 
   renderActiveShellScreen();
-  window.scrollTo({ top: 0, behavior: "auto" });
+  /* Not when the itinerary just landed on today: the render above schedules that
+     scroll, and resetting to the top here would fight it. Every other screen still
+     opens at the top, which is what you want when you switch tabs. */
+  if (!(id === "itinerary" && timelineAutoLanded && timelineDayIso === todayLocalISO())) {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
 }
 
 /* ---------- Trip timing and order ----------
@@ -5328,6 +6435,57 @@ function featuredTrip() {
   return dated[0] || live[0] || null;
 }
 
+/* The trip an expense most likely belongs to right now: the one being travelled,
+   else the next one coming up. Boundaries (local timezone, inclusive end date,
+   cancelled trips excluded) all come from tripTiming, which already gets them
+   right and is already tested — reimplementing "is this trip on today" would be a
+   second, quietly different answer to a question the app has already answered. */
+function activeExpenseTrip(trips) {
+  const live = trips.filter((t) => t.cancelled !== true);
+  return live.find((t) => tripTiming(t).state === "travelling")
+    || live.find((t) => tripTiming(t).state === "upcoming")
+    || null;
+}
+
+/* On day 4 of 4 the live trip IS the screen. The year's funds-vs-committed figure is
+   real but it is background — so while a trip is running the trip list goes first and
+   the overview folds down below it, carrying its headline number on the summary line so
+   folding costs you nothing. Both move back the moment the trip ends; nothing is
+   hidden, and the DOM order change is what carries it on both layouts. */
+function layoutBudgetForTrip(travelling) {
+  const panel = $("global-panel");
+  const trips = document.querySelector(".trips-section");
+  if (!panel || !trips || !trips.parentElement) return;
+  const note = $("global-summary-note");
+  if (travelling) {
+    if (panel.nextElementSibling !== null && trips.nextElementSibling !== panel) {
+      trips.parentElement.insertBefore(panel, trips.nextElementSibling);
+    }
+    panel.open = budgetOverviewOpen;
+    // Folded, the one number worth keeping in view rides on the summary line.
+    const spare = Number(state.currentFunds) - state.trips.reduce((n, t) => n + tripCommitted(t), 0);
+    note.textContent = `${formatMoney(spare)} to spare`;
+  } else {
+    if (trips.previousElementSibling !== panel) trips.parentElement.insertBefore(panel, trips);
+    panel.open = true;
+    note.textContent = "";
+  }
+}
+
+/* A sticky bar rather than the card button alone: on a trip with a dozen expenses
+   the card button sits past the whole list and the category breakdown, so logging
+   a coffee meant scrolling the length of the trip first. */
+function renderExpenseQuickAdd(trip) {
+  const bar = $("budget-quickadd");
+  if (!bar) return;
+  bar.hidden = !trip;
+  if (!trip) return;
+  const timing = tripTiming(trip);
+  bar.querySelector("[data-quickadd-trip]").textContent =
+    timing.state === "travelling" ? trip.name : `${trip.name} · next`;
+  bar.querySelector("[data-quickadd-btn]").onclick = () => openExpenseDialog(trip.id);
+}
+
 function renderTripsScreen() {
   const trip = featuredTrip();
   const hero = $("trips-hero");
@@ -5348,16 +6506,26 @@ function renderTripsScreen() {
     }[timing.state];
     hero.innerHTML = `
       <div class="hero">
-        ${coverArt(trip)}
-        <span class="hero__plane">${ICONS.plane}</span>
-        <div class="hero__kicker">${escapeHtml(kicker)}</div>
-        <h2 class="hero__title">${nameWithCity(trip)}</h2>
-        <div class="hero__meta">
-          ${range ? `<span class="hero__dates">${ICONS.calendar} ${range}</span>` : `<span class="hero__dates">${trip.year}</span>`}
-          <button type="button" class="pill" data-edit-trip="${trip.id}">Edit</button>
+        <!-- The painting gets a band of its own and the words sit BELOW it, which is how
+             the pastel gallery lays these out and what finally made the trip cards work.
+             A translucent plate over the image was still a panel over the image: the art
+             could only be seen through something. Here nothing is on top of it, so the
+             painting is simply visible and the type simply legible — no scrim, no blur,
+             and no contrast that depends on which city you are looking at. -->
+        <div class="hero__art">
+          ${coverArt(trip)}
+          <span class="hero__plane">${ICONS.plane}</span>
         </div>
-        <div class="hero__travellers">${travellers}<span style="font-weight:600">${escapeHtml((meta.travelers || []).join(", "))}</span></div>
-        ${timing.state === "travelling" ? renderTodayCard(trip, todayLocalISO(), nowMinutes()) : ""}
+        <div class="hero__body">
+          <div class="hero__kicker">${escapeHtml(kicker)}</div>
+          <h2 class="hero__title">${nameWithCity(trip)}</h2>
+          <div class="hero__meta">
+            ${range ? `<span class="hero__dates">${ICONS.calendar} ${range}</span>` : `<span class="hero__dates">${trip.year}</span>`}
+            <button type="button" class="pill" data-edit-trip="${trip.id}">Edit</button>
+          </div>
+          <div class="hero__travellers">${travellers}<span style="font-weight:600">${escapeHtml((meta.travelers || []).join(", "))}</span></div>
+          ${timing.state === "travelling" ? renderTodayCard(trip, todayLocalISO(), nowMinutes()) : ""}
+        </div>
       </div>`;
     hero.querySelector("[data-edit-trip]")?.addEventListener("click", () => openTripDialog(trip));
     hero.querySelector("[data-today-add]")?.addEventListener("click", () =>
@@ -5562,9 +6730,12 @@ function renderTripOverviewCard(trip) {
         ${trip.cancelled
           ? `<span class="tag tag--timing tag--cancelled">Cancelled</span>`
           : timing.text ? `<span class="tag tag--timing tag--${timing.state}">${escapeHtml(timing.text)}</span>` : ""}
-        <h3>${escapeHtml(trip.name)}</h3>
       </div>
       <div class="tripcard__body">
+        <!-- The title sits BELOW the painting, the way the gallery lays these out. It used
+             to be printed over the art, which is what forced a scrim heavy enough to hide
+             the painting. Nothing over the image means the image can simply be seen. -->
+        <h3 class="tripcard__name">${escapeHtml(trip.name)}</h3>
         <div class="tripcard__row">${ICONS.trips}<span>${
           (meta.destinations || []).length
             ? escapeHtml(meta.destinations.join(" · ")) // "·" not "," — comma means city/country
@@ -5810,14 +6981,117 @@ function renderItinerary() {
   bindTablistKeys(subList, activateSubTab);
 
   if (itinerarySubTab === "maps") renderMapsTab(trip);
-  else renderTimelineTab(trip);
+  else {
+    // The timeline has no map to draw a dot on; a watch left running here is pure drain.
+    stopGeoWatch();
+    if (leafletMap) { leafletMap.remove(); leafletMap = null; }
+    renderTimelineTab(trip);
+  }
 
   /* Order matters: the header can only be measured once the tab has filled it, and the
      observer's rootMargin needs that height, so it is armed here rather than inside
      renderTimelineTab. */
   measureStickyHeader();
-  if (itinerarySubTab !== "maps") observeTimelineDays(eachDay(trip).map(isoOf));
+  if (itinerarySubTab !== "maps") {
+    const isos = eachDay(trip).map(isoOf);
+    observeTimelineDays(isos);
+    openTimelineOnToday(isos);
+  }
   restorePendingTabFocus(sw, subList);
+}
+
+/* The timeline opened at day 1 and the scroll spy then reported day 1 as "current",
+   so arriving on the Itinerary mid-trip meant scrolling past every day you had
+   already lived through. Runs only once per trip (dayChosen), so it never yanks
+   you back to today after you have deliberately navigated somewhere else —
+   setItineraryTrip resets the flag when the trip changes.
+
+   Deferred a frame because scrollToDay needs the day nodes laid out, and it goes
+   through scrollToDay so the 900ms programmaticScrollUntil guard suppresses the
+   spy — otherwise the scroll it performs is read as a user scroll and fights it. */
+function openTimelineOnToday(isos) {
+  /* Deliberately does NOT set dayChosen. That flag means "the user picked this day",
+     and Maps inherits it as a day filter (see activateSubTab) — auto-landing is not
+     a choice, so setting it made tapping Maps silently filter the whole trip down to
+     today, which is the exact bug v1.11.3 fixed. A separate one-shot flag keeps the
+     run-once behaviour without claiming an intent the user never expressed. */
+  if (dayChosen || timelineAutoLanded) return;
+  /* Only once the Itinerary is the screen on show. render() rebuilds whichever screen
+     is active, but renderItinerary also runs from other paths while the section is
+     still display:none — and scrollIntoView on a hidden element silently does nothing
+     while the one-shot flag is spent, so the landing was consumed by a render the user
+     never saw. Same reason teardownDayScrollSpy keys off currentScreenId(). */
+  if (currentScreenId() !== "itinerary") return;
+  const today = todayLocalISO();
+  if (!isos.includes(today)) return;
+  timelineAutoLanded = true;
+  timelineDayIso = today;
+  markActiveDayChip(today);
+  // chosen:false — arriving on today is not the user picking a day, so Maps must not
+  // inherit it as a filter (see activateSubTab).
+  landOnDay(today, { chosen: false });
+}
+
+/* ============================================================
+   DAY SHEET (v2.0) — "export a day for offline", precisely
+   ============================================================
+
+   This does NOT make the app work offline. There is no service worker, so the app
+   itself still needs the network to load. What it gives you is an ARTIFACT: you
+   generate it while you have signal, save/share/print/screenshot it, and that saved
+   copy is what works in the metro. The wording in the UI says so rather than
+   implying the app survives a cold start in flight mode.
+
+   Everything on it is already computed elsewhere — stopNumbers for the map-matching
+   numbers, legLabel for the walking legs — so the sheet cannot drift from the
+   timeline it describes. */
+function openDaySheet(trip, iso) {
+  const dlg = $("dialog-daysheet");
+  const d = parseISO(iso);
+  const numbers = stopNumbers(trip, iso);
+  const entries = itemsForDay(trip, iso);
+
+  let prevLoc = null;
+  const rows = entries.map((e) => {
+    const { item, checkout } = e;
+    const no = numbers.get(item.id);
+    const time = checkout ? (item.endTime || "") : fmtTimeRange(item);
+    const bits = [];
+    if (!checkout && item.location.name) bits.push(escapeHtml(item.location.name));
+    if (item.confirmation) bits.push(`Conf: <span class="ltr">${escapeHtml(item.confirmation)}</span>`);
+    let leg = "";
+    if (!checkout && isMappable(e) && item.location.lat != null) {
+      leg = legLabel(prevLoc, item.location);
+      prevLoc = item.location;
+    }
+    return `
+      ${leg ? `<div class="ds-leg">↓ ${escapeHtml(leg)}</div>` : ""}
+      <div class="ds-row${item.visitedAt ? " ds-row--visited" : ""}">
+        <div class="ds-row__no">${no ? escapeHtml(no) : "·"}</div>
+        <div class="ds-row__body">
+          <div class="ds-row__title">${escapeHtml(checkout ? `Check-out · ${item.title}` : item.title)}${item.visitedAt ? " ✓" : ""}</div>
+          ${bits.length ? `<div class="ds-row__sub">${bits.join(" · ")}</div>` : ""}
+          ${item.notes ? `<div class="ds-row__notes">${escapeHtml(item.notes)}</div>` : ""}
+        </div>
+        <div class="ds-row__time">${escapeHtml(time)}</div>
+      </div>`;
+  }).join("");
+
+  $("daysheet-body").innerHTML = `
+    <div class="ds-head">
+      <div class="ds-head__trip">${escapeHtml(trip.name)}</div>
+      <div class="ds-head__day">${escapeHtml(fmtDow(d))} ${d.getDate()} ${escapeHtml(d.toLocaleDateString("en-GB", { month: "long" }))}</div>
+    </div>
+    ${rows || `<p class="empty-state">Nothing planned for this day.</p>`}`;
+
+  /* Confirmation numbers and addresses end up on this sheet, so say so once. It is
+     the kind of thing that gets forwarded to a group chat without a second thought. */
+  $("daysheet-privacy").textContent =
+    entries.some((e) => e.item.confirmation)
+      ? "Includes booking references — check before you share it."
+      : "";
+  $("daysheet-print").onclick = () => window.print();
+  openDialog(dlg);
 }
 
 function minutesOf(hhmm, dflt) {
@@ -5933,15 +7207,21 @@ function itemCard({ item, checkout }, stopNo) {
 
   /* data-item makes the whole card a tap target (edit) and a drag handle.
      .act--checkout marks the rows that can be tapped but never lifted. */
+  // A checkout row is a hotel's endDate, not a place you visit, so it never shows the tick.
+  const visited = !checkout && Boolean(item.visitedAt);
   return `
-    <div class="act${checkout ? " act--checkout" : ""}" data-item="${escapeHtml(item.id)}">
+    <div class="act${checkout ? " act--checkout" : ""}${visited ? " act--visited" : ""}" data-item="${escapeHtml(item.id)}">
       <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}</span>
-      ${stopNo ? `<span class="act__stopno" aria-label="Map stop ${stopNo}">${stopNo}</span>` : ""}
+      ${stopNo ? `<span class="act__stopno${visited ? " act__stopno--visited" : ""}" aria-label="Map stop ${stopNo}${visited ? ", visited" : ""}">${stopNo}</span>` : ""}
       <span class="act__body">
-        <span class="act__title">${escapeHtml(title)}</span>
+        <span class="act__title">${escapeHtml(title)}${visited ? ` <span class="visited-tick" title="Visited">✓</span>` : ""}</span>
         <span class="act__sub">${subParts.join(" · ")}</span>
       </span>
       ${time ? `<span class="act__time">${escapeHtml(time)}</span>` : ""}
+      ${checkout ? "" : `<button type="button" class="act__tick ${visited ? "is-on" : ""}" data-visit-item="${item.id}"
+          aria-pressed="${visited ? "true" : "false"}" title="${visited ? "Mark not visited" : "Mark visited"}"
+          aria-label="${visited ? "Mark" : "Mark"} ${escapeHtml(item.title)} ${visited ? "not visited" : "visited"}"
+        ><svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4 10-10" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`}
       ${checkout ? "" : `<button type="button" class="act__more" data-item-more="${item.id}" aria-label="Actions for ${escapeHtml(item.title)}" title="Actions"><svg viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg></button>`}
       <span class="act__actions">
         ${checkout ? "" : `
@@ -5991,7 +7271,7 @@ function renderTimelineTab(trip) {
       const numbers = stopNumbers(trip, iso); // same numbers the map pins use
       const entries = itemsForDay(trip, iso).map((e) => itemCard(e, numbers.get(e.item.id)));
       entries.push(
-        `<button type="button" class="act act--add" data-add-item="${iso}" aria-label="Add a booking on ${escapeHtml(fmtDow(d))} ${d.getDate()}">${ICONS.explore}<span class="act__body"><span class="act__title">Add booking</span></span></button>`
+        `<button type="button" class="act act--add" data-add-item="${iso}" aria-label="Add to ${escapeHtml(fmtDow(d))} ${d.getDate()}">${ICONS.explore}<span class="act__body"><span class="act__title">Add to day</span></span></button>`
       );
       /* The date rail becomes the fold control. It was a plain <div> — not
          focusable, not announced — so making it a button fixes that too. */
@@ -6006,6 +7286,7 @@ function renderTimelineTab(trip) {
             <span class="dnum">${d.getDate()}</span>
             <span class="mon">${d.toLocaleDateString("en-GB", { month: "short" })}</span>
           </button>
+          ${count ? `<button type="button" class="day__sheet" data-day-sheet="${iso}" aria-label="Day sheet for ${escapeHtml(fmtDow(d))} ${d.getDate()} — save it to read without signal" title="Day sheet"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>` : ""}
           ${collapsed
             ? `<button type="button" class="day__summary" data-day-toggle="${iso}">${
                 count ? `${count} booking${count === 1 ? "" : "s"}` : "Nothing planned"
@@ -6023,13 +7304,20 @@ function renderTimelineTab(trip) {
         return `<button type="button" class="daychip ${iso === timelineDayIso ? "is-active" : ""}" data-strip-day="${iso}"><span class="dc-dow">${fmtDow(d)}</span><span class="dc-num">${d.getDate()}</span></button>`;
       })
       .join("")}</div>`;
-  const fab = `<button type="button" class="fab" data-fab-add aria-label="Add booking"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`;
+  const fab = `<button type="button" class="fab" data-fab-add aria-label="Add to day"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`;
 
   /* The strip lives in the sticky header now, not in the scrolling view, so the Timeline/Maps
      toggle stays put alongside it. Maps clears the slot. */
   $("daystrip-slot").innerHTML = strip;
   view.innerHTML = `${route}${dayHtml}${fab}`;
   bindItemActions(view, trip);
+
+  view.querySelectorAll("[data-day-sheet]").forEach((btn) =>
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation(); // the day header is a fold toggle; this is not that
+      openDaySheet(trip, btn.getAttribute("data-day-sheet"));
+    })
+  );
 
   view.querySelectorAll("[data-day-toggle]").forEach((btn) =>
     btn.addEventListener("click", () => {
@@ -6086,6 +7374,42 @@ function scrollToDay(iso) {
   document.getElementById(`day-${iso}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/* Land on a day and STAY there. scrollToDay alone fires once and hopes: the cover
+   images finish decoding mid-animation, the document grows, and the smooth scroll
+   stops short — leaving the intended day a couple of hundred pixels below the header.
+   The scroll spy then reads the day BEFORE it, which is correct for that position and
+   completely wrong as an answer, and sets dayChosen, which is what leaks into the Maps
+   day filter.
+
+   So: nudge instantly until the day actually sits under the header or the page runs
+   out of scroll, refreshing the spy's guard each pass, and only then assert the day.
+   Instant rather than smooth because this is a correction, not a journey — and because
+   a smooth scroll would be fighting the next correction. */
+function landOnDay(iso, opts) {
+  const chosen = !!(opts && opts.chosen);
+  const settle = (tries) => {
+    const el = document.getElementById(`day-${iso}`);
+    if (!el) return;
+    programmaticScrollUntil = nowMs() + 500; // keep the spy quiet while we converge
+    const line = stickyHeaderHeight() + 8;
+    const delta = el.getBoundingClientRect().top - line;
+    const room = document.documentElement.scrollHeight - window.innerHeight - window.scrollY;
+    const canMove = delta < 0 ? window.scrollY > 0 : room > 1;
+    if (tries > 0 && Math.abs(delta) > 4 && canMove) {
+      window.scrollBy({ top: delta, behavior: "auto" });
+      requestAnimationFrame(() => settle(tries - 1));
+      return;
+    }
+    /* Assert the day even when the page could not bring it to the line — a short final
+       day never reaches it, and the answer is still "you are on that day". */
+    timelineDayIso = iso;
+    if (chosen) dayChosen = true;
+    markActiveDayChip(iso);
+    programmaticScrollUntil = nowMs() + 250; // outlast the last scroll event
+  };
+  requestAnimationFrame(() => settle(8));
+}
+
 function markActiveDayChip(iso) {
   const slot = document.getElementById("daystrip-slot");
   if (!slot) return;
@@ -6103,6 +7427,18 @@ function markActiveDayChip(iso) {
    synthesising real scroll events. */
 function dayUnderHeader(isos) {
   const line = stickyHeaderHeight() + 8;
+  /* At the bottom of the page the last day wins, whether or not it ever reaches the
+     header line. A short final day cannot be scrolled up to the line — the document
+     runs out first — so the walk below would break on it and leave the day BEFORE it
+     selected. Landing on today did exactly that when today was the last day of the
+     trip: it scrolled correctly, bottomed out, and the strip snapped back one day. */
+  const atBottom = window.innerHeight + window.scrollY
+    >= document.documentElement.scrollHeight - 2;
+  if (atBottom) {
+    for (let i = isos.length - 1; i >= 0; i--) {
+      if (document.getElementById(`day-${isos[i]}`)) return isos[i];
+    }
+  }
   let best = null;
   for (const iso of isos) {
     const el = document.getElementById(`day-${iso}`);
@@ -6172,12 +7508,29 @@ function bindItemActions(scope, trip) {
       moveItemInDay(trip, btn.getAttribute("data-move-item"), Number(btn.getAttribute("data-move-dir")))
     )
   );
+  scope.querySelectorAll("[data-visit-item]").forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation(); // the card itself is an edit target
+      toggleVisited(btn.getAttribute("data-visit-item"));
+    })
+  );
   scope.querySelectorAll("[data-item-more]").forEach((btn) =>
     btn.addEventListener("click", () => openItemActionsSheet(trip, btn.getAttribute("data-item-more")))
   );
 }
 
 /* Mobile ⋯ action sheet: Edit / Move up / Move down / Delete for one item */
+/* A timestamp rather than a flag: two devices toggling a boolean resolve by whoever
+   synced last, which can silently un-tick a place you ticked standing outside it.
+   The later stamp wins instead, and "when did we do the Louvre" is answerable. */
+function toggleVisited(itemId) {
+  const item = state.items.find((i) => i.id === itemId);
+  if (!item) return;
+  item.visitedAt = item.visitedAt ? "" : new Date().toISOString();
+  saveState();
+  render();
+}
+
 function openItemActionsSheet(trip, itemId, opts = {}) {
   const item = state.items.find((i) => i.id === itemId);
   if (!item) return;
@@ -6192,6 +7545,12 @@ function openItemActionsSheet(trip, itemId, opts = {}) {
   dlg.querySelector('[data-item-action="move-down"]').hidden = !reorder;
   // "Add expense" until one is linked, then "Open expense" — the same row, never two.
   dlg.querySelector("[data-item-action-label]").textContent = linkedExpense(item) ? "Open expense" : "Add expense";
+  /* Visiting a flight or a hotel is not a thing you tick off — the flag is about
+     places you go and see, which is what the timeline numbers and the map pins mark. */
+  const visitable = !["flight", "hotel"].includes(item.type);
+  const visitedRow = dlg.querySelector('[data-item-action="visited"]');
+  visitedRow.hidden = !visitable;
+  dlg.querySelector("[data-visited-label]").textContent = item.visitedAt ? "Mark not visited" : "Mark visited";
   dlg.querySelectorAll("[data-item-action]").forEach((b) => {
     b.onclick = () => {
       closeDialog(dlg);
@@ -6200,6 +7559,7 @@ function openItemActionsSheet(trip, itemId, opts = {}) {
       else if (action === "expense") openExpenseForItem(item);
       else if (action === "move-up") moveItemInDay(trip, itemId, -1);
       else if (action === "move-down") moveItemInDay(trip, itemId, 1);
+      else if (action === "visited") toggleVisited(itemId);
       else if (action === "maps") window.open(gmapsLink(item, trip), "_blank", "noopener");
       else if (action === "delete") deleteItem(itemId);
     };
@@ -6496,12 +7856,140 @@ function withViewGuard(fn) {
   };
 }
 
+/* ============================================================
+   WHERE AM I (v2.0)
+   ============================================================
+
+   Never auto-prompts. A permission dialog that appears because you opened a screen
+   is the kind of thing people deny once and then cannot easily undo — it has to be
+   the answer to a button press.
+
+   The lifecycle is the whole difficulty. renderMapsTab tears the Leaflet map down
+   and rebuilds it on every render (a day chip, a resize, any re-render), so a watch
+   started against one map holds layers on an object that no longer exists, and a
+   watch that is never cleared accumulates one live GPS subscription per render.
+   Hence: geoWanted (the intent) is module state and survives, while the watch and
+   its layers (the resources) are torn down and recreated with each map. */
+let geoWatchId = null;
+let geoWanted = false;       // the user asked to be shown; survives re-renders
+let geoMarker = null, geoCircle = null, geoLastFix = null;
+
+function stopGeoWatch() {
+  if (geoWatchId !== null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+  /* REMOVE the layers, do not just forget them. Dropping the references alone left
+     the blue dot sitting on the map after you switched locating off — a position
+     that no longer updates but still looks live, which is worse than no dot at all.
+     Guarded because the map may already be gone (this also runs during teardown),
+     and the intent flag is deliberately untouched here. */
+  if (leafletMap) {
+    if (geoMarker) leafletMap.removeLayer(geoMarker);
+    if (geoCircle) leafletMap.removeLayer(geoCircle);
+  }
+  geoMarker = null; geoCircle = null;
+  geoLastFix = null; // a stale fix must not feed the distance line either
+}
+
+function setGeoButton(state) {
+  const b = $("btn-geo");
+  if (!b) return;
+  b.classList.toggle("is-on", state === "on");
+  b.classList.toggle("is-busy", state === "busy");
+  b.setAttribute("aria-pressed", state === "on" ? "true" : "false");
+}
+
+function startGeoWatch() {
+  if (!leafletMap || geoWatchId !== null) return;
+  if (!navigator.geolocation || !window.isSecureContext) {
+    geoWanted = false;
+    showToast("Location needs a secure connection", "error");
+    return;
+  }
+  setGeoButton("busy");
+  geoWatchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      if (!leafletMap) return; // a render raced us; the next map will restart the watch
+      const { latitude: lat, longitude: lng, accuracy } = pos.coords;
+      geoLastFix = { lat, lng, accuracy, at: Date.now() };
+      if (!geoMarker) {
+        geoMarker = L.marker([lat, lng], {
+          icon: L.divIcon({ className: "", html: `<span class="map-me"></span>`, iconSize: [18, 18], iconAnchor: [9, 9] }),
+          interactive: false, keyboard: false, zIndexOffset: 1000,
+        }).addTo(leafletMap);
+        // Accuracy matters: a 2km fix drawn as a precise dot is a lie you act on.
+        geoCircle = L.circle([lat, lng], { radius: accuracy, stroke: false, fillColor: "#2f6fd0", fillOpacity: 0.12, interactive: false }).addTo(leafletMap);
+        leafletMap.setView([lat, lng], Math.max(leafletMap.getZoom() || 0, 15));
+        mapUserMoved = true; // stop the fit-to-bounds logic yanking the view back off you
+      } else {
+        geoMarker.setLatLng([lat, lng]);
+        geoCircle.setLatLng([lat, lng]).setRadius(accuracy);
+      }
+      setGeoButton("on");
+      renderGeoDistance();
+    },
+    (err) => {
+      stopGeoWatch();
+      geoWanted = false;
+      setGeoButton("off");
+      // Quietly, and never twice: a refused permission is an answer, not an error.
+      showToast(err.code === err.PERMISSION_DENIED
+        ? "Location is off for this site"
+        : "Couldn't get a location fix", "error");
+      renderGeoDistance();
+    },
+    { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 }
+  );
+}
+
+function toggleGeo() {
+  if (geoWanted) { geoWanted = false; stopGeoWatch(); setGeoButton("off"); renderGeoDistance(); return; }
+  geoWanted = true;
+  startGeoWatch();
+}
+
+/* How far to the next stop, from where you are standing — the question the map is
+   open to answer. Reuses legLabel so the units and walking assumptions match the
+   legs already drawn between stops. */
+function renderGeoDistance() {
+  const el = $("map-me-dist");
+  if (!el) return;
+  const stale = !geoLastFix || Date.now() - geoLastFix.at > 120000;
+  if (!geoWanted || stale) { el.hidden = true; return; }
+  const next = geoNextStop();
+  if (!next) { el.hidden = true; return; }
+  const leg = legLabel(geoLastFix, next.location);
+  el.hidden = !leg;
+  if (leg) el.innerHTML = `You are <strong>${escapeHtml(leg)}</strong> from ${escapeHtml(next.title)}`;
+}
+
+/* The next mappable stop on the day in view that has not been visited — if every
+   stop is ticked there is nothing left to walk to, and saying so beats pointing at
+   somewhere you have already been. */
+function geoNextStop() {
+  const trip = state.trips.find((t) => t.id === itineraryTripId);
+  if (!trip) return null;
+  const isos = mapDayFilter === "all" ? eachDay(trip).map(isoOf) : [mapDayFilter];
+  for (const iso of isos) {
+    for (const e of itemsForDay(trip, iso)) {
+      if (!isMappable(e) || e.item.location.lat === null) continue;
+      if (e.item.visitedAt) continue;
+      return e.item;
+    }
+  }
+  return null;
+}
+
 function renderMapsTab(trip) {
   const view = $("itinerary-view");
   const days = eachDay(trip);
   // No day strip on the map — the sticky header is just the view toggle here.
   $("daystrip-slot").innerHTML = "";
   teardownDayScrollSpy();
+  /* The watch has to stop BEFORE the map goes: its marker and accuracy circle belong
+     to this map instance, and renderMapsTab runs on every day-chip tap. Without this
+     each render leaks another watcher — several GPS subscriptions running at once,
+     all writing to layers on maps that no longer exist. geoWanted survives, so the
+     dot comes back on the new map without asking for permission again. */
+  stopGeoWatch();
   if (leafletMap) { leafletMap.remove(); leafletMap = null; }
 
   const dayIsos = days.map(isoOf);
@@ -6573,14 +8061,26 @@ function renderMapsTab(trip) {
       const leg = prevLoc && geo ? legLabel(prevLoc, e.item.location) : "";
       if (leg) sidebar += `<div class="mapstop-leg">↓ ${escapeHtml(leg)}</div>`;
       const when = e.item.startTime || "";
+      /* The timeline card has carried notes and the confirmation since v1.x; the map
+         list deliberately showed only the address, which meant standing outside a
+         restaurant with the booking reference one screen away. Clamped to two lines
+         so the collapsed sidebar (which hides stops 3+ on phones) still shows a
+         useful number of rows. Non-interactive text: this sits inside the focus
+         button, so it must not be a target of its own. */
+      const visited = Boolean(e.item.visitedAt);
+      const noteBits = [];
+      if (e.item.confirmation) noteBits.push(`Conf: <span class="ltr">${escapeHtml(e.item.confirmation)}</span>`);
+      if (e.item.notes) noteBits.push(escapeHtml(e.item.notes));
+      const noteLine = noteBits.join(" · ");
       sidebar += `
-        <div class="mapstop">
+        <div class="mapstop${visited ? " act--visited" : ""}">
           <button type="button" class="mapstop__focus" ${geo ? `data-focus-stop="${escapeHtml(e.item.id)}"` : "disabled"}
                   aria-label="Show ${escapeHtml(e.item.title)} on the map">
-            <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}">${e.label}</span>
+            <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}${visited ? " act__stopno--visited" : ""}">${e.label}</span>
             <span class="mapstop__body">
-              <span class="act__title">${escapeHtml(e.item.title)}</span>
+              <span class="act__title">${escapeHtml(e.item.title)}${visited ? ` <span class="visited-tick" title="Visited">✓</span>` : ""}</span>
               <span class="act__sub">${escapeHtml(e.item.location.name)}${when ? " · " + escapeHtml(when) : ""}</span>
+              ${noteLine ? `<span class="act__sub mapstop__note">${noteLine}</span>` : ""}
             </span>
           </button>
           ${geo ? "" : `<button type="button" class="icon-btn icon-btn--stop" data-locate-item="${e.item.id}" aria-label="Find this place on the map" title="Locate"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg></button>`}
@@ -6597,13 +8097,30 @@ function renderMapsTab(trip) {
     <div class="daychips">${chips}</div>
     <div class="map-layout">
       ${hasLeaflet
-        ? `<div id="map-canvas" class="map-canvas"></div>`
+        ? `<div id="map-canvas" class="map-canvas">
+             <button type="button" class="map-locate" id="btn-geo" aria-pressed="false"
+                     aria-label="Show my location on the map" title="Show my location">
+               <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" fill="currentColor"/><circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v2.6M12 19.4V22M22 12h-2.6M4.6 12H2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+             </button>
+           </div>`
         : `<div class="empty-card"><h3>Map unavailable</h3><p>Couldn't load the map library — check your connection, or use the Google Maps links below.</p><button type="button" class="btn btn--small" id="btn-map-retry">Retry</button></div>`}
       <div class="map-list ${window.innerWidth <= 900 && mapDayFilter === "all" ? "map-list--collapsed" : ""}" id="map-list">
         <h3 class="map-list__title">${escapeHtml((trip.destination || trip.name).split(",")[0])}</h3>
+        <p class="map-me-dist" id="map-me-dist" hidden></p>
         ${listHtml}
       </div>
     </div>`;
+
+  /* Same add affordance as the timeline. Standing in front of somewhere you want to keep,
+     the map is as likely to be the screen you are on — and it already knows which day you
+     are filtered to, so it can prefill better than the timeline can. */
+  view.insertAdjacentHTML("beforeend",
+    `<button type="button" class="fab" data-map-add aria-label="Add to day"><svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`);
+  view.querySelector("[data-map-add]")?.addEventListener("click", () => {
+    openItemDialog(trip.id, null, { date: defaultAddDate(dayIsos) });
+  });
+
+  $("btn-geo")?.addEventListener("click", toggleGeo);
 
   // Mobile stops sheet: tap the sheet header to expand/collapse (map reflows)
   const mapList = $("map-list");
@@ -6649,6 +8166,10 @@ function renderMapsTab(trip) {
   });
   mapResizeObserver.observe(canvas);
   mapUserMoved = false;
+  /* The map is new, so the watch (torn down at the top of this function) is
+     recreated against it. No permission prompt: the browser already has the grant. */
+  setGeoButton(geoWanted ? "busy" : "off");
+  if (geoWanted) startGeoWatch();
   leafletMap.on("dragstart zoomstart", () => { if (!mapApplyingView) mapUserMoved = true; });
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19,
@@ -6747,7 +8268,7 @@ function renderBookings() {
           const foot = exp
             ? `<div class="booking__foot">
                   <span class="payment-status payment-status--${expenseDisplayStatus(exp)}">${paymentStatusLabel(exp)}</span>
-                  <span class="booking__amount">${formatMoney(exp.amount)}</span>
+                  <span class="booking__amount">${formatMoney(exp.amount, exp.currency)}</span>
                 </div>`
             : `<div class="booking__foot">
                   <button type="button" class="btn btn--small btn--ghost booking__add-expense" data-add-expense="${escapeHtml(it.id)}">Add expense</button>
@@ -7348,7 +8869,7 @@ function diffStates(prevRaw, nextRaw) {
   const out = [];
 
   diffCollection(prev.items, next.items,
-    ["type", "title", "details", "date", "endDate", "startTime", "endTime", "location", "confirmation", "notes", "flightNo", "departAirport", "arrivalAirport"],
+    ["type", "title", "details", "date", "endDate", "startTime", "endTime", "location", "confirmation", "notes", "flightNo", "departAirport", "arrivalAirport", "visitedAt"],
     changeItemLabel, ["itinerary", "bookings"], out);
 
   const prevChk = new Map(prev.checklist.map((c) => [c.id, c]));
@@ -7379,7 +8900,13 @@ function diffStates(prevRaw, nextRaw) {
       out.push({ screens: ["trips"], text: t.cancelled ? `cancelled trip ${t.name}` : `reinstated trip ${t.name}` });
     }
     if (Number(p.budget) !== Number(t.budget)) out.push({ screens: ["budget"], text: `changed budget of ${t.name}` });
-    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "status", "amountPaid", "itemId"],
+    /* These are an allow-list, not a deep diff — a field absent here syncs correctly
+       but never shows up in What's new, which reads as the sync having missed it. */
+    if (p.spendCurrency !== t.spendCurrency || JSON.stringify(p.rates) !== JSON.stringify(t.rates)
+        || Number(p.feePercent) !== Number(t.feePercent)) {
+      out.push({ screens: ["budget"], text: `changed currency settings on ${t.name}` });
+    }
+    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "currency", "status", "amountPaid", "itemId", "settledHome", "settledDate"],
       (e) => `expense ${e.label}`, ["budget"], out);
   }
   for (const [id, p] of prevTrips) {
@@ -7550,6 +9077,12 @@ window.VacationApp = {
   },
   mergeStates, // exposed for ?selftest=1
   merge3,      // ditto
+  // v2.0 money — exposed so the selftest can exercise the conversion rules directly.
+  normalizeState, normalizeExpense, normalizeItem, migrateToV3,
+  rateFor, expenseHome, expensePaidHome, expenseNeedsSettling, expenseNeedsRate,
+  tripCommitted, tripPaid, tripDue, tripCommittedHome, categoryBreakdown,
+  expenseMatchesFilter, formatMoney, diffStates,
+  setExpenseFilter: (v) => { expenseFilter = v; },
   render,
   getDeviceName,
   ensureDeviceName,
