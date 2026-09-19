@@ -52,7 +52,12 @@ closed. ☐
 
 ## 2. Foreign currency
 
-2.1 Edit a trip → **Spending currency** → EUR → rate `1 EUR = 4 ₪` → card fee 1%.
+2.0 Edit a trip while it is still **ILS**.
+- **Expect:** under Spending currency it says *"Spending abroad? Change the currency to set an
+  exchange rate for this trip."* — the path to a rate has to be visible before you have found
+  it, which it was not in the first build. ☐
+
+2.1 Edit a trip → **Spending currency** (the chip with the ▾) → EUR → rate `1 EUR = 4 ₪` → card fee 1%.
 - **Expect:** the Budget label still says **Budget (₪)** — budgets are always shekels. ☐
 - **Expect:** every existing expense on that trip is unchanged. ☐
 2.2 Add an expense on that trip: `Dinner`, `38`.
@@ -94,6 +99,26 @@ closed. ☐
 - **Expect:** the bar stays put and never sits under the tab bar. ☐
 4.3 Between trips (year filter → a year with no live trip).
 - **Expect:** the bar targets the next upcoming trip, and that trip is **not** unfolded. ☐
+
+## 4b. Budget mid-trip: trip first, and the day chips
+
+4b.1 While a trip is running, the **trip list comes first** and the **Overview folds below
+it**, carrying "₪X to spare" on its summary line.
+- **Expect:** tapping the summary expands it, and it stays expanded/folded across a
+  re-render (marking something paid must not reopen it). ☐
+4b.2 Once no trip is live (year filter → a past year), the Overview is back on top and open. ☐
+4b.3 On a trip with expenses, a row of **day chips** appears: `All · Wed 16 · Thu 17 · No date`,
+each with a count.
+- **Expect:** the counts add up to the total, and **"No date" exists whenever any expense
+  lacks one** — nothing is ever hidden by the filter. On the Paris data that is 15 of 22. ☐
+4b.4 Tap a day.
+- **Expect:** only that day's rows, and the fold summary says e.g. `5 on Thu 17 of 22 expenses`.
+  Combine with an Unpaid/Paid chip and it should read `2 unpaid on Thu 17 of 22`. ☐
+4b.5 Add an expense **while the trip is running**.
+- **Expect:** the **Date spent** field is already set to today. This is what makes the day
+  chips useful going forward — historically most expenses had no date at all. ☐
+4b.6 Add an expense on the Christmas trip (not running yet).
+- **Expect:** the date is **empty** — an expense booked months ahead is not "today". ☐
 
 ## 5. 📱 Timeline
 
@@ -143,7 +168,12 @@ closed. ☐
 ## 8. Covers
 
 8.1 Trips screen, hero and the small trip cards.
-- **Expect:** the pastel painting for the right city, text fully legible over it. ☐
+- **Expect:** the painting is **clearly visible** — you should be able to make out the Eiffel
+  Tower on Paris and the street scene on Christmas, not just a faint tint. It is brightest
+  where there is no text: the right of the hero, the left of the trip cards. ☐
+- **Expect:** every piece of text over it is still fully legible, including in sunlight. The
+  measured floors are 5.69 (hero) and 4.59 (card) across all 19 paintings; if anything looks
+  marginal on a real screen, say so — the measurement samples glyphs, not your eyes. ☐
 8.2 Throttle to Slow 3G and reload.
 - **Expect:** covers arrive without blocking the page (~95KB each, lazy). ☐
 8.3 Rename a trip's destination to somewhere with no painting (e.g. "Reykjavik").
