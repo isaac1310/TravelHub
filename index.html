@@ -895,9 +895,11 @@ h1, h2, h3, .hero h1, .hero p {
 .category-tag[data-category="Hotel"]      { --cat-bg: #f0e6fb; --cat-fg: #7c4fc4; }
 .category-tag[data-category="Flight"]     { --cat-bg: #dcf1f4; --cat-fg: #2f8a9b; }
 .category-tag[data-category="Food"]       { --cat-bg: #fce8d8; --cat-fg: #c26a33; }
+.category-tag[data-category="Groceries"]  { --cat-bg: #e9f0d8; --cat-fg: #6b8c33; }
 .category-tag[data-category="Transport"]  { --cat-bg: #dff0e6; --cat-fg: #3f8a63; }
 .category-tag[data-category="Activities"] { --cat-bg: #fbeecf; --cat-fg: #b9852f; }
 .category-tag[data-category="Shopping"]   { --cat-bg: #fbe3ea; --cat-fg: #b0456a; }
+.category-tag[data-category="Gifts"]      { --cat-bg: #fae0dd; --cat-fg: #c05a4a; }
 .category-tag[data-category="Other"]      { --cat-bg: #efe9e3; --cat-fg: #8a7f74; }
 
 .category-breakdown { padding: 0.7rem 0; border-top: 1px solid var(--border); }
@@ -907,9 +909,11 @@ h1, h2, h3, .hero h1, .hero p {
 .category-breakdown__segment[data-category="Hotel"]      { --cat-bar: #a884e0; }
 .category-breakdown__segment[data-category="Flight"]     { --cat-bar: #5cb8c6; }
 .category-breakdown__segment[data-category="Food"]       { --cat-bar: #eb9160; }
+.category-breakdown__segment[data-category="Groceries"]  { --cat-bar: #9cba5c; }
 .category-breakdown__segment[data-category="Transport"]  { --cat-bar: #63b585; }
 .category-breakdown__segment[data-category="Activities"] { --cat-bar: #e0b552; }
 .category-breakdown__segment[data-category="Shopping"]   { --cat-bar: #e08aa6; }
+.category-breakdown__segment[data-category="Gifts"]      { --cat-bar: #e0806e; }
 .category-breakdown__segment[data-category="Other"]      { --cat-bar: #b7a99a; }
 .category-breakdown__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .category-breakdown__row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem; align-items: center; font-size: 0.8rem; }
@@ -963,6 +967,23 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .dialog--wide { max-width: 480px; }
 .dialog__hint { margin: 0 0 1rem; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
 .field__hint { display: block; margin-top: 0.3rem; font-size: 0.8rem; color: var(--muted); }
+
+/* ---- v2.0 money controls ---- */
+.amount-row { display: flex; gap: 0.5rem; align-items: stretch; }
+.amount-row input[type="number"] { flex: 1; min-width: 0; }
+/* 44px minimum, same as every other tap target on this dialog. */
+.currency-btn {
+  flex: 0 0 4.2rem; min-height: 44px; border: 1px solid var(--border-strong, #d9cfc7);
+  border-radius: 10px; background: var(--cream, #fdf8f4); color: var(--text);
+  font: inherit; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.02em; cursor: pointer;
+}
+.currency-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.settled-line__row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+/* The estimate is muted and always prefixed "≈" — it must never read as settled money. */
+.fx-est { color: var(--muted); }
+.fx-settled { color: #3f8a63; font-weight: 600; }
+.fx-norate { color: #b0456a; font-weight: 600; }
+.trip-card__fxnote { margin: -0.2rem 0 0.5rem; font-size: 0.78rem; color: var(--muted); }
 .field input[readonly] { background: var(--cream); color: var(--muted); }
 .dialog::backdrop { background: rgba(60, 42, 30, 0.4); backdrop-filter: blur(2px); }
 .dialog form { padding: 1.4rem; }
@@ -1965,9 +1986,30 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <input type="number" name="year" min="2000" max="2100" required />
           <span class="field__hint" id="trip-year-hint" hidden>Taken from the start date</span>
         </label>
+        <!-- Budget is ALWAYS in shekels, on every trip. A foreign currency is only how
+             an expense is entered at the till; it is never a unit of account. That is
+             what keeps this label static and the rollover untouched. -->
         <label class="field">
           <span class="field__label">Budget (₪)</span>
           <input type="number" name="budget" min="0" step="0.01" required />
+        </label>
+        <div class="field">
+          <span class="field__label">Spending currency</span>
+          <div class="amount-row">
+            <input type="hidden" name="spendCurrency" value="ILS" />
+            <button type="button" class="currency-btn" id="trip-currency-btn"
+                    style="flex:0 0 5.5rem" aria-label="Spending currency">ILS</button>
+            <input type="number" name="rate" min="0" step="0.0001" inputmode="decimal"
+                   placeholder="rate" aria-labelledby="trip-rate-hint" style="flex:1" />
+          </div>
+          <!-- One field, not a rate table. The shekel figure it produces is a placeholder
+               that the card statement later overwrites, so it does not need to be exact —
+               it needs to exist before you are standing at a till. -->
+          <span class="field__hint" id="trip-rate-hint">What one unit costs in shekels. Rough is fine — the statement replaces it.</span>
+        </div>
+        <label class="field" id="trip-fee-field" hidden>
+          <span class="field__label">Card fee (%)</span>
+          <input type="number" name="feePercent" min="0" max="20" step="0.1" inputmode="decimal" />
         </label>
         <div class="roll-years">
           <label class="field">
@@ -2067,17 +2109,30 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <option value="Hotel">Hotel</option>
             <option value="Flight">Flight</option>
             <option value="Food">Food</option>
+            <option value="Groceries">Groceries</option>
             <option value="Transport">Transport</option>
             <option value="Activities">Activities</option>
             <option value="Shopping">Shopping</option>
+            <option value="Gifts">Gifts</option>
             <option value="Other">Other</option>
           </select>
         </label>
         <input type="hidden" name="itemId" />
-        <label class="field">
-          <span class="field__label">Amount (₪)</span>
-          <input type="number" name="amount" id="expense-amount" min="0.01" step="0.01" required />
-        </label>
+        <!-- Amount + currency. The currency is a BUTTON plus a hidden input, never a
+             <select> — see the payment-status comment below for why a native option
+             list is not usable on this dialog. The hidden input keeps the form
+             contract (`name="currency"`) identical for FormData. -->
+        <div class="field">
+          <span class="field__label" id="expense-amount-label">Amount</span>
+          <div class="amount-row">
+            <input type="number" name="amount" id="expense-amount" min="0.01" step="0.01" required
+                   inputmode="decimal" aria-labelledby="expense-amount-label" />
+            <input type="hidden" name="currency" value="ILS" />
+            <button type="button" class="currency-btn" id="expense-currency-btn"
+                    aria-label="Currency">ILS</button>
+          </div>
+          <p class="field__hint" id="expense-estimate" hidden></p>
+        </div>
         <!-- Three tap targets, not a <select>. Twice now a fix for "picking Paid closes the
              sheet" has failed on a real Android phone: v1.10.4 timed a window from touching the
              select, v1.10.5 keyed off the select holding focus. Both were guesses about how the
@@ -2094,9 +2149,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <button type="button" data-status="paid">Paid</button>
           </div>
         </div>
+        <!-- No value="0": an amount field that starts at zero has to be cleared before
+             it can be typed into. Empty means zero, handled in buildExpenseFromForm. -->
         <label class="field">
-          <span class="field__label">Amount paid (₪)</span>
-          <input type="number" name="amountPaid" min="0" step="0.01" value="0" />
+          <span class="field__label" id="expense-paid-label">Amount paid</span>
+          <input type="number" name="amountPaid" min="0" step="0.01" inputmode="decimal" />
         </label>
         <label class="field" id="expense-paid-date-wrap" hidden>
           <span class="field__label">Paid date (optional)</span>
@@ -2106,8 +2163,51 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label">Booking date (optional)</span>
           <input type="date" name="date" />
         </label>
+        <!-- Read-only: settling is its own flow (the Settle sheet), because it happens
+             days later from the card statement, not while editing the expense. This is
+             here only so a mistake can be seen and cleared. -->
+        <div class="field settled-line" id="expense-settled-line" hidden>
+          <span class="field__label">Settled</span>
+          <div class="settled-line__row">
+            <span id="expense-settled-text"></span>
+            <button type="button" class="btn btn--ghost btn--small" id="expense-settled-clear">Clear</button>
+          </div>
+        </div>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
+          <button type="submit" class="btn btn--primary">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- ===== Currency picker (see the amount field) ===== -->
+    <dialog id="dialog-currency" class="dialog" aria-labelledby="currency-title">
+      <div style="padding: 0.9rem 1.2rem 0.4rem">
+        <h3 class="dialog__title" id="currency-title" style="margin-bottom:0.6rem">Currency</h3>
+        <div id="currency-list"></div>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close style="flex:1;justify-content:center">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ===== Settle: the real ILS charge from the card statement ===== -->
+    <dialog id="dialog-settle" class="dialog" aria-labelledby="settle-title">
+      <form id="form-settle" method="dialog">
+        <h3 class="dialog__title" id="settle-title">Settle from statement</h3>
+        <input type="hidden" name="tripId" />
+        <input type="hidden" name="expenseId" />
+        <p class="field__hint" id="settle-context"></p>
+        <label class="field">
+          <span class="field__label">Actual charge (₪)</span>
+          <input type="number" name="settledHome" min="0.01" step="0.01" required inputmode="decimal" id="settle-amount" />
+        </label>
+        <label class="field">
+          <span class="field__label">Statement date</span>
+          <input type="date" name="settledDate" />
+        </label>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>Not yet</button>
           <button type="submit" class="btn btn--primary">Save</button>
         </div>
       </form>
@@ -2231,9 +2331,90 @@ function pendingBackup() {
   return imp ? { kind: "import", data: imp } : null;
 }
 
-const CATEGORIES = ["Hotel", "Flight", "Food", "Transport", "Activities", "Shopping", "Other"];
+const CATEGORIES = ["Hotel", "Flight", "Food", "Groceries", "Transport", "Activities", "Shopping", "Gifts", "Other"];
 
 const PAYMENT_STATUSES = ["planned", "booked", "paid"];
+
+/* ============================================================
+   MONEY (v2.0) — ILS is the only accounting currency
+   ============================================================
+
+   A foreign currency is how an expense was ENTERED at the till, never a unit of
+   account. Every budget, every total, the fund pot and the rollover stay in ILS
+   exactly as they always were, which is why trip.budget needs no conversion and
+   formatMoney's ~30 existing call sites keep rendering the shekel untouched.
+
+   Two INDEPENDENT axes that must never be conflated:
+     payment    — status/amountPaid/paidDate, denominated in the expense's own currency
+     settlement — settledHome, the real ILS the card was charged. Always ILS. */
+const HOME_CURRENCY = "ILS";
+const COMMON_CURRENCIES = ["ILS", "EUR", "USD", "GBP", "CHF", "CZK", "HUF", "PLN", "TRY", "THB", "JPY", "AED"];
+/* Any ISO-shaped code Intl can format is allowed — deliberately not a fixed registry,
+   so a currency we never listed still works. The regex alone would accept an invented
+   code; normalizeCurrency uppercases FIRST so "eur" is not treated as one. */
+const CURRENCY_RE = /^[A-Z]{3}$/;
+
+function normalizeCurrency(code) {
+  const up = String(code || "").trim().toUpperCase();
+  return CURRENCY_RE.test(up) ? up : "";
+}
+
+/* ILS per 1 unit of `code`. One direction only — no reciprocals anywhere, and the
+   number is typed the way it is read ("1 EUR = 3.85 ILS").
+
+   Returns 0 for UNKNOWN, NEVER 1. A 1:1 fallback would render a EUR 420 dinner as
+   ILS 420; every caller must branch on `known` instead. */
+function rateFor(trip, code) {
+  const cur = normalizeCurrency(code);
+  if (!cur || cur === HOME_CURRENCY) return 1;
+  const r = Number(trip && trip.rates ? trip.rates[cur] : 0);
+  return Number.isFinite(r) && r > 0 ? r : 0;
+}
+
+function tripFeeMultiplier(trip) {
+  const f = Number(trip && trip.feePercent);
+  return 1 + (Number.isFinite(f) && f >= 0 ? f : 0) / 100;
+}
+
+function expenseNeedsRate(trip, e) {
+  return rateFor(trip, e.currency) === 0;
+}
+
+function isFullyPaid(e) {
+  return Number(e.amount) > 0 && Number(e.amountPaid) >= Number(e.amount);
+}
+
+/* The ILS value of an expense: settled truth when the statement has landed,
+   otherwise the fee-loaded estimate. `known` is false when no rate is set —
+   callers must EXCLUDE those rows from totals rather than adding value 0, or a
+   EUR trip with no rate reads as "nothing spent, full budget left". */
+function expenseHome(trip, e) {
+  if (e.settledHome != null) return { value: Number(e.settledHome), settled: true, known: true };
+  const r = rateFor(trip, e.currency);
+  const fee = e.currency === HOME_CURRENCY ? 1 : tripFeeMultiplier(trip);
+  return { value: Number(e.amount) * r * fee, settled: false, known: r > 0 };
+}
+
+/* Paid-so-far in ILS. Settlement is ALL-OR-NOTHING: settledHome is the charge for
+   the whole expense, so it may only stand in for "paid" once the expense is fully
+   paid. A deposit plus a balance is two expenses. Never pro-rata settledHome. */
+function expensePaidHome(trip, e) {
+  if (e.settledHome != null && isFullyPaid(e)) {
+    return { value: Number(e.settledHome), settled: true, known: true };
+  }
+  const r = rateFor(trip, e.currency);
+  const fee = e.currency === HOME_CURRENCY ? 1 : tripFeeMultiplier(trip);
+  return { value: Number(e.amountPaid) * r * fee, settled: false, known: r > 0 };
+}
+
+/* All spend is card spend (confirmed with Isaac — there is no cash path), so every
+   foreign expense will eventually get a statement line. Settlement is a different
+   axis from payment: this asks "has the real charge landed?", not "did we pay?". */
+function expenseNeedsSettling(trip, e) {
+  if (e.settledHome != null) return false;
+  if (normalizeCurrency(e.currency) === HOME_CURRENCY) return false;
+  return Number(e.amountPaid) > 0 || isFullyPaid(e);
+}
 
 function normalizeCategory(category) {
   const match = CATEGORIES.find(
@@ -2247,10 +2428,16 @@ function categoryDataAttr(category) {
 }
 
 function categoryBreakdown(trip) {
+  /* Numerator and denominator MUST change together. tripSpent() below now converts
+     to ILS and drops unrated rows; summing raw e.amount here would mix a EUR 38
+     into a shekel total and produce bars that are wrong but still plausibly
+     shaped — the kind of bug that survives review. Same filter, same units. */
   const totals = {};
   for (const e of trip.expenses) {
+    const h = expenseHome(trip, e);
+    if (!h.known) continue;
     const cat = normalizeCategory(e.category);
-    totals[cat] = (totals[cat] || 0) + Number(e.amount);
+    totals[cat] = (totals[cat] || 0) + h.value;
   }
   const spent = tripSpent(trip);
   return Object.entries(totals)
@@ -2382,6 +2569,12 @@ function normalizeItem(it) {
     /* Manual position within its day; 0 = "sort me by time". Set by the
        timeline ↑/↓ buttons (minutes-scale float, so timed items interleave). */
     sortIndex: Number(it.sortIndex) > 0 ? Number(it.sortIndex) : 0,
+    /* v2.0. A TIMESTAMP, not a boolean: under the merge's remote-wins rule two
+       devices toggling a bare flag can resurrect or erase a tick depending on
+       edit order, whereas the later stamp always wins. "" = not visited.
+       Like sortIndex, the form does not carry it — handleItemSubmit must copy it
+       forward explicitly or every edit silently un-visits the place. */
+    visitedAt: typeof it.visitedAt === "string" ? it.visitedAt : "",
   };
 }
 
@@ -2411,6 +2604,27 @@ function normalizeTripMeta(trip) {
   /* v1.14.0. Strict — shared payloads are the trust boundary, and !!"false" is true. The flag
      names the fact (the trip is not happening); "archived" is derived from it and the dates. */
   trip.cancelled = trip.cancelled === true;
+
+  /* v2.0 money. trip.budget is deliberately NOT touched: budgets are always ILS,
+     which is the whole reason this feature needs no budget conversion and no
+     re-basing. spendCurrency only picks the DEFAULT currency for the next expense
+     — changing it never rewrites an existing one.
+
+     Note these live on the trip rather than the expense precisely because this
+     function MUTATES in place: unlike normalizeExpense, which rebuilds from a
+     literal and drops unknown keys, trip-level additions survive an older client. */
+  trip.spendCurrency = normalizeCurrency(trip.spendCurrency) || HOME_CURRENCY;
+  trip.rates = trip.rates && typeof trip.rates === "object" && !Array.isArray(trip.rates) ? trip.rates : {};
+  for (const [code, v] of Object.entries(trip.rates)) {
+    const cur = normalizeCurrency(code);
+    const n = Number(v);
+    delete trip.rates[code];
+    // 0/NaN/negative are all "no rate" — dropped, so rateFor() reports unknown
+    // rather than letting a malformed payload quietly scale a total.
+    if (cur && cur !== HOME_CURRENCY && Number.isFinite(n) && n > 0) trip.rates[cur] = n;
+  }
+  const fee = Number(trip.feePercent);
+  trip.feePercent = Number.isFinite(fee) && fee >= 0 ? fee : 1;
 }
 
 /* v2: promote hardcoded trip meta + booking refs into persisted state */
@@ -2460,6 +2674,8 @@ function safeId(id) {
 
 function normalizeExpense(exp) {
   const amount = Math.max(0, Number(exp.amount) || 0);
+  const settledRaw = Number(exp.settledHome);
+  const settled = Number.isFinite(settledRaw) && settledRaw > 0 ? settledRaw : null;
   let amountPaid = Math.min(amount, Math.max(0, Number(exp.amountPaid) || 0));
   let status = PAYMENT_STATUSES.includes(exp.status) ? exp.status : "booked";
   let paidDate = exp.paidDate || "";
@@ -2489,6 +2705,17 @@ function normalizeExpense(exp) {
     amountPaid,
     paidDate,
     itemId: exp.itemId ? String(exp.itemId) : "", // v1.15.0: the booking this expense pays for
+
+    /* v2.0. Defaults to "" and NOT to ILS on purpose: deciding that a bare legacy
+       amount is shekels belongs to migrateToV3, which is the one place that reasons
+       about pre-v2.0 data. rateFor() already treats "" as 1:1, so an unmigrated row
+       still renders correctly in the meantime.
+
+       settledHome is the real ILS the card was charged — always ILS, never the
+       expense's own currency. It must be finite and > 0; zero is NOT settled. */
+    currency: normalizeCurrency(exp.currency),
+    settledHome: settled,
+    settledDate: settled != null ? (exp.settledDate || "") : "",
   };
 }
 
@@ -2781,6 +3008,40 @@ function normalizeState(data) {
      deterministic, so two devices migrating independently agree and merge3 sees
      no conflict. */
   migrateUntimedOrder(data);
+  /* Same reasoning as migrateUntimedOrder: runs on every load AND on every incoming
+     shared payload, not just once at startup. */
+  migrateToV3(data);
+  return data;
+}
+
+/* ============================================================
+   migrateToV3 (v2.0) — stamp ILS, convert nothing
+   ============================================================
+
+   Every pre-v2.0 amount was rendered by a formatMoney() that hardcoded
+   currency:"ILS", so ILS is what those numbers ARE. Recording that fact is the
+   entire migration: no value is converted, no currency is inferred, and because
+   budgets stay ILS forever there is nothing else to touch. Choosing a trip's
+   spendCurrency later is a user action that changes only the default for the NEXT
+   expense — it never reinterprets an existing one.
+
+   IDEMPOTENT BY CONSTRUCTION: every write is guarded by "this field is missing or
+   invalid", so a second pass writes nothing. There are no clocks, ids or ordering
+   involved, so two devices migrating independently produce byte-identical results
+   and merge3 sees no conflict — the property migrateUntimedOrder relies on too.
+
+   Guarded per ENTITY rather than on data.version, deliberately. merge3 sets
+   version = Math.max(base, local, remote), so a document can carry the new version
+   while still holding an expense that arrived without a currency; gating on the
+   version alone would skip exactly the rows that need help. That is also why there
+   is no SCHEMA_VERSION constant — nothing would read it. */
+function migrateToV3(data) {
+  for (const trip of data.trips) {
+    // normalizeTripMeta has already defaulted spendCurrency/rates/feePercent.
+    for (const exp of trip.expenses) {
+      if (!exp.currency) exp.currency = HOME_CURRENCY;
+    }
+  }
   return data;
 }
 
@@ -2867,28 +3128,59 @@ function saveState() {
 let state = loadState();
 let selectedYear = "all";
 
-function formatMoney(n) {
-  return new Intl.NumberFormat("en-IL", {
+/* v2.0: widened, not changed. The code parameter DEFAULTS to ILS so all ~30
+   existing call sites keep rendering shekels untouched — every one of them is a
+   genuine ILS figure (budget, committed, paid, the fund pot, rollover, cross-trip
+   stats). Only the expense row itself ever passes a foreign code. */
+function formatMoney(n, code) {
+  const cur = normalizeCurrency(code) || HOME_CURRENCY;
+  // en-IL renders a non-shekel currency oddly; en-GB is neutral for everything else.
+  return new Intl.NumberFormat(cur === HOME_CURRENCY ? "en-IL" : "en-GB", {
     style: "currency",
-    currency: "ILS",
+    currency: cur,
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(n);
 }
 
-function tripCommitted(trip) {
-  return trip.expenses.reduce((sum, e) => sum + Number(e.amount), 0);
+/* Sum an expense-derived ILS value, EXCLUDING rows whose rate is unknown.
+   Returning {value, unrated} rather than a bare number is the point: a naive
+   sum of expenseHome().value would add 0 for every unrated row, so a EUR trip
+   with no rate set would read as "nothing committed, whole budget left" — as
+   wrong as a 1:1 fallback and in the more dangerous direction. Callers render
+   the unrated count beside the number so the total is never silently partial. */
+function sumHome(trip, pick) {
+  let value = 0, unrated = 0;
+  for (const e of trip.expenses) {
+    const h = pick(trip, e);
+    if (h.known) value += h.value;
+    else unrated++;
+  }
+  return { value, unrated };
 }
+function tripCommittedHome(trip) { return sumHome(trip, expenseHome); }
+function tripPaidHome(trip) { return sumHome(trip, expensePaidHome); }
+function tripDueHome(trip) {
+  let value = 0, unrated = 0;
+  for (const e of trip.expenses) {
+    const full = expenseHome(trip, e), paid = expensePaidHome(trip, e);
+    if (full.known && paid.known) value += Math.max(0, full.value - paid.value);
+    else unrated++;
+  }
+  return { value, unrated };
+}
+function tripUnsettledCount(trip) {
+  return trip.expenses.filter((e) => expenseNeedsSettling(trip, e)).length;
+}
+
+/* v2.0: these still return a plain ILS number, so every existing caller and every
+   formatMoney(...) around them is unchanged — but they now CONVERT, because an
+   expense's amount is in its own currency. Unrated rows are excluded, not counted
+   as 0; use the *Home variants when the count needs to be disclosed. */
+function tripCommitted(trip) { return tripCommittedHome(trip).value; }
 function tripSpent(trip) { return tripCommitted(trip); }
-function tripPaid(trip) {
-  return trip.expenses.reduce((sum, e) => sum + Number(e.amountPaid), 0);
-}
-function tripDue(trip) {
-  return trip.expenses.reduce(
-    (sum, e) => sum + Math.max(0, Number(e.amount) - Number(e.amountPaid)),
-    0
-  );
-}
+function tripPaid(trip) { return tripPaidHome(trip).value; }
+function tripDue(trip) { return tripDueHome(trip).value; }
 
 function expenseDisplayStatus(exp) {
   const amount = Number(exp.amount);
@@ -2910,15 +3202,15 @@ function expenseFormField(form, name) { return form.elements[name]; }
 
 function buildExpenseFromForm(form) {
   const amount = Number(expenseFormField(form, "amount").value);
+  const currency = normalizeCurrency(expenseFormField(form, "currency").value) || HOME_CURRENCY;
   const label = expenseFormField(form, "label").value.trim();
   const category = expenseFormField(form, "category").value;
   const date = expenseFormField(form, "date").value;
   const itemId = expenseFormField(form, "itemId").value; // the booking this pays for, if any
   let status = expenseFormField(form, "status").value;
-  let amountPaid = Math.min(
-    amount,
-    Math.max(0, Number(expenseFormField(form, "amountPaid").value) || 0)
-  );
+  // Empty is zero — the field no longer starts at "0" (it had to be cleared before typing).
+  const paidRaw = expenseFormField(form, "amountPaid").value.trim();
+  let amountPaid = Math.min(amount, Math.max(0, paidRaw === "" ? 0 : Number(paidRaw) || 0));
   let paidDate = expenseFormField(form, "paidDate").value;
 
   if (!label || !CATEGORIES.includes(category) || amount <= 0) return null;
@@ -2942,8 +3234,13 @@ function buildExpenseFromForm(form) {
      An expense with an empty id is unreachable: every row action carries data-expense-id=""
      and bails. Drop the id here; both call sites own it. */
   const { id: _noId, ...fields } = normalizeExpense({
-    label, category, amount, date, status, amountPaid, paidDate, itemId,
+    label, category, amount, currency, date, status, amountPaid, paidDate, itemId,
   });
+  /* Settlement is NOT a form field — it is owned by the Settle sheet. Leaving the
+     keys out here means the caller's `{ ...exp, ...payload }` spread preserves an
+     existing settlement instead of clearing it on every unrelated edit. */
+  delete fields.settledHome;
+  delete fields.settledDate;
   return fields;
 }
 
@@ -3299,10 +3596,23 @@ function renderExpenseItem(trip, e) {
   const isPaid = display === "paid";
   const isPartial = display === "partial";
   const statusClass = `payment-status payment-status--${display}`;
+  const cur = e.currency || HOME_CURRENCY;
   const partialLine =
     isPartial || (paid > 0 && !isPaid)
-      ? `<div class="expense-item__paid-line">${formatMoney(paid)} / ${formatMoney(amount)} paid</div>`
+      ? `<div class="expense-item__paid-line">${formatMoney(paid, cur)} / ${formatMoney(amount, cur)} paid</div>`
       : "";
+
+  /* The second money line. Only foreign expenses have one — an ILS expense already
+     IS its shekel figure. Three states, visually distinct on purpose: an estimate is
+     muted and prefixed "≈" so it never reads as reconciled, a settled figure is the
+     bank's truth, and a missing rate says so rather than silently converting 1:1. */
+  const home = expenseHome(trip, e);
+  const homeLine = cur === HOME_CURRENCY ? ""
+    : !home.known
+      ? `<div class="expense-item__paid-line"><span class="fx-norate">Rate needed</span></div>`
+      : home.settled
+        ? `<div class="expense-item__paid-line"><span class="fx-settled">${formatMoney(home.value)} ✓</span></div>`
+        : `<div class="expense-item__paid-line"><span class="fx-est">≈ ${formatMoney(home.value)}</span></div>`;
 
   return `
         <li class="expense-item ${isPaid ? "expense-item--paid" : ""}">
@@ -3315,8 +3625,9 @@ function renderExpenseItem(trip, e) {
                 ${e.date ? ` · ${escapeHtml(e.date)}` : ""}
               </div>
               ${partialLine}
+              ${homeLine}
             </div>
-            <span class="expense-item__amount">${formatMoney(e.amount)}</span>
+            <span class="expense-item__amount">${formatMoney(e.amount, cur)}</span>
           </div>
           <div class="expense-item__actions">
             ${
@@ -3324,6 +3635,9 @@ function renderExpenseItem(trip, e) {
                 ? `<button type="button" class="btn btn--small btn--ghost btn-mark-unpaid" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="Mark ${escapeHtml(e.label)} unpaid">Mark unpaid</button>`
                 : `<button type="button" class="btn btn--small btn--ghost btn-mark-paid" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="Mark ${escapeHtml(e.label)} paid">Mark paid</button>`
             }
+            ${expenseNeedsSettling(trip, e) || e.settledHome != null
+              ? `<button type="button" class="btn btn--small btn--ghost btn-settle-expense" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="${e.settledHome != null ? "Re-settle" : "Settle"} ${escapeHtml(e.label)} from the statement">${e.settledHome != null ? "Re-settle" : "Settle"}</button>`
+              : ""}
             <button type="button" class="btn btn--small btn--ghost btn-edit-expense" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="Edit ${escapeHtml(e.label)}">Edit</button>
             <button type="button" class="btn btn--small btn--danger btn-delete-expense" data-trip-id="${trip.id}" data-expense-id="${e.id}" aria-label="Delete ${escapeHtml(e.label)}">Delete</button>
           </div>
@@ -3331,14 +3645,27 @@ function renderExpenseItem(trip, e) {
 }
 
 function renderTripCard(trip) {
-  const committed = tripCommitted(trip);
+  const committedAgg = tripCommittedHome(trip);
+  const committed = committedAgg.value;
   const paid = tripPaid(trip);
   const due = tripDue(trip);
+  /* An excluded row must be VISIBLE in the number it was excluded from. Totals here
+     drop expenses whose rate is unknown — correct, because converting them 1:1 would
+     be a lie — but silently dropping them reads as "nothing spent, budget intact",
+     which is the more dangerous lie. Same for estimates: a total built partly from
+     guesses says so, next to the figure rather than in a chip somewhere else. */
+  const unsettled = tripUnsettledCount(trip);
+  const notes = [
+    committedAgg.unrated ? `${committedAgg.unrated} awaiting rate${committedAgg.unrated === 1 ? "" : "s"}` : "",
+    unsettled ? `${unsettled} unsettled` : "",
+  ].filter(Boolean);
+  const totalNote = notes.length
+    ? `<p class="trip-card__fxnote">${notes.map((n) => escapeHtml(n)).join(" · ")}</p>` : "";
   const budget = Number(trip.budget);
   const remaining = budget - committed;
   const over = committed > budget;
   const pct = budget > 0 ? Math.min(100, (committed / budget) * 100) : committed > 0 ? 100 : 0;
-  const shown = trip.expenses.filter(expenseMatchesFilter);
+  const shown = trip.expenses.filter((e) => expenseMatchesFilter(e, trip));
   const expensesHtml =
     trip.expenses.length === 0
       ? `<li class="empty-state">Nothing booked yet — add an expense to start tracking this budget.</li>`
@@ -3372,6 +3699,7 @@ function renderTripCard(trip) {
         <div><dt>Still to pay</dt><dd class="${due > 0 ? "trip-metrics__due" : ""}">${formatMoney(due)}</dd></div>
         <div><dt>Left in budget</dt><dd class="${remaining < 0 ? "over-badge" : ""}">${formatMoney(remaining)}</dd></div>
       </dl>
+      ${totalNote}
       <details class="expenses-fold" data-trip-fold="${trip.id}" ${window.innerWidth > 900 || trip.expenses.length === 0 || expensesFoldOpen.has(trip.id) ? "open" : ""}>
         <summary>${foldLabel}</summary>
         <ul class="expense-list">${expensesHtml}</ul>
@@ -3419,7 +3747,10 @@ function renderExpenseFilter(trips) {
   if (!row) return;
   const all = trips.flatMap((t) => t.expenses);
   const paid = all.filter((e) => expenseDisplayStatus(e) === "paid").length;
-  const counts = { all: all.length, unpaid: all.length - paid, paid };
+  /* Unsettled needs each expense's OWN trip for its rates, so it cannot be counted
+     off the flattened list the way paid is. */
+  const unsettled = trips.reduce((n, t) => n + tripUnsettledCount(t), 0);
+  const counts = { all: all.length, unpaid: all.length - paid, paid, unsettled };
   if (expenseFilter !== "all" && !counts[expenseFilter]) expenseFilter = "all";
   row.hidden = all.length === 0;
   const chip = (value, label) => counts[value] === 0 && value !== "all" ? "" :
@@ -3427,7 +3758,7 @@ function renderExpenseFilter(trips) {
        data-expense-filter="${value}" aria-pressed="${expenseFilter === value ? "true" : "false"}"
        aria-label="${label}, ${counts[value]} expense${counts[value] === 1 ? "" : "s"}"
      >${label} <span class="filter-chip__count">${counts[value]}</span></button>`;
-  row.innerHTML = chip("all", "All") + chip("unpaid", "Unpaid") + chip("paid", "Paid");
+  row.innerHTML = chip("all", "All") + chip("unpaid", "Unpaid") + chip("paid", "Paid") + chip("unsettled", "Unsettled");
   row.querySelectorAll("[data-expense-filter]").forEach((b) =>
     b.addEventListener("click", () => {
       expenseFilter = b.getAttribute("data-expense-filter");
@@ -3443,7 +3774,7 @@ function bindExpenseRowActions() {
   if (!tripsList) return;
 
   tripsList
-    .querySelectorAll(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense")
+    .querySelectorAll(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense, .btn-settle-expense")
     .forEach((btn) => {
       btn.onclick = (e) => {
         e.preventDefault();
@@ -3460,6 +3791,8 @@ function bindExpenseRowActions() {
           const trip = state.trips.find((t) => t.id === tripId);
           const exp = trip?.expenses.find((x) => x.id === expenseId);
           if (trip && exp) openExpenseDialog(trip.id, exp);
+        } else if (btn.classList.contains("btn-settle-expense")) {
+          openSettleDialog(tripId, expenseId);
         } else if (btn.classList.contains("btn-delete-expense")) {
           deleteExpense(tripId, expenseId);
         }
@@ -3756,6 +4089,9 @@ function openTripDialog(trip = null) {
     form.cancelled.checked = trip.cancelled === true;
     $("trip-cancelled-field").hidden = false;
     $("trip-delete-row").hidden = false;
+    setTripCurrency(trip.spendCurrency || HOME_CURRENCY);
+    form.rate.value = trip.rates?.[trip.spendCurrency] ?? "";
+    form.feePercent.value = trip.feePercent ?? 1;
   } else {
     $("trip-delete-row").hidden = true;
     title.textContent = "New trip";
@@ -3764,10 +4100,52 @@ function openTripDialog(trip = null) {
     form.budget.value = "";
     renderDestRows([]);
     $("trip-cancelled-field").hidden = true; // you do not create a trip already cancelled
+    setTripCurrency(HOME_CURRENCY);
+    form.rate.value = "";
+    form.feePercent.value = 1;
   }
   syncTripYearField(form);
 
   openDialog($("dialog-trip"));
+}
+
+/* The rate and fee only mean anything once the trip spends in something other than
+   shekels, so they stay out of the way until then. */
+function setTripCurrency(code) {
+  const form = $("form-trip");
+  const cur = normalizeCurrency(code) || HOME_CURRENCY;
+  form.spendCurrency.value = cur;
+  $("trip-currency-btn").textContent = cur;
+  const foreign = cur !== HOME_CURRENCY;
+  $("trip-fee-field").hidden = !foreign;
+  form.rate.parentElement.querySelector("input[name='rate']").hidden = !foreign;
+  $("trip-rate-hint").hidden = !foreign;
+  if (foreign) $("trip-rate-hint").textContent = `What one ${cur} costs in shekels. Rough is fine — the statement replaces it.`;
+}
+
+function openTripCurrencyPicker() {
+  const form = $("form-trip");
+  const active = normalizeCurrency(form.spendCurrency.value) || HOME_CURRENCY;
+  const order = [];
+  const seen = new Set();
+  for (const c of [HOME_CURRENCY, ...COMMON_CURRENCIES]) {
+    const cur = normalizeCurrency(c);
+    if (cur && !seen.has(cur)) { seen.add(cur); order.push(cur); }
+  }
+  $("currency-list").innerHTML = order.map((cur) => `
+    <button type="button" class="sheet-item" data-currency="${escapeHtml(cur)}"
+            aria-pressed="${cur === active ? "true" : "false"}">
+      <strong style="min-width:2.6rem">${escapeHtml(cur)}</strong>
+      <span>${escapeHtml(currencySymbol(cur))}</span>
+      ${cur === active ? '<span style="margin-inline-start:auto">✓</span>' : ""}
+    </button>`).join("");
+  $("currency-list").querySelectorAll("[data-currency]").forEach((b) =>
+    b.addEventListener("click", () => {
+      setTripCurrency(b.getAttribute("data-currency"));
+      closeDialog($("dialog-currency"));
+    })
+  );
+  openDialog($("dialog-currency"));
 }
 
 /* One input per destination. Always renders at least one row so the field never
@@ -3814,6 +4192,7 @@ function openExpenseDialog(tripId, expense = null, defaults = {}) {
   expenseFormField(form, "itemId").value = expense ? (expense.itemId || "") : (defaults.itemId || "");
   title.textContent = expense ? "Edit expense" : "Add expense";
 
+  const trip = state.trips.find((t) => t.id === tripId) || null;
   const normalized = expense ? normalizeExpense(expense) : null;
   if (normalized) {
     expenseFormField(form, "label").value = normalized.label;
@@ -3823,19 +4202,126 @@ function openExpenseDialog(tripId, expense = null, defaults = {}) {
     setExpenseStatus(normalized.status, true); // reflect only — the values are already coherent
     expenseFormField(form, "amountPaid").value = normalized.amountPaid;
     expenseFormField(form, "paidDate").value = normalized.paidDate || "";
+    setExpenseCurrency(normalized.currency || HOME_CURRENCY);
   } else {
     setExpenseStatus("booked", true);
-    expenseFormField(form, "amountPaid").value = 0;
+    // No default 0 in amountPaid — empty reads as zero and saves a tap to clear it.
+    expenseFormField(form, "amountPaid").value = "";
     expenseFormField(form, "paidDate").value = "";
     if (defaults.label) expenseFormField(form, "label").value = defaults.label;
     if (defaults.category && CATEGORIES.includes(defaults.category)) expenseFormField(form, "category").value = defaults.category;
     if (defaults.date) expenseFormField(form, "date").value = defaults.date;
+    /* New expenses default to the trip's spend currency — in Paris you are typing
+       euros all week and should never have to pick EUR twice. */
+    setExpenseCurrency(trip ? trip.spendCurrency : HOME_CURRENCY);
   }
 
+  renderSettledLine(trip, normalized);
   syncExpensePaidDateVisibility();
+  syncExpenseEstimate();
   openDialog($("dialog-expense"));
   // Prefilled from a booking: the only thing left to type is the amount.
   if (!expense && defaults.label) expenseFormField(form, "amount").focus();
+}
+
+/* ---- currency picker + live estimate (v2.0) ---------------------------------
+
+   The picker is a button and a bottom sheet rather than a <select>, for exactly the
+   reason documented on the payment-status control: a native option list on this
+   dialog has twice shipped a bug where dismissing it also dismissed the dialog. */
+function setExpenseCurrency(code) {
+  const form = $("form-expense");
+  const cur = normalizeCurrency(code) || HOME_CURRENCY;
+  expenseFormField(form, "currency").value = cur;
+  const btn = $("expense-currency-btn");
+  if (btn) btn.textContent = cur;
+  syncExpenseCurrencyLabels(cur);
+  syncExpenseEstimate();
+}
+
+/* Both amount fields are denominated in the expense's own currency, so both labels
+   follow the picker. settledHome is the only always-ILS money field. */
+function syncExpenseCurrencyLabels(cur) {
+  const sym = currencySymbol(cur);
+  const a = $("expense-amount-label"), p = $("expense-paid-label");
+  if (a) a.textContent = `Amount (${sym})`;
+  if (p) p.textContent = `Amount paid (${sym})`;
+}
+
+function currencySymbol(code) {
+  const cur = normalizeCurrency(code) || HOME_CURRENCY;
+  try {
+    // "narrowSymbol" gives ₪/€/$ rather than ILS/EUR/USD; not everywhere, hence the guard.
+    const parts = new Intl.NumberFormat("en-GB", { style: "currency", currency: cur, currencyDisplay: "narrowSymbol" }).formatToParts(0);
+    return (parts.find((x) => x.type === "currency") || {}).value || cur;
+  } catch { return cur; }
+}
+
+/* The ILS figure under the amount is a PLACEHOLDER — it exists so you know roughly
+   what a €38 dinner cost until the statement replaces it. Always muted, always
+   prefixed "≈", never presented as money that has been reconciled. */
+function syncExpenseEstimate() {
+  const hint = $("expense-estimate");
+  if (!hint) return;
+  const form = $("form-expense");
+  const trip = state.trips.find((t) => t.id === expenseFormField(form, "tripId").value);
+  const cur = normalizeCurrency(expenseFormField(form, "currency").value) || HOME_CURRENCY;
+  const amount = Number(expenseFormField(form, "amount").value);
+  if (!trip || cur === HOME_CURRENCY || !(amount > 0)) { hint.hidden = true; return; }
+  const rate = rateFor(trip, cur);
+  hint.hidden = false;
+  if (!rate) {
+    hint.innerHTML = `<span class="fx-norate">No rate for ${escapeHtml(cur)} yet</span> — saves anyway, set it on the trip.`;
+    return;
+  }
+  const fee = Number(trip.feePercent) || 0;
+  hint.innerHTML = `<span class="fx-est">≈ ${escapeHtml(formatMoney(amount * rate * tripFeeMultiplier(trip)))}</span>`
+    + (fee ? ` est. (incl. ${fee}% fee)` : " est.");
+}
+
+function renderSettledLine(trip, normalized) {
+  const wrap = $("expense-settled-line");
+  if (!wrap) return;
+  const settled = normalized && normalized.settledHome != null;
+  wrap.hidden = !settled;
+  if (!settled) return;
+  const when = normalized.settledDate ? ` on ${fmtHistoryDate(normalized.settledDate)}` : "";
+  $("expense-settled-text").innerHTML =
+    `<span class="fx-settled">${escapeHtml(formatMoney(normalized.settledHome))}</span>${escapeHtml(when)}`;
+}
+
+function openCurrencyPicker() {
+  const form = $("form-expense");
+  const trip = state.trips.find((t) => t.id === expenseFormField(form, "tripId").value);
+  const active = normalizeCurrency(expenseFormField(form, "currency").value) || HOME_CURRENCY;
+  /* Ordered by how likely it is to be wanted: this trip's spend currency, then any
+     code that already has a rate on the trip, then the common list. */
+  const seen = new Set();
+  const order = [];
+  const push = (c, note) => {
+    const cur = normalizeCurrency(c);
+    if (!cur || seen.has(cur)) return;
+    seen.add(cur); order.push({ cur, note });
+  };
+  if (trip) push(trip.spendCurrency, "trip currency");
+  push(HOME_CURRENCY, "home");
+  if (trip) Object.keys(trip.rates || {}).forEach((c) => push(c, "rate set"));
+  COMMON_CURRENCIES.forEach((c) => push(c, ""));
+
+  $("currency-list").innerHTML = order.map(({ cur, note }) => `
+    <button type="button" class="sheet-item" data-currency="${escapeHtml(cur)}"
+            aria-pressed="${cur === active ? "true" : "false"}">
+      <strong style="min-width:2.6rem">${escapeHtml(cur)}</strong>
+      <span>${escapeHtml(currencySymbol(cur))}${note ? ` · ${escapeHtml(note)}` : ""}</span>
+      ${cur === active ? '<span style="margin-inline-start:auto">✓</span>' : ""}
+    </button>`).join("");
+  $("currency-list").querySelectorAll("[data-currency]").forEach((b) =>
+    b.addEventListener("click", () => {
+      setExpenseCurrency(b.getAttribute("data-currency"));
+      closeDialog($("dialog-currency"));
+    })
+  );
+  openDialog($("dialog-currency"));
 }
 
 /* "Add expense" from a booking: everything but the amount comes from the booking itself. */
@@ -4529,17 +5015,37 @@ function handleTripSubmit(e) {
   const year = tripYearFor(startDate, form.year.value);
   const travelers = form.travelers.value.split(",").map((s) => s.trim()).filter(Boolean);
   const cancelled = form.cancelled.checked;
+  /* Money settings. Changing spendCurrency only picks the default for the NEXT
+     expense — no existing expense is ever rewritten, so this is always reversible.
+     A blank or non-positive rate DELETES the entry rather than storing 0, so
+     rateFor() reports "unknown" and the totals disclose it instead of converting. */
+  const spendCurrency = normalizeCurrency(form.spendCurrency.value) || HOME_CURRENCY;
+  const rateRaw = Number(form.rate.value);
+  const feeRaw = Number(form.feePercent.value);
+  const feePercent = Number.isFinite(feeRaw) && feeRaw >= 0 ? feeRaw : 1;
+
   if (startDate && endDate && endDate < startDate) {
     alert("End date must be after the start date.");
     return;
   }
 
+  const applyRate = (trip) => {
+    trip.rates = trip.rates || {};
+    if (spendCurrency === HOME_CURRENCY) return;
+    if (Number.isFinite(rateRaw) && rateRaw > 0) trip.rates[spendCurrency] = rateRaw;
+    else delete trip.rates[spendCurrency];
+  };
+
   if (id) {
     const trip = state.trips.find((t) => t.id === id);
-    if (trip) Object.assign(trip, { name, year, budget, destination, destinations, startDate, endDate, travelers, cancelled });
+    if (trip) {
+      Object.assign(trip, { name, year, budget, destination, destinations, startDate, endDate, travelers, cancelled, spendCurrency, feePercent });
+      applyRate(trip);
+    }
   } else {
     // The literal enumerates fields, so a new one has to be added here too or it is undefined.
-    const trip = { id: uid("trip"), name, year, budget, expenses: [], destination, destinations, startDate, endDate, travelers, cancelled };
+    const trip = { id: uid("trip"), name, year, budget, expenses: [], destination, destinations, startDate, endDate, travelers, cancelled, spendCurrency, feePercent, rates: {} };
+    applyRate(trip);
     normalizeTripMeta(trip);
     state.trips.push(trip);
   }
@@ -4562,7 +5068,22 @@ function handleExpenseSubmit(e) {
 
   if (expenseId) {
     const exp = trip.expenses.find((x) => x.id === expenseId);
-    if (exp) Object.assign(exp, normalizeExpense({ ...exp, ...payload }));
+    if (exp) {
+      /* settledHome is an ABSOLUTE shekel figure, not a rate — if the amount or the
+         currency changes it no longer describes this expense, so it is dropped
+         rather than left to quietly misreport the total. The undo restores it,
+         because the usual reason to edit a settled expense is a typo in the label. */
+      const stale = exp.settledHome != null
+        && (Number(exp.amount) !== Number(payload.amount) || exp.currency !== payload.currency);
+      const prev = { settledHome: exp.settledHome, settledDate: exp.settledDate };
+      Object.assign(exp, normalizeExpense({ ...exp, ...payload }));
+      if (stale) {
+        exp.settledHome = null;
+        exp.settledDate = "";
+        undoAction = () => restoreSettlement(tripId, expenseId, prev);
+        showToast("Settled amount cleared — the amount changed.", "undo");
+      }
+    }
   } else {
     trip.expenses.push(normalizeExpense({ id: uid("exp"), ...payload }));
   }
@@ -4571,6 +5092,71 @@ function handleExpenseSubmit(e) {
   saveState();
   render();
   closeDialog($("dialog-expense"));
+}
+
+/* ---- settlement (v2.0) ------------------------------------------------------
+
+   Settling happens days after the expense, on the couch, working down the card
+   statement — a different task from editing an expense, which is why it has its
+   own one-field sheet rather than living in the edit dialog. */
+function openSettleDialog(tripId, expenseId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  const exp = trip && trip.expenses.find((x) => x.id === expenseId);
+  if (!exp) return;
+  const form = $("form-settle");
+  form.reset();
+  expenseFormField(form, "tripId").value = tripId;
+  expenseFormField(form, "expenseId").value = expenseId;
+  const home = expenseHome(trip, exp);
+  $("settle-context").textContent =
+    `${exp.label} · ${formatMoney(exp.amount, exp.currency)}`
+    + (home.known && !home.settled ? ` · estimated ${formatMoney(home.value)}` : "");
+  // Prefilled with the estimate: when the bank agrees it is two taps to accept.
+  expenseFormField(form, "settledHome").value =
+    exp.settledHome != null ? exp.settledHome : (home.known ? Math.round(home.value * 100) / 100 : "");
+  expenseFormField(form, "settledDate").value = exp.settledDate || todayISO();
+  openDialog($("dialog-settle"));
+  $("settle-amount").focus();
+}
+
+function handleSettleSubmit(e) {
+  e.preventDefault();
+  const form = e.target;
+  const trip = state.trips.find((t) => t.id === expenseFormField(form, "tripId").value);
+  const exp = trip && trip.expenses.find((x) => x.id === expenseFormField(form, "expenseId").value);
+  if (!exp) return;
+  const amount = Number(expenseFormField(form, "settledHome").value);
+  if (!Number.isFinite(amount) || amount <= 0) return; // zero is not "settled", it is empty
+  exp.settledHome = amount;
+  exp.settledDate = expenseFormField(form, "settledDate").value || todayISO();
+  saveState();
+  render();
+  closeDialog($("dialog-settle"));
+}
+
+function clearSettlement(tripId, expenseId) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  const exp = trip && trip.expenses.find((x) => x.id === expenseId);
+  if (!exp || exp.settledHome == null) return;
+  const prev = { settledHome: exp.settledHome, settledDate: exp.settledDate };
+  exp.settledHome = null;
+  exp.settledDate = "";
+  saveState();
+  render();
+  undoAction = () => restoreSettlement(tripId, expenseId, prev);
+  showToast("Settlement cleared", "undo");
+}
+
+/* Reconciling is slow, manual work read off a statement — losing it to a typo fix
+   on the label would be the kind of small betrayal that stops you trusting the app. */
+function restoreSettlement(tripId, expenseId, prev) {
+  const trip = state.trips.find((t) => t.id === tripId);
+  const exp = trip && trip.expenses.find((x) => x.id === expenseId);
+  if (!exp) return;
+  exp.settledHome = prev.settledHome;
+  exp.settledDate = prev.settledDate;
+  saveState();
+  render();
 }
 
 /* `onDeleted` runs only after a confirmed delete — the Edit dialog closes itself from it, and
@@ -4694,6 +5280,7 @@ function bindEvents() {
     $("form-trip").startDate.addEventListener(ev, () => syncTripYearField($("form-trip")))
   );
   $("dest-add").addEventListener("click", () => renderDestRows([...readDestRows(), ""]));
+  $("trip-currency-btn").addEventListener("click", openTripCurrencyPicker);
   $("form-expense").addEventListener("submit", handleExpenseSubmit);
   $("form-item").addEventListener("submit", handleItemSubmit);
   $("form-item").type.addEventListener("change", syncItemTypeFields);
@@ -4756,18 +5343,27 @@ function bindEvents() {
     }
     // Status is a segmented control now; its reconciliation lives in setExpenseStatus.
     syncExpensePaidDateVisibility();
+    if (e.target.name === "amount") syncExpenseEstimate();
   });
 
   $("expense-status").querySelectorAll("[data-status]").forEach((b) =>
     b.addEventListener("click", () => setExpenseStatus(b.getAttribute("data-status")))
   );
 
+  $("expense-currency-btn").addEventListener("click", openCurrencyPicker);
+  $("expense-settled-clear").addEventListener("click", () => {
+    const form = $("form-expense");
+    clearSettlement(expenseFormField(form, "tripId").value, expenseFormField(form, "expenseId").value);
+    $("expense-settled-line").hidden = true;
+  });
+  $("form-settle").addEventListener("submit", handleSettleSubmit);
+
   $("form-expense").addEventListener("change", (e) => {
     if (e.target.form?.id === "form-expense") syncExpensePaidDateVisibility();
   });
 
   $("trips-list").addEventListener("click", (e) => {
-    if (e.target.closest(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense")) {
+    if (e.target.closest(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense, .btn-settle-expense")) {
       return;
     }
 
@@ -4834,10 +5430,14 @@ let itineraryTripId = null;
 let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
 let bookingsFilter = "all"; // all | flight | hotel | other
-let expenseFilter = "all";  // all | unpaid | paid — Budget expense rows (v1.15.0)
+let expenseFilter = "all";  // all | unpaid | paid | unsettled — Budget expense rows (v1.15.0, v2.0)
 /* "Paid" is fully paid; everything else — planned, booked, partly paid — still needs money. */
-function expenseMatchesFilter(e) {
+/* Takes the trip as a second argument (v2.0 — "unsettled" needs the trip's rates).
+   MUST NOT be passed straight to Array.prototype.filter: filter's second argument
+   is the INDEX, which would arrive here as `trip`. Always wrap in an arrow. */
+function expenseMatchesFilter(e, trip) {
   if (expenseFilter === "all") return true;
+  if (expenseFilter === "unsettled") return expenseNeedsSettling(trip, e);
   const paid = expenseDisplayStatus(e) === "paid";
   return expenseFilter === "paid" ? paid : !paid;
 }
@@ -7348,7 +7948,7 @@ function diffStates(prevRaw, nextRaw) {
   const out = [];
 
   diffCollection(prev.items, next.items,
-    ["type", "title", "details", "date", "endDate", "startTime", "endTime", "location", "confirmation", "notes", "flightNo", "departAirport", "arrivalAirport"],
+    ["type", "title", "details", "date", "endDate", "startTime", "endTime", "location", "confirmation", "notes", "flightNo", "departAirport", "arrivalAirport", "visitedAt"],
     changeItemLabel, ["itinerary", "bookings"], out);
 
   const prevChk = new Map(prev.checklist.map((c) => [c.id, c]));
@@ -7379,7 +7979,13 @@ function diffStates(prevRaw, nextRaw) {
       out.push({ screens: ["trips"], text: t.cancelled ? `cancelled trip ${t.name}` : `reinstated trip ${t.name}` });
     }
     if (Number(p.budget) !== Number(t.budget)) out.push({ screens: ["budget"], text: `changed budget of ${t.name}` });
-    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "status", "amountPaid", "itemId"],
+    /* These are an allow-list, not a deep diff — a field absent here syncs correctly
+       but never shows up in What's new, which reads as the sync having missed it. */
+    if (p.spendCurrency !== t.spendCurrency || JSON.stringify(p.rates) !== JSON.stringify(t.rates)
+        || Number(p.feePercent) !== Number(t.feePercent)) {
+      out.push({ screens: ["budget"], text: `changed currency settings on ${t.name}` });
+    }
+    diffCollection(p.expenses, t.expenses, ["label", "category", "amount", "currency", "status", "amountPaid", "itemId", "settledHome"],
       (e) => `expense ${e.label}`, ["budget"], out);
   }
   for (const [id, p] of prevTrips) {
@@ -7550,6 +8156,12 @@ window.VacationApp = {
   },
   mergeStates, // exposed for ?selftest=1
   merge3,      // ditto
+  // v2.0 money — exposed so the selftest can exercise the conversion rules directly.
+  normalizeState, normalizeExpense, normalizeItem, migrateToV3,
+  rateFor, expenseHome, expensePaidHome, expenseNeedsSettling, expenseNeedsRate,
+  tripCommitted, tripPaid, tripDue, tripCommittedHome, categoryBreakdown,
+  expenseMatchesFilter, formatMoney, diffStates,
+  setExpenseFilter: (v) => { expenseFilter = v; },
   render,
   getDeviceName,
   ensureDeviceName,

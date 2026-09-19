@@ -4569,6 +4569,217 @@
   /* ===== 2. Trust boundary — everything a shared payload controls ===== */
 
   function trustBoundary() {
+    group("v2.0-money");
+
+    /* A trip built from scratch so the assertions never depend on the real data
+       that happens to be in localStorage on this origin. */
+    const A = window.VacationApp;
+    const mkTrip = (over) => A.normalizeState({
+      trips: [Object.assign({
+        id: "t1", name: "Paris", year: 2026, budget: 10000,
+        spendCurrency: "EUR", rates: { EUR: 4 }, feePercent: 1,
+        expenses: [],
+      }, over || {})],
+      items: [], checklist: [], fundHistory: [], rollHistory: [],
+    }).trips[0];
+    const mkExp = (over) => Object.assign({
+      id: "e1", label: "Dinner", category: "Food", amount: 100, currency: "EUR",
+      status: "paid", amountPaid: 100, paidDate: "2026-05-02", settledHome: null, settledDate: "",
+    }, over || {});
+
+    check("migration stamps ILS and changes no number", () => {
+      // A v1.15.3-shaped payload: expenses carry a bare amount and no currency.
+      const legacy = {
+        trips: [{ id: "t", name: "Rome", year: 2025, budget: 5000, expenses: [
+          { id: "a", label: "Hotel", category: "Hotel", amount: 3116, status: "paid", amountPaid: 3116 },
+          { id: "b", label: "Food", category: "Food", amount: 240, status: "booked", amountPaid: 0 },
+        ] }],
+        items: [], checklist: [], fundHistory: [], rollHistory: [],
+      };
+      const out = A.normalizeState(structuredClone(legacy));
+      const t = out.trips[0];
+      if (t.budget !== 5000) return `budget changed to ${t.budget}`;
+      if (t.expenses.some((e) => e.currency !== "ILS")) return "an expense was not stamped ILS";
+      if (t.expenses[0].amount !== 3116 || t.expenses[1].amount !== 240) return "an amount changed";
+      // Totals must be identical to the pre-migration arithmetic.
+      if (A.tripCommitted(t) !== 3356) return `committed ${A.tripCommitted(t)}, expected 3356`;
+      if (A.tripPaid(t) !== 3116) return `paid ${A.tripPaid(t)}, expected 3116`;
+      return true;
+    });
+
+    check("migration is idempotent — a second pass changes nothing", () => {
+      const legacy = { trips: [{ id: "t", name: "Rome", year: 2025, budget: 5000,
+        expenses: [{ id: "a", label: "Hotel", category: "Hotel", amount: 3116, status: "paid", amountPaid: 3116 }] }],
+        items: [], checklist: [], fundHistory: [], rollHistory: [] };
+      const once = A.normalizeState(structuredClone(legacy));
+      const twice = A.normalizeState(structuredClone(once));
+      return JSON.stringify(once) === JSON.stringify(twice) ? true : "second pass differed";
+    });
+
+    check("migration repairs an entity even when the version already looks current", () => {
+      /* merge3 sets version = Math.max(...), so a document can carry the new version
+         while still holding a row that arrived without a currency. Guarding on the
+         version instead of the entity would skip exactly that row. */
+      const doc = { version: 99, trips: [{ id: "t", name: "X", year: 2026, budget: 10,
+        expenses: [{ id: "a", label: "L", category: "Food", amount: 5 }] }],
+        items: [], checklist: [], fundHistory: [], rollHistory: [] };
+      return A.normalizeState(doc).trips[0].expenses[0].currency === "ILS"
+        ? true : "a bare expense under a current version was left unstamped";
+    });
+
+    check("an unknown rate is 0, never 1", () => {
+      const t = mkTrip({ rates: {} });
+      if (A.rateFor(t, "EUR") !== 0) return `rateFor returned ${A.rateFor(t, "EUR")}`;
+      const h = A.expenseHome(t, mkExp());
+      return h.known === false ? true : "expenseHome claimed to know an unset rate";
+    });
+
+    check("unrated rows are EXCLUDED from totals, not summed as zero", () => {
+      /* The dangerous direction: summing value 0 would show a EUR trip with no rate
+         as "nothing committed, whole budget left". */
+      const t = mkTrip({ rates: {}, expenses: [mkExp()] });
+      const agg = A.tripCommittedHome(t);
+      if (agg.unrated !== 1) return `unrated count ${agg.unrated}, expected 1`;
+      if (agg.value !== 0) return `value ${agg.value} — an unrated row leaked into the total`;
+      // and the count must be available to disclose, which is the whole point
+      return true;
+    });
+
+    check("malformed rates are treated as unknown, not as a scale factor", () => {
+      for (const bad of [0, -3, "abc", null, undefined, NaN, Infinity]) {
+        const t = mkTrip({ rates: { EUR: bad } });
+        if (A.rateFor(t, "EUR") !== 0) return `rate ${String(bad)} produced ${A.rateFor(t, "EUR")}`;
+      }
+      return true;
+    });
+
+    check("a foreign expense converts with the card fee", () => {
+      const t = mkTrip({ expenses: [mkExp()] });        // 100 EUR, rate 4, fee 1%
+      const h = A.expenseHome(t, t.expenses[0]);
+      return h.known && !h.settled && Math.abs(h.value - 404) < 1e-9
+        ? true : `got ${h.value}, expected 404`;
+    });
+
+    check("settling replaces the estimate and nothing else", () => {
+      const t = mkTrip({ expenses: [mkExp()] });
+      const before = A.tripCommitted(t);
+      t.expenses[0].settledHome = 412.5;
+      const h = A.expenseHome(t, t.expenses[0]);
+      if (!h.settled || h.value !== 412.5) return "settled value not used";
+      if (A.tripCommitted(t) !== 412.5) return `total ${A.tripCommitted(t)}, expected 412.5`;
+      return before === 404 ? true : `estimate was ${before}`;
+    });
+
+    check("settledHome of 0 is not 'settled'", () => {
+      const e = A.normalizeExpense(mkExp({ settledHome: 0 }));
+      return e.settledHome === null && e.settledDate === "" ? true : "zero was accepted as a settlement";
+    });
+
+    check("settlement never pro-rata: a partly-paid expense keeps the estimate path", () => {
+      /* Settlement is all-or-nothing — settledHome is the charge for the WHOLE
+         expense, so it may only stand in for "paid" once the expense is fully paid. */
+      const t = mkTrip({ expenses: [mkExp({ status: "booked", amountPaid: 40, settledHome: 412.5 })] });
+      const paid = A.expensePaidHome(t, t.expenses[0]);
+      return !paid.settled && Math.abs(paid.value - 40 * 4 * 1.01) < 1e-9
+        ? true : `paid-home was ${paid.value} (settled=${paid.settled})`;
+    });
+
+    check("settled/unsettled is independent of paid/unpaid in both directions", () => {
+      const t = mkTrip({ rates: { EUR: 4 } });
+      // paid but not settled -> needs settling
+      const a = mkExp({ status: "paid", amountPaid: 100, settledHome: null });
+      // planned, nothing paid -> no statement line to wait for
+      const b = mkExp({ status: "planned", amountPaid: 0, settledHome: null });
+      // paid AND settled -> done
+      const c = mkExp({ status: "paid", amountPaid: 100, settledHome: 400 });
+      if (!A.expenseNeedsSettling(t, a)) return "a paid foreign expense was not flagged";
+      if (A.expenseNeedsSettling(t, b)) return "an unpaid planned expense was flagged";
+      if (A.expenseNeedsSettling(t, c)) return "an already-settled expense was flagged";
+      // and an ILS expense never needs settling, whatever its status
+      if (A.expenseNeedsSettling(t, mkExp({ currency: "ILS" }))) return "a shekel expense was flagged";
+      return true;
+    });
+
+    check("expenseMatchesFilter is never used as a raw filter callback", () => {
+      /* Array.prototype.filter passes the INDEX as its second argument, so
+         `.filter(expenseMatchesFilter)` hands a number in where `trip` belongs.
+         Asserted at the SOURCE, not by comparing results: today the unsettled
+         predicate happens not to read `trip`, so both forms agree by luck and a
+         behavioural test would pass while the bug sat there waiting for the first
+         rate-dependent filter. */
+      const src = String(renderTripCard);
+      const m = src.match(/\.filter\(\s*expenseMatchesFilter\s*\)/);
+      if (m) return "renderTripCard passes expenseMatchesFilter straight to .filter";
+      return /\.filter\(\s*\(\s*e\s*\)\s*=>\s*expenseMatchesFilter\(\s*e\s*,\s*trip\s*\)\s*\)/.test(src)
+        ? true : "could not find the wrapped expenseMatchesFilter call in renderTripCard";
+    });
+
+    check("formatMoney still renders shekels when no code is passed", () => {
+      const out = A.formatMoney(1234);
+      if (!/₪|ILS/.test(out)) return `default render was "${out}"`;
+      const eur = A.formatMoney(1234, "EUR");
+      return /€|EUR/.test(eur) ? true : `EUR render was "${eur}"`;
+    });
+
+    check("category bars use the same units and filter as their denominator", () => {
+      /* Numerator and denominator must move together: a raw-amount numerator over a
+         converted denominator gives bars that are wrong but plausibly shaped. */
+      const t = mkTrip({ expenses: [
+        mkExp({ id: "e1", category: "Food", amount: 100, currency: "EUR" }),
+        mkExp({ id: "e2", category: "Gifts", amount: 404, currency: "ILS" }),
+      ] });
+      const rows = A.categoryBreakdown(t);
+      const food = rows.find((r) => r.category === "Food");
+      const gifts = rows.find((r) => r.category === "Gifts");
+      if (!food || !gifts) return "a category row is missing";
+      if (Math.abs(food.amount - 404) > 1e-9) return `Food summed to ${food.amount}, expected 404`;
+      if (Math.abs(food.percent - 50) > 0.001) return `Food was ${food.percent}%, expected 50`;
+      return true;
+    });
+
+    check("unrated rows are excluded from the category bars too", () => {
+      const t = mkTrip({ rates: {}, expenses: [mkExp({ category: "Food" })] });
+      return A.categoryBreakdown(t).length === 0
+        ? true : "an unrated row produced a category bar";
+    });
+
+    check("Groceries and Gifts are real categories, not folded into Other", () => {
+      for (const c of ["Groceries", "Gifts"]) {
+        if (A.normalizeExpense({ id: "x", category: c, amount: 1 }).category !== c) return `${c} normalised away`;
+        const opt = document.querySelector(`#form-expense select[name="category"] option[value="${c}"]`);
+        if (!opt) return `${c} missing from the dialog's option list`;
+      }
+      return true;
+    });
+
+    check("changing the spend currency leaves every existing expense untouched", () => {
+      const t = mkTrip({ expenses: [mkExp(), mkExp({ id: "e2", currency: "ILS", amount: 50 })] });
+      const before = JSON.stringify(t.expenses);
+      t.spendCurrency = "USD";
+      A.normalizeState({ trips: [t], items: [], checklist: [], fundHistory: [], rollHistory: [] });
+      return JSON.stringify(t.expenses) === before ? true : "an expense changed";
+    });
+
+    check("visitedAt survives normalize and is a timestamp, not a boolean", () => {
+      const it = A.normalizeItem({ id: "i1", tripId: "t1", type: "attraction", title: "Louvre",
+        date: "2026-05-02", visitedAt: "2026-05-02T10:00:00.000Z" });
+      if (it.visitedAt !== "2026-05-02T10:00:00.000Z") return "visitedAt was dropped";
+      // a boolean from a hostile/old payload must not survive as one
+      return A.normalizeItem({ id: "i2", tripId: "t1", type: "attraction", title: "X",
+        date: "2026-05-02", visitedAt: true }).visitedAt === "" ? true : "a boolean was kept";
+    });
+
+    check("What's-new reports the new money fields", () => {
+      /* diffCollection works from an allow-list: a field missing there syncs fine but
+         never appears in What's new, which reads as the sync having dropped it. */
+      const base = { trips: [{ id: "t", name: "P", year: 2026, budget: 10,
+        expenses: [mkExp({ settledHome: null })] }], items: [], checklist: [], fundHistory: [], rollHistory: [] };
+      const next = structuredClone(base);
+      next.trips[0].expenses[0].settledHome = 404;
+      const out = A.diffStates(base, next);
+      return out.length > 0 ? true : "settling an expense produced no change entry";
+    });
+
     group("trust-boundary");
 
     check("ids are restricted to a safe charset", () =>
