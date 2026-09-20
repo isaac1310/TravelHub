@@ -4641,6 +4641,28 @@
         ? true : "paintChip does not own both the room code and the stale state";
     });
 
+    check("a long toast keeps its text inside the bubble and its buttons usable", () => {
+      /* It did not: the text was a flex item with no basis, so it shrank to its longest word
+         while the buttons kept theirs — "5 places imported · 4 without a day yet." rendered in
+         a 58px column six lines deep, with the pill radius clipping what fell outside. */
+      if (!laidOut) return skip("viewport not laid out — cannot measure");
+      const t = document.getElementById("toast");
+      const txt = document.getElementById("toast-text");
+      const wasHidden = t.hidden;
+      try {
+        showToast("5 places imported · 4 without a day yet.", "view");
+        const tr = t.getBoundingClientRect();
+        const sr = txt.getBoundingClientRect();
+        if (sr.left < tr.left - 0.5 || sr.right > tr.right + 0.5) return "the text spills outside the bubble";
+        if (sr.top < tr.top - 0.5 || sr.bottom > tr.bottom + 0.5) return "the text spills above or below the bubble";
+        if (tr.left < -0.5 || tr.right > window.innerWidth + 0.5) return "the toast does not fit the viewport";
+        if (sr.width < 120) return `the text column collapsed to ${Math.round(sr.width)}px`;
+        const view = document.getElementById("toast-view").getBoundingClientRect();
+        if (view.width < 40) return `the action button was squeezed to ${Math.round(view.width)}px`;
+        return eq(getComputedStyle(txt).textAlign, "center", "text is centred");
+      } finally { t.hidden = wasHidden; }
+    });
+
     /* ---- B: clean start ---- */
 
     check("no seed document, no fund injection, nobody's name in the chrome", () => {
@@ -4822,19 +4844,6 @@
         eq(rows[2].kind, "name"), eq(rows[2].title, "Sainte-Chapelle", "bare string row"),
       ].find((x) => x !== true);
       return r || true;
-    });
-
-    check("parseTakeoutCsv: BOM, CRLF, quoted commas, doubled quotes, blank rows; no URL column is an error", () => {
-      const csv = `\uFEFFTitle,Note,URL\r\n"Café ""Le"" Nemours, Paris","terrace","${FULL_URL}"\r\n\r\n"Second","",https://maps.app.goo.gl/XyZ\r\n`;
-      const rows = A.__parseTakeoutCsv(csv);
-      if (rows.length !== 2) return `expected 2 rows, got ${rows.length}`;
-      const r = [
-        eq(rows[0].title, 'Café "Le" Nemours, Paris', "quoted title"), eq(rows[0].note, "terrace"), eq(rows[0].kind, "place"),
-        eq(rows[1].kind, "short", "short link row"),
-      ].find((x) => x !== true);
-      if (r) return r;
-      try { A.__parseTakeoutCsv("Title,Note\nA,B\n"); return "a file without URL was accepted"; }
-      catch (err) { return /URL column/.test(err.message) ? true : `wrong error: ${err.message}`; }
     });
 
     check("short rows ask /api/expand, never Photon", () => {

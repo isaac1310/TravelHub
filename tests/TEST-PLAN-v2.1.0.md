@@ -152,9 +152,6 @@ Import places from Maps).
 5.6 Maps tab with **All** selected.
 - **Expect:** undated places appear as **grey** pins under an *Unscheduled* heading; picking a
   single day hides them. ☐
-5.6b Takeout CSV: takeout.google.com → Deselect all → **Saved** → Export → unzip →
-`Takeout/Saved/<list name>.csv`. Upload it.
-- **Expect:** a row per place with your own notes shown in italics underneath. ☐
 5.7 AI route: tap **Copy prompt for AI**, paste it plus your list into ChatGPT/Claude, paste the
 JSON array back into the links box.
 - **Expect:** a row per place, names intact (Hebrew too), notes carried, any day it returned

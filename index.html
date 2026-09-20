@@ -1499,12 +1499,23 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         display: inline-block; width: 8px; height: 8px; border-radius: 50%;
         background: var(--coral, #ef8e7f); margin-left: 0.45rem; flex: none;
       }
+      /* The text used to be a bare flex item with no basis, so it shrank to its longest word
+         while the buttons kept theirs: "5 places imported · 4 without a day yet." rendered in a
+         58px column six lines deep, and the pill radius then clipped the words that fell outside
+         the curve. `width: max-content` lets the bubble use its allowance before wrapping, the
+         text gets the leftover room, the buttons never squash, and the radius is one a two-line
+         bubble can actually wear. */
       .toast {
         position: fixed; left: 50%; bottom: 4.6rem; transform: translateX(-50%); z-index: 60;
         display: flex; align-items: center; gap: 0.6rem;
-        background: #3b2b26; color: #fff; padding: 0.6rem 0.7rem 0.6rem 1rem; border-radius: 999px;
-        box-shadow: 0 10px 30px rgba(59,43,38,0.35); font-size: 0.85rem; max-width: min(92vw, 480px);
+        width: max-content; max-width: min(92vw, 480px);
+        background: #3b2b26; color: #fff; padding: 0.6rem 0.7rem 0.6rem 1rem;
+        border-radius: var(--radius, 16px);
+        box-shadow: 0 10px 30px rgba(59,43,38,0.35); font-size: 0.85rem;
       }
+      #toast-text { flex: 1 1 auto; min-width: 0; text-align: center; line-height: 1.35; overflow-wrap: anywhere; }
+      /* Never let the actions be squeezed by a long message — they are the way out of it. */
+      .toast .btn, .toast .icon-btn { flex: none; }
       /* Do not remove: the toast is the ONE dark surface an .icon-btn lands on, and .icon-btn
          defaults to var(--muted). Without this override that button would be dark-on-dark. */
       .toast .icon-btn--small { background: transparent; color: #fff; }
@@ -2639,7 +2650,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
     <!-- v2.1.0: bulk import places from Google Maps. Google cannot hand another app the contents
          of a saved list (the list page carries no place data; the request that loads it needs
          Google's own bot token), so the inputs are the two things that DO work: one share link
-         per line, or the CSV Google Takeout exports for every saved list. -->
+         per line, or the JSON an AI reads back from a screenshot of the list. -->
     <dialog id="dialog-import-places" class="dialog dialog--wide" aria-labelledby="import-places-title">
       <form id="form-import-places" method="dialog">
         <h3 class="dialog__title" id="import-places-title">Import places</h3>
@@ -2651,17 +2662,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <label class="field">
           <span class="field__label">Google Maps links, one per line — or JSON from an AI</span>
           <textarea name="links" rows="4" dir="auto" placeholder="https://maps.app.goo.gl/…&#10;https://maps.app.goo.gl/…&#10;or  [{&quot;title&quot;: &quot;Louvre&quot;, &quot;note&quot;: &quot;book ahead&quot;}, …]"></textarea>
-          <span class="field__hint">In Google Maps open the place → Share → Copy link. A whole list can't be shared to another app — share the places inside it, upload the list's Takeout CSV, or show the list to an AI and paste the JSON it returns.</span>
+          <span class="field__hint">In Google Maps open the place → Share → Copy link. A whole list can't be shared to another app — share the places inside it, or show the list to an AI and paste the JSON it returns.</span>
         </label>
         <div class="field">
           <button type="button" class="btn btn--small btn--outline" id="import-copy-prompt">Copy prompt for AI</button>
           <span class="field__hint" id="import-copy-prompt-hint">Paste it with a screenshot of your list (or the place names) into ChatGPT / Claude, then paste the JSON above.</span>
         </div>
-        <label class="field">
-          <span class="field__label">…or a Google Takeout “Saved” CSV</span>
-          <input type="file" name="csv" accept=".csv,text/csv" />
-          <span class="field__hint">takeout.google.com → Deselect all → tick <strong>Saved</strong> → Export. The zip holds one CSV per list, with your notes.</span>
-        </label>
         <div class="import-rows" id="import-rows" aria-live="polite"></div>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
@@ -5348,7 +5354,7 @@ Rules:
 
 function bulkRowFromLink(link, title, note) {
   const row = { title: title || "", note: note || "", url: link || "", kind: null, name: "", lat: null, lng: null, status: "", error: "", date: "" };
-  if (link && LIST_LINK_RE.test(link)) { row.kind = "list"; row.error = "This is a list link — share the places inside it, or upload the list's Takeout CSV."; return row; }
+  if (link && LIST_LINK_RE.test(link)) { row.kind = "list"; row.error = "This is a list link — share the places inside it, or show it to an AI and paste the JSON."; return row; }
   if (!link) {
     if (!title) { row.error = "Nothing to import on this line."; return row; }
     row.kind = "name"; row.name = title; return row;
@@ -5363,45 +5369,6 @@ function bulkRowFromLink(link, title, note) {
     if (!row.title) row.title = row.name;
   }
   return row;
-}
-
-/* Google Takeout → Maps (your places) → one CSV per list: Title,Note,URL[,Comment,Tags].
-   Tolerant of quoted fields with commas, doubled quotes, CRLF and a BOM. Throws a
-   readable message when the URL column is missing, rather than importing nothing. */
-function parseCsvRecords(text) {
-  const out = []; let row = []; let field = ""; let quoted = false;
-  const src = String(text || "").replace(/^\uFEFF/, "");
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i];
-    if (quoted) {
-      if (c === '"') { if (src[i + 1] === '"') { field += '"'; i++; } else quoted = false; }
-      else field += c;
-    } else if (c === '"') quoted = true;
-    else if (c === ",") { row.push(field); field = ""; }
-    else if (c === "\n" || c === "\r") {
-      if (c === "\r" && src[i + 1] === "\n") i++;
-      row.push(field); field = "";
-      if (row.some((f) => f.trim() !== "")) out.push(row);
-      row = [];
-    } else field += c;
-  }
-  row.push(field);
-  if (row.some((f) => f.trim() !== "")) out.push(row);
-  return out;
-}
-
-function parseTakeoutCsv(text) {
-  const records = parseCsvRecords(text);
-  if (!records.length) throw new Error("The file is empty.");
-  const header = records[0].map((h) => h.trim().toLowerCase());
-  const urlCol = header.indexOf("url");
-  if (urlCol < 0) throw new Error("This doesn't look like a Takeout list — no URL column.");
-  const titleCol = header.indexOf("title");
-  const noteCol = header.indexOf("note");
-  return records.slice(1).map((r) => {
-    const link = extractMapsLink(r[urlCol] || "") || (r[urlCol] || "").trim();
-    return bulkRowFromLink(link, titleCol >= 0 ? (r[titleCol] || "").trim() : "", noteCol >= 0 ? (r[noteCol] || "").trim() : "");
-  });
 }
 
 /* Follow every short link through /api/expand, two at a time, then re-read the long URL.
@@ -5551,20 +5518,6 @@ function bindImportPlaces() {
     } catch {
       hint.textContent = AI_IMPORT_PROMPT; // no clipboard (http, permissions): show it to copy by hand
     }
-  });
-  form.csv.addEventListener("change", () => {
-    const file = form.csv.files && form.csv.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try { bulkRowsChanged(parseTakeoutCsv(String(reader.result || ""))); }
-      catch (err) {
-        bulkRows = [];
-        renderBulkRows();
-        $("import-rows").innerHTML = `<p class="import-row import-row--bad"><span class="import-row__status">${escapeHtml(err.message || "Couldn't read that file.")}</span></p>`;
-      }
-    };
-    reader.readAsText(file);
   });
   form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -7690,7 +7643,7 @@ function renderTimelineTab(trip) {
         ${undated.map((item) => itemCard({ item, checkout: false })).join("")}
       </section>`
     : "";
-  const importBtn = `<button type="button" class="act act--add" data-import-places aria-label="Import places from Google Maps">${ICONS.explore}<span class="act__body"><span class="act__title">Import places from Google Maps</span><span class="act__sub">Paste share links or a Takeout CSV — pick days now or later</span></span></button>`;
+  const importBtn = `<button type="button" class="act act--add" data-import-places aria-label="Import places from Google Maps">${ICONS.explore}<span class="act__body"><span class="act__title">Import places from Google Maps</span><span class="act__sub">Paste share links, or JSON from an AI — pick days now or later</span></span></button>`;
 
   $("daystrip-slot").innerHTML = strip;
   view.innerHTML = `${route}${unschedHtml}${dayHtml}${importBtn}${fab}`;
@@ -9505,7 +9458,6 @@ window.VacationApp = {
   __emptyState: emptyState,
   __parseBulkPlaces: parseBulkPlaces,
   __aiImportPrompt: AI_IMPORT_PROMPT,
-  __parseTakeoutCsv: parseTakeoutCsv,
   __importBulkRows: importBulkRows,
   __expandBulkRows: expandBulkRows,
   __openImportPlaces: openImportPlacesDialog,
