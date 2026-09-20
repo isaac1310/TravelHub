@@ -249,6 +249,7 @@ h1, h2, h3, h4, .brand__name {
   font-family: "Poppins", sans-serif;
   box-shadow: 0 0 0 2px var(--surface);
 }
+.avatar--me { background: var(--brand, #ef8e7f); }
 .avatar--Itzik { background: #ef8e7f; }
 .avatar--Moran { background: #6bb3a8; }
 .avatar--Goni  { background: #d9a066; }
@@ -1559,7 +1560,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       .act__more { display: none; }
       .fab { display: none; }
       .sync-chip { display: none; }
-      #btn-overflow { display: none; }
+      /* v2.1.0: the ⋯ sheet shows at every width — Start fresh / Restore / Import live only there. */
       .daystrip { display: none; }
       .filter-chips { display: flex; gap: 0.45rem; overflow-x: auto; padding: 0.1rem 0 0.7rem; scrollbar-width: none; }
       .filter-chip__count { opacity: 0.65; font-variant-numeric: tabular-nums; margin-inline-start: 0.15rem; }
@@ -1824,8 +1825,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <nav class="nav" id="sidebar-nav" aria-label="Primary"></nav>
         <div class="sidebar__spacer"></div>
         <div class="sidebar__account">
-          <span class="avatar avatar--Itzik">I</span>
-          <span class="who"><strong>Itzik</strong><span>Family organiser</span></span>
+          <span class="avatar avatar--me" id="sidebar-avatar" aria-hidden="true">?</span>
+          <span class="who"><strong id="sidebar-name">You</strong><span>Family organiser</span></span>
         </div>
         <div class="app-version" data-room-identity></div>
         <div class="app-version" data-app-version></div>
@@ -1873,7 +1874,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <button type="button" class="icon-btn" id="btn-appbar-add" aria-label="New trip" title="New trip">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             </button>
-            <button type="button" class="icon-btn" id="btn-appbar-account" aria-label="Account" title="Signed in as Itzik" style="background:var(--cream);color:#6b4a3a">
+            <button type="button" class="icon-btn" id="btn-appbar-account" aria-label="Account" title="Who is using this device" style="background:var(--cream);color:#6b4a3a">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </button>
           </div>
@@ -2099,6 +2100,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <button type="button" class="sheet-item" data-overflow="leave" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Leave shared trip
+        </button>
+        <!-- v2.1.0: the exceptional reset — for handing a device to another family, or undoing a
+             wrong join. Backs up first; the Restore row below brings it back. -->
+        <button type="button" class="sheet-item sheet-item--danger" data-overflow="reset">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Start fresh on this device
         </button>
         <button type="button" class="sheet-item" data-overflow="restore" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 10a8 8 0 1 1 2 6M4 10V5m0 5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2604,17 +2611,53 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
    ============================================================ */
 const APP_VERSION = "v2.1.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
-/* Snapshot of this device's data taken just before a shared trip replaced it */
-const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
-/* Snapshot taken just before an import replaced this device's data (v1.15.1). */
-const PRE_IMPORT_BACKUP_KEY = "vacation-budget-backup-before-import";
-/* Whichever snapshot exists — a join takes precedence because restoring it also leaves the room. */
-function pendingBackup() {
-  const join = localStorage.getItem(PRE_JOIN_BACKUP_KEY);
-  if (join) return { kind: "join", data: join };
-  const imp = localStorage.getItem(PRE_IMPORT_BACKUP_KEY);
-  return imp ? { kind: "import", data: imp } : null;
+/* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
+   other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
+   ago by "Start fresh". Legacy keys are still read (and preferred last) so nothing already
+   stored on a device is lost on upgrade. */
+const BACKUP_KEY = "vacation-budget-backup";
+const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";     // legacy, read-only
+const PRE_IMPORT_BACKUP_KEY = "vacation-budget-backup-before-import"; // legacy, read-only
+/* Snapshot the CURRENT stored document under `kind` ("join" | "import" | "reset"). Returns
+   whether the write landed AND reads back identical — a reset must never proceed on a
+   backup that only looked like it was written (quota, private mode). */
+function writeBackup(kind, rawOverride) {
+  try {
+    const raw = rawOverride ?? localStorage.getItem(STORAGE_KEY) ?? JSON.stringify(state);
+    JSON.parse(raw); // must be a document we could restore
+    const entry = JSON.stringify({ kind, at: Date.now(), data: raw });
+    localStorage.setItem(BACKUP_KEY, entry);
+    return localStorage.getItem(BACKUP_KEY) === entry;
+  } catch (err) {
+    console.error("writeBackup failed", err);
+    return false;
+  }
 }
+/* Newest snapshot on this device, or null. Legacy entries carry no timestamp → oldest. */
+function pendingBackup() {
+  const found = [];
+  try {
+    const unified = JSON.parse(localStorage.getItem(BACKUP_KEY) || "null");
+    if (unified && typeof unified.data === "string") found.push({ kind: unified.kind || "reset", at: Number(unified.at) || 0, data: unified.data, key: BACKUP_KEY });
+  } catch { /* corrupt entry — ignore, the legacy ones may still be good */ }
+  try {
+    const join = localStorage.getItem(PRE_JOIN_BACKUP_KEY);
+    if (join) found.push({ kind: "join", at: 0, data: join, key: PRE_JOIN_BACKUP_KEY });
+    const imp = localStorage.getItem(PRE_IMPORT_BACKUP_KEY);
+    if (imp) found.push({ kind: "import", at: 0, data: imp, key: PRE_IMPORT_BACKUP_KEY });
+  } catch { /* localStorage unavailable */ }
+  if (!found.length) return null;
+  found.sort((a, b) => b.at - a.at);
+  return found[0];
+}
+function clearBackup(backup) {
+  try { localStorage.removeItem(backup?.key || BACKUP_KEY); } catch { /* private mode */ }
+}
+const BACKUP_LABELS = {
+  join: "Restore my old data",
+  import: "Restore data from before the import",
+  reset: "Restore data from before the reset",
+};
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Groceries", "Transport", "Activities", "Shopping", "Gifts", "Other"];
 
@@ -2764,37 +2807,6 @@ function renderCategoryBreakdown(trip, spent) {
     </div>`;
 }
 
-const SEED_DATA = {
-  currentFunds: 20671,
-  fundHistory: [
-    { id: "fund-2026-07-08", amount: 2716, date: "2026-07-08", note: "Funds addition" },
-  ],
-  trips: [
-    {
-      id: "trip-paris-2026",
-      name: "Paris",
-      year: 2026,
-      budget: 10000,
-      expenses: [
-        { id: "exp-paris-hotel", label: "Paris Hotel", category: "Hotel", amount: 3116, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-        { id: "exp-paris-flight", label: "Paris flight", category: "Flight", amount: 3635, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-      ],
-    },
-    {
-      id: "trip-christmas-2026",
-      name: "Christmas",
-      year: 2026,
-      budget: 10000,
-      expenses: [
-        { id: "exp-xmas-hotel-1", label: "Christmas hotel 1", category: "Hotel", amount: 1721, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-        { id: "exp-xmas-hotel-2", label: "Christmas hotel 2", category: "Hotel", amount: 1617, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-        { id: "exp-xmas-flight", label: "Christmas Flight", category: "Flight", amount: 1736, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-        { id: "exp-xmas-hotel-3", label: "Christmas hotel 3", category: "Hotel", amount: 546, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-      ],
-    },
-  ],
-};
-
 /* --- Migration seeds: trip metadata + booking refs for the original
        hardcoded trips. Used once by migrateToV2, kept as constants. --- */
 const TRIP_META = {
@@ -2912,7 +2924,9 @@ function normalizeTripMeta(trip) {
   trip.feePercent = Number.isFinite(fee) && fee >= 0 ? fee : 1;
 }
 
-/* v2: promote hardcoded trip meta + booking refs into persisted state */
+/* v2: promote hardcoded trip meta + booking refs into persisted state.
+   v2.1.0: TRIP_META / EXPENSE_REF stay although the seed data is gone — they are a one-time
+   migration keyed by the ORIGINAL device's legacy trip ids and are inert for anyone else. */
 function migrateToV2(data) {
   for (const trip of data.trips || []) {
     const meta = TRIP_META[trip.id];
@@ -3014,7 +3028,7 @@ function normalizeExpense(exp) {
    so renaming an expense would orphan its reservation, and renaming a trip would
    strand every item pointing at it.
 
-   Divergent local copies aren't destroyed — the caller writes PRE_JOIN_BACKUP_KEY
+   Divergent local copies aren't destroyed — the caller writes a "join" backup entry
    first, and reports the count so the user can restore. */
 
 /* Compare an entity's own scalar fields, ignoring nested collections that are
@@ -3330,20 +3344,12 @@ function migrateToV3(data) {
   return data;
 }
 
-/* One-time fund additions applied to existing saved data (keyed by id, never re-applied). */
-const PENDING_FUND_ADDITIONS = [
-  { id: "fund-2026-07-08", amount: 2716, date: "2026-07-08", note: "Funds addition" },
-];
-
-function applyPendingFundAdditions(data) {
-  if (!Array.isArray(data.fundHistory)) data.fundHistory = [];
-  for (const add of PENDING_FUND_ADDITIONS) {
-    if (!data.fundHistory.some((h) => h.id === add.id)) {
-      data.currentFunds = (Number(data.currentFunds) || 0) + add.amount;
-      data.fundHistory.push({ ...add });
-    }
-  }
-  return data;
+/* v2.1.0: a fresh device starts EMPTY. Until now first run fell back to a seed document
+   that was one family's real trips, funds and traveller names — and shipped to production
+   unchanged, so a second family opening the app saw them, and "Create a room" would have
+   uploaded them as that family's room. */
+function emptyState() {
+  return { currentFunds: 0, fundHistory: [], rollHistory: [], trips: [], items: [], checklist: [] };
 }
 
 function loadState() {
@@ -3352,19 +3358,19 @@ function loadState() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.trips)) {
-        return normalizeState(applyPendingFundAdditions(parsed));
+        return normalizeState(parsed);
       }
     }
   } catch (err) {
-    console.error("loadState: falling back to seed data", err);
+    console.error("loadState: falling back to an empty document", err);
     // Only alarm the user if there WAS stored data we couldn't read — not on first run.
     try {
       if (localStorage.getItem(STORAGE_KEY)) {
-        alert("Your saved trip data couldn't be loaded, so default trips are shown. Your stored data was not deleted — reload to try again, or import a backup.");
+        alert("Your saved trip data couldn't be loaded, so the app is shown empty. Your stored data was not deleted — reload to try again, or import a backup.");
       }
     } catch { /* localStorage unavailable */ }
   }
-  return normalizeState(structuredClone(SEED_DATA));
+  return normalizeState(emptyState());
 }
 
 /* Warn once per session — a full quota fires on every keystroke otherwise. */
@@ -3407,8 +3413,8 @@ function saveState() {
   return ok;
 }
 
-/* State init lives here — after every const it depends on (SEED_DATA,
-   PENDING_FUND_ADDITIONS, ITEM_TYPES…) is initialized, so loadState
+/* State init lives here — after every const it depends on (TRIP_META,
+   ITEM_TYPES…) is initialized, so loadState
    never hits a temporal-dead-zone error and silently falls back to seed. */
 let state = loadState();
 let selectedYear = "all";
@@ -5401,7 +5407,7 @@ function handleImportFile(e) {
       if (!confirm("Replace all data on this device with the imported file?")) return;
       /* v1.15.1: keep what was here. The same key the "Restore my old data" menu item reads, so
          the existing restore path covers a bad import too. */
-      try { localStorage.setItem(PRE_IMPORT_BACKUP_KEY, JSON.stringify(state)); } catch { /* full — the import itself will say so */ }
+      writeBackup("import", JSON.stringify(state)); // full → the import's own save will say so
       state = normalizeState(parsed);
       const saved = saveState();
       render();
@@ -5715,22 +5721,13 @@ function bindEvents() {
   restoreBtn.addEventListener("click", () => {
     const backup = pendingBackup();
     if (!backup) return;
-    if (backup.kind === "import") {
-      if (!confirm("Restore the data this device had before the import? The imported data will be replaced.")) return;
-      localStorage.setItem(STORAGE_KEY, backup.data);
-      localStorage.removeItem(PRE_IMPORT_BACKUP_KEY);
-      location.reload();
-      return;
-    }
-    if (!confirm("Restore the data this device had before joining the shared trip? This disconnects from the shared trip and brings back your old local data.")) return;
-    localStorage.setItem(STORAGE_KEY, backup.data);
-    localStorage.removeItem(PRE_JOIN_BACKUP_KEY);
-    localStorage.removeItem("travelhub-room");
-    const url = new URL(window.location.href);
-    url.searchParams.delete("room");
-    url.searchParams.delete("key");
-    window.history.replaceState({}, "", url);
-    location.reload();
+    const question = {
+      import: "Restore the data this device had before the import? The imported data will be replaced.",
+      reset: "Restore the data this device had before it was reset? What is on the device now will be replaced.",
+      join: "Restore the data this device had before joining the shared trip? This disconnects from the shared trip and brings back your old local data.",
+    }[backup.kind] || "Restore the older data on this device?";
+    if (!confirm(question)) return;
+    restoreBackup(backup);
   });
   $("btn-import-data").addEventListener("click", () => $("import-file-input").click());
   $("import-file-input").addEventListener("change", handleImportFile);
@@ -8717,7 +8714,7 @@ function bindShellEvents() {
     const backup = pendingBackup();
     const restoreRow = dlg.querySelector('[data-overflow="restore"]');
     restoreRow.hidden = !backup;
-    if (backup) restoreRow.lastChild.textContent = backup.kind === "import" ? " Restore data from before the import" : " Restore my old data";
+    if (backup) restoreRow.lastChild.textContent = " " + (BACKUP_LABELS[backup.kind] || BACKUP_LABELS.join);
     openDialog(dlg);
   });
   $("dialog-overflow").querySelectorAll("[data-overflow]").forEach((b) =>
@@ -8727,6 +8724,7 @@ function bindShellEvents() {
       if (act === "save") $("btn-share").click();
       else if (act === "join") openJoinDialog();
       else if (act === "leave") window.VacationShare?.leaveRoom?.();
+      else if (act === "reset") resetDevice();
       else if (act === "copy") $("btn-copy-link").click();
       else if (act === "sync") window.VacationShare?.syncNow?.();
       else if (act === "export") exportData();
@@ -8800,6 +8798,18 @@ function getDeviceName() {
   try { return localStorage.getItem(DEVICE_NAME_KEY) || ""; } catch { return ""; }
 }
 
+/* v2.1.0: the sidebar used to hard-code one person's name. It now shows whoever this device
+   said it was (the same answer that stamps shared changes), or a neutral placeholder. */
+function renderAccountChrome() {
+  const name = getDeviceName();
+  const nameEl = $("sidebar-name");
+  const avatar = $("sidebar-avatar");
+  if (nameEl) nameEl.textContent = name || "You";
+  if (avatar) avatar.textContent = (name || "?").trim().charAt(0).toUpperCase() || "?";
+  const acct = $("btn-appbar-account");
+  if (acct) acct.title = name ? `This device: ${name}` : "Who is using this device";
+}
+
 /* Ask once per device who is using it (travel-party buttons + free text). */
 function ensureDeviceName() {
   return new Promise((resolve) => {
@@ -8819,6 +8829,7 @@ function ensureDeviceName() {
       if (settled) return;
       settled = true;
       try { localStorage.setItem(DEVICE_NAME_KEY, name); } catch { /* private mode */ }
+      renderAccountChrome();
       dlg.close();
       resolve(name);
     };
@@ -9035,8 +9046,53 @@ function openChangesDialog() {
 /* ============================================================
    SHARING ADAPTER — used by share.js (optional, Supabase-backed)
    ============================================================ */
+/* v2.1.0 — "Start fresh on this device". Order is the whole point: nothing changes until a
+   backup is written AND read back. A failed write (quota, private mode) leaves state and
+   room membership exactly as they were. */
+function resetDevice(opts) {
+  const silent = opts && opts.silent;
+  const proceed = () => {
+    if (!writeBackup("reset")) {
+      showToast("Couldn't back up this device — nothing was changed.", "error");
+      return false;
+    }
+    window.VacationShare?.leaveRoom?.({ silent: true });
+    state = normalizeState(emptyState());
+    const saved = saveState(); // its own bar + alert explain a failure
+    render();
+    if (saved && !silent) showToast("This device is empty. Restore is in the ⋯ menu.", "view");
+    return saved;
+  };
+  if (silent) return proceed();
+  appConfirm(
+    "Remove every trip, plan and expense from this device? A backup is kept — Restore is in the ⋯ menu.",
+    (yes) => { if (yes) proceed(); },
+    { title: "Start fresh", okLabel: "Start fresh" }
+  );
+  return undefined;
+}
+
+/* Bring a snapshot back and reload. Every kind leaves the room: a snapshot predates whatever
+   room the device is in now, and reconnecting would merge it straight back. */
+function restoreBackup(backup) {
+  localStorage.setItem(STORAGE_KEY, backup.data);
+  clearBackup(backup);
+  ["travelhub-room", "travelhub-sync-base", "travelhub-last-sync"].forEach((k) => {
+    try { localStorage.removeItem(k); } catch { /* private mode */ }
+  });
+  const url = new URL(window.location.href);
+  url.searchParams.delete("room");
+  url.searchParams.delete("key");
+  window.history.replaceState({}, "", url);
+  location.reload();
+}
+
 window.VacationApp = {
   announce, // share.js reports sync results through the shared live region
+  writeBackup, // share.js snapshots before a join through the same entry
+  __emptyState: emptyState,
+  __resetDevice: resetDevice,
+  __pendingBackup: pendingBackup,
   getPayload: () => state,
   setPayload: (payload) => {
     state = normalizeState(payload);
@@ -9119,6 +9175,7 @@ function versionLabel() {
    defined — this script is inline and would otherwise run before them. */
 function boot() {
   document.querySelectorAll("[data-app-version]").forEach((el) => { el.textContent = versionLabel(); });
+  renderAccountChrome();
   setupDialogCloseHandlers();
   bindEvents();
   buildNav();
