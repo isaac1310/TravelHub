@@ -248,7 +248,11 @@ h1, h2, h3, h4, .brand__name {
   font-weight: 700; font-size: 0.85rem; color: var(--heading);
   font-family: "Poppins", sans-serif;
   box-shadow: 0 0 0 2px var(--surface);
+  /* v2.1.0: a default fill. The three named colours below cover one family; anyone else's
+     initial used to sit on a transparent circle. */
+  background: #e3cdbf;
 }
+.avatar--me { background: var(--brand, #ef8e7f); }
 .avatar--Itzik { background: #ef8e7f; }
 .avatar--Moran { background: #6bb3a8; }
 .avatar--Goni  { background: #d9a066; }
@@ -330,6 +334,11 @@ h1, h2, h3, h4, .brand__name {
 }
 .room-badge::before { content: "●"; color: var(--brand, #ef8e7f); font-size: 0.7em; }
 @media (hover: hover) { .room-badge:hover { background: var(--brand-soft, #fbe4de); } }
+/* v2.1.0: in the app bar the badge is a label, not a button; amber once the device has not
+   synced for a week — the quiet state that let two devices drift apart. */
+.room-badge--appbar { margin: 0; cursor: default; }
+.room-badge--stale { background: #fbf1dd; border-color: #ead9a8; color: #9a6a12; }
+.room-badge--stale::before { color: #d69a1c; }
 
 .app__body { min-width: 0; display: flex; flex-direction: column; }
 
@@ -1430,6 +1439,22 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       .mapstop__pin--nogeo { background: #b9aca4; }
       .dest-rows { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.4rem; }
 .dest-row { display: flex; gap: 0.4rem; align-items: center; }
+/* v2.1.0: bulk import preview rows + the Unscheduled fold on the timeline */
+.import-rows { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.4rem 0 0.6rem; max-height: 40vh; overflow-y: auto; }
+.import-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.4rem; align-items: center; padding: 0.4rem 0.5rem; border: 1px solid var(--line, #e8ddd5); border-radius: 10px; background: var(--cream-2, #f7ede6); }
+.import-row input[type="text"] { grid-column: 1; min-width: 0; }
+.import-row input[type="date"] { font-size: 0.8rem; padding: 0.3rem 0.4rem; }
+.import-row__status { grid-column: 1 / -1; font-size: 0.75rem; color: var(--muted, #8a7a70); }
+.import-row__note { display: block; color: var(--ink, #3b2b26); font-style: italic; }
+.import-row--ok .import-row__status { color: #1f7a44; }
+.import-row--bad { opacity: 0.85; }
+.import-row--bad .import-row__status { color: #c0392b; }
+.unsched { margin: 0 0 0.8rem; padding: 0.6rem 0.7rem; border: 1px dashed var(--line, #e8ddd5); border-radius: 14px; background: var(--cream-2, #f7ede6); }
+.unsched__head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.4rem; font-weight: 700; font-size: 0.9rem; }
+.unsched__head small { font-weight: 500; color: var(--muted, #8a7a70); }
+.unsched .act { background: var(--surface, #fff); }
+.map-pin--unsched { background: #b9aaa2; }
+.mapstop__pin--unsched { background: #b9aaa2; color: #fff; }
 .dest-row input { flex: 1; min-width: 0; }
 .mapstop__body { display: flex; flex-direction: column; min-width: 0; flex: 1; text-align: start; }
 /* Only the pin and the text focus the map. Locate and Maps sit outside this
@@ -1474,12 +1499,23 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         display: inline-block; width: 8px; height: 8px; border-radius: 50%;
         background: var(--coral, #ef8e7f); margin-left: 0.45rem; flex: none;
       }
+      /* The text used to be a bare flex item with no basis, so it shrank to its longest word
+         while the buttons kept theirs: "5 places imported · 4 without a day yet." rendered in a
+         58px column six lines deep, and the pill radius then clipped the words that fell outside
+         the curve. `width: max-content` lets the bubble use its allowance before wrapping, the
+         text gets the leftover room, the buttons never squash, and the radius is one a two-line
+         bubble can actually wear. */
       .toast {
         position: fixed; left: 50%; bottom: 4.6rem; transform: translateX(-50%); z-index: 60;
         display: flex; align-items: center; gap: 0.6rem;
-        background: #3b2b26; color: #fff; padding: 0.6rem 0.7rem 0.6rem 1rem; border-radius: 999px;
-        box-shadow: 0 10px 30px rgba(59,43,38,0.35); font-size: 0.85rem; max-width: min(92vw, 480px);
+        width: max-content; max-width: min(92vw, 480px);
+        background: #3b2b26; color: #fff; padding: 0.6rem 0.7rem 0.6rem 1rem;
+        border-radius: var(--radius, 16px);
+        box-shadow: 0 10px 30px rgba(59,43,38,0.35); font-size: 0.85rem;
       }
+      #toast-text { flex: 1 1 auto; min-width: 0; text-align: center; line-height: 1.35; overflow-wrap: anywhere; }
+      /* Never let the actions be squeezed by a long message — they are the way out of it. */
+      .toast .btn, .toast .icon-btn { flex: none; }
       /* Do not remove: the toast is the ONE dark surface an .icon-btn lands on, and .icon-btn
          defaults to var(--muted). Without this override that button would be dark-on-dark. */
       .toast .icon-btn--small { background: transparent; color: #fff; }
@@ -1554,7 +1590,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       .act__more { display: none; }
       .fab { display: none; }
       .sync-chip { display: none; }
-      #btn-overflow { display: none; }
+      /* v2.1.0: the ⋯ sheet shows at every width — Start fresh / Restore / Import live only there. */
       .daystrip { display: none; }
       .filter-chips { display: flex; gap: 0.45rem; overflow-x: auto; padding: 0.1rem 0 0.7rem; scrollbar-width: none; }
       .filter-chip__count { opacity: 0.65; font-variant-numeric: tabular-nums; margin-inline-start: 0.15rem; }
@@ -1588,7 +1624,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .appbar__brand-mobile { display: none; }
         .appbar__eyebrow { display: block; font-size: 0.62rem; letter-spacing: 0.14em; }
         .appbar__title { display: block; font-size: 1.05rem; }
-        #sync-status, #btn-share, #btn-copy-link, #btn-sync-now, #btn-appbar-account { display: none; }
+        #sync-status, #appbar-room, #btn-share, #btn-copy-link, #btn-sync-now, #btn-leave-room, #btn-appbar-account { display: none; }
         /* See setActiveScreen: on Itinerary the FAB already adds a reservation, and two plus
            buttons on one screen with no way to tell them apart is worse than one. */
         #btn-appbar-add[data-duplicate-of-fab="true"] { display: none; }
@@ -1601,6 +1637,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .sync-chip--ok { background: #e4f4ea; color: #1f7a44; border-color: #cfe8dd; }
         .sync-chip--busy { background: #fbf1dd; color: #9a6a12; border-color: #f0ddb8; }
         .sync-chip--error { background: var(--danger-bg); color: var(--danger-text); border-color: #f4cfca; }
+        /* Not synced for a week. Amber on the chip itself, because the phone has no hover and
+           the sheet badge is behind a tap. */
+        .sync-chip--stale { background: #fbf1dd; color: #9a6a12; border-color: #ead9a8; }
+        .sync-chip__room { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+        .sync-chip__room[hidden] { display: none; }
         .sync-chip__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); flex: none; }
         .sync-chip__dot[hidden] { display: none; }
         .sync-chip[hidden] { display: none; }
@@ -1819,8 +1860,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <nav class="nav" id="sidebar-nav" aria-label="Primary"></nav>
         <div class="sidebar__spacer"></div>
         <div class="sidebar__account">
-          <span class="avatar avatar--Itzik">I</span>
-          <span class="who"><strong>Itzik</strong><span>Family organiser</span></span>
+          <span class="avatar avatar--me" id="sidebar-avatar" aria-hidden="true">?</span>
+          <span class="who"><strong id="sidebar-name">You</strong><span>Family organiser</span></span>
         </div>
         <div class="app-version" data-room-identity></div>
         <div class="app-version" data-app-version></div>
@@ -1843,11 +1884,17 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <div class="appbar__actions">
             <button type="button" class="sync-chip" id="sync-chip" hidden aria-label="Sync now" title="Sync now">
               <span class="sync-chip__dot" id="sync-chip-dot" hidden></span>
+              <!-- v2.1.0: the room code, on the phone, without opening a menu. The desktop pill
+                   is display:none here, and a title tooltip does not exist on a touch device. -->
+              <span class="sync-chip__room" id="sync-chip-room" hidden></span>
               <span id="sync-chip-text">✓</span>
             </button>
             <button type="button" class="icon-btn" id="btn-overflow" aria-label="More options" title="More">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>
             </button>
+            <!-- v2.1.0: WHICH room, always visible on desktop. Painted by share.js updateRoomChrome();
+                 a sibling of #sync-status on purpose — setSyncStatus rewrites that element wholesale. -->
+            <span class="room-badge room-badge--appbar" id="appbar-room" data-room-identity data-when-shared hidden></span>
             <span class="sync-status" id="sync-status" hidden></span>
             <button type="button" class="icon-btn" id="btn-sync-now" aria-label="Check for family changes" title="Check now — family changes arrive automatically" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.5 4.6M4 12a8 8 0 0 1 14.5-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M18.5 3.5v4h-4M5.5 20.5v-4h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1856,13 +1903,16 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <button type="button" class="icon-btn" id="btn-copy-link" aria-label="Copy share link" title="Copy share link" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.5 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </button>
-            <button type="button" class="icon-btn" id="btn-share" aria-label="Share my trips" title="Share my trips — puts everything on this device into a shared space" hidden>
+            <button type="button" class="icon-btn" id="btn-leave-room" aria-label="Leave shared trip" title="Leave shared trip — your trips stay on this device" hidden>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 17l5-5-5-5M19 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" class="icon-btn" id="btn-share" aria-label="Create a room" title="Create a room — puts everything on this device into a shared space" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 19h9a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 5 9.5 3.5 3.5 0 0 0 6 19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 9v5m0 0-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <button type="button" class="icon-btn" id="btn-appbar-add" aria-label="New trip" title="New trip">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
             </button>
-            <button type="button" class="icon-btn" id="btn-appbar-account" aria-label="Account" title="Signed in as Itzik" style="background:var(--cream);color:#6b4a3a">
+            <button type="button" class="icon-btn" id="btn-appbar-account" aria-label="Account" title="Who is using this device" style="background:var(--cream);color:#6b4a3a">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.6"/><path d="M5 20c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </button>
           </div>
@@ -1887,7 +1937,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
                 <strong>These trips are only on this device.</strong>
                 <span>Nothing is backed up or visible to the family until you share them.</span>
               </div>
-              <button type="button" class="btn btn--primary btn--small" id="btn-local-notice-share">Share my trips</button>
+              <button type="button" class="btn btn--primary btn--small" id="btn-local-notice-share">Create a room</button>
               <button type="button" class="icon-btn icon-btn--small" id="btn-local-notice-dismiss" aria-label="Dismiss this reminder" title="Dismiss">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
               </button>
@@ -2057,13 +2107,15 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       <div style="padding: 0.9rem 1.2rem 0.4rem">
         <h3 class="dialog__title" id="overflow-title" style="margin-bottom:0.4rem">Menu</h3>
         <p class="dialog__hint" id="overflow-device" style="margin-bottom:0.2rem"></p>
+        <!-- v2.1.0: spelled out rather than hidden in a title — a phone cannot hover. -->
+        <p class="dialog__hint" id="overflow-sync-age" style="margin-bottom:0.2rem" hidden></p>
         <!-- Which room this device is in, where you'd actually look for it.
              Tap to copy the full id — the short form is for comparing two devices
              at a glance, the full one for matching against the database. -->
         <button type="button" class="room-badge" id="btn-room-badge" data-room-identity></button>
         <button type="button" class="sheet-item" data-overflow="save">
           <svg viewBox="0 0 24 24" fill="none"><path d="M6 19h9a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 5 9.5 3.5 3.5 0 0 0 6 19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 9v5m0 0-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span id="overflow-save-label">Share my trips</span>
+          <span id="overflow-save-label">Create a room</span>
         </button>
         <button type="button" class="sheet-item" data-overflow="join">
           <svg viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2081,6 +2133,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 15V4m0 11-3.5-3.5M12 15l3.5-3.5M5 19h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Export data
         </button>
+        <button type="button" class="sheet-item" data-overflow="import-places">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 7v6m-3-3h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          Import places from Maps
+        </button>
         <button type="button" class="sheet-item" data-overflow="import">
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 4v11m0 0-3.5-3.5M12 15l3.5 3.5M5 19h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Import data
@@ -2088,6 +2144,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <button type="button" class="sheet-item" data-overflow="leave" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Leave shared trip
+        </button>
+        <!-- v2.1.0: the exceptional reset — for handing a device to another family, or undoing a
+             wrong join. Backs up first; the Restore row below brings it back. -->
+        <button type="button" class="sheet-item sheet-item--danger" data-overflow="reset">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Start fresh on this device
         </button>
         <button type="button" class="sheet-item" data-overflow="restore" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 10a8 8 0 1 1 2 6M4 10V5m0 5h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2269,7 +2331,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </div>
         <label class="field">
           <span class="field__label">Travelers (comma separated)</span>
-          <input type="text" dir="auto" name="travelers" maxlength="200" placeholder="e.g. Itzik, Moran" />
+          <input type="text" dir="auto" name="travelers" maxlength="200" placeholder="e.g. Sam, Alex" />
         </label>
         <!-- Edit only (openTripDialog toggles it): a trip that is not happening drops into Past
              trips whatever its dates say. Its budget and expenses stay in Budget — a deposit
@@ -2401,10 +2463,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label" id="expense-paid-label">Amount paid</span>
           <input type="number" name="amountPaid" min="0" step="0.01" inputmode="decimal" />
         </label>
-        <label class="field" id="expense-paid-date-wrap" hidden>
-          <span class="field__label">Paid date (optional)</span>
-          <input type="date" name="paidDate" />
-        </label>
+        <!-- v2.1.0: no separate "Paid date". One date per expense — the day it belongs to — is
+             what the Budget day chips group by; paidDate lives on as invisible bookkeeping. -->
         <label class="field">
           <!-- "Booking date" was wrong for the common case: on a trip this is the day you
                spent the money, which is what the day filter groups by. -->
@@ -2528,8 +2588,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </div>
         <div class="roll-years">
           <label class="field">
-            <span class="field__label" id="item-date-label">Date</span>
-            <input type="date" name="date" required />
+            <span class="field__label" id="item-date-label">Day <small>(leave empty to decide later)</small></span>
+            <input type="date" name="date" />
           </label>
           <label class="field">
             <span class="field__label" id="item-start-label">Start time</span>
@@ -2587,23 +2647,88 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       </form>
     </dialog>
 
+    <!-- v2.1.0: bulk import places from Google Maps. Google cannot hand another app the contents
+         of a saved list (the list page carries no place data; the request that loads it needs
+         Google's own bot token), so the inputs are the two things that DO work: one share link
+         per line, or the JSON an AI reads back from a screenshot of the list. -->
+    <dialog id="dialog-import-places" class="dialog dialog--wide" aria-labelledby="import-places-title">
+      <form id="form-import-places" method="dialog">
+        <h3 class="dialog__title" id="import-places-title">Import places</h3>
+        <input type="hidden" name="tripId" />
+        <div class="field" id="import-trip-field" role="group" aria-labelledby="import-trip-label">
+          <span class="field__label" id="import-trip-label">Trip</span>
+          <div class="trip-choice" id="import-trip-choice"></div>
+        </div>
+        <label class="field">
+          <span class="field__label">Google Maps links, one per line — or JSON from an AI</span>
+          <textarea name="links" rows="4" dir="auto" placeholder="https://maps.app.goo.gl/…&#10;https://maps.app.goo.gl/…&#10;or  [{&quot;title&quot;: &quot;Louvre&quot;, &quot;note&quot;: &quot;book ahead&quot;}, …]"></textarea>
+          <span class="field__hint">In Google Maps open the place → Share → Copy link. A whole list can't be shared to another app — share the places inside it, or show the list to an AI and paste the JSON it returns.</span>
+        </label>
+        <div class="field">
+          <button type="button" class="btn btn--small btn--outline" id="import-copy-prompt">Copy prompt for AI</button>
+          <span class="field__hint" id="import-copy-prompt-hint">Paste it with a screenshot of your list (or the place names) into ChatGPT / Claude, then paste the JSON above.</span>
+        </div>
+        <div class="import-rows" id="import-rows" aria-live="polite"></div>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
+          <button type="submit" class="btn btn--primary" id="import-places-submit" disabled>Import</button>
+        </div>
+      </form>
+    </dialog>
+
     <script>
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.0.0";
+const APP_VERSION = "v2.1.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
-/* Snapshot of this device's data taken just before a shared trip replaced it */
-const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
-/* Snapshot taken just before an import replaced this device's data (v1.15.1). */
-const PRE_IMPORT_BACKUP_KEY = "vacation-budget-backup-before-import";
-/* Whichever snapshot exists — a join takes precedence because restoring it also leaves the room. */
-function pendingBackup() {
-  const join = localStorage.getItem(PRE_JOIN_BACKUP_KEY);
-  if (join) return { kind: "join", data: join };
-  const imp = localStorage.getItem(PRE_IMPORT_BACKUP_KEY);
-  return imp ? { kind: "import", data: imp } : null;
+/* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
+   other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
+   ago by "Start fresh". Legacy keys are still read (and preferred last) so nothing already
+   stored on a device is lost on upgrade. */
+const BACKUP_KEY = "vacation-budget-backup";
+const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";     // legacy, read-only
+const PRE_IMPORT_BACKUP_KEY = "vacation-budget-backup-before-import"; // legacy, read-only
+/* Snapshot the CURRENT stored document under `kind` ("join" | "import" | "reset"). Returns
+   whether the write landed AND reads back identical — a reset must never proceed on a
+   backup that only looked like it was written (quota, private mode). */
+function writeBackup(kind, rawOverride) {
+  try {
+    const raw = rawOverride ?? localStorage.getItem(STORAGE_KEY) ?? JSON.stringify(state);
+    JSON.parse(raw); // must be a document we could restore
+    const entry = JSON.stringify({ kind, at: Date.now(), data: raw });
+    localStorage.setItem(BACKUP_KEY, entry);
+    return localStorage.getItem(BACKUP_KEY) === entry;
+  } catch (err) {
+    console.error("writeBackup failed", err);
+    return false;
+  }
 }
+/* Newest snapshot on this device, or null. Legacy entries carry no timestamp → oldest. */
+function pendingBackup() {
+  const found = [];
+  try {
+    const unified = JSON.parse(localStorage.getItem(BACKUP_KEY) || "null");
+    if (unified && typeof unified.data === "string") found.push({ kind: unified.kind || "reset", at: Number(unified.at) || 0, data: unified.data, key: BACKUP_KEY });
+  } catch { /* corrupt entry — ignore, the legacy ones may still be good */ }
+  try {
+    const join = localStorage.getItem(PRE_JOIN_BACKUP_KEY);
+    if (join) found.push({ kind: "join", at: 0, data: join, key: PRE_JOIN_BACKUP_KEY });
+    const imp = localStorage.getItem(PRE_IMPORT_BACKUP_KEY);
+    if (imp) found.push({ kind: "import", at: 0, data: imp, key: PRE_IMPORT_BACKUP_KEY });
+  } catch { /* localStorage unavailable */ }
+  if (!found.length) return null;
+  found.sort((a, b) => b.at - a.at);
+  return found[0];
+}
+function clearBackup(backup) {
+  try { localStorage.removeItem(backup?.key || BACKUP_KEY); } catch { /* private mode */ }
+}
+const BACKUP_LABELS = {
+  join: "Restore my old data",
+  import: "Restore data from before the import",
+  reset: "Restore data from before the reset",
+};
 
 const CATEGORIES = ["Hotel", "Flight", "Food", "Groceries", "Transport", "Activities", "Shopping", "Gifts", "Other"];
 
@@ -2753,37 +2878,6 @@ function renderCategoryBreakdown(trip, spent) {
     </div>`;
 }
 
-const SEED_DATA = {
-  currentFunds: 20671,
-  fundHistory: [
-    { id: "fund-2026-07-08", amount: 2716, date: "2026-07-08", note: "Funds addition" },
-  ],
-  trips: [
-    {
-      id: "trip-paris-2026",
-      name: "Paris",
-      year: 2026,
-      budget: 10000,
-      expenses: [
-        { id: "exp-paris-hotel", label: "Paris Hotel", category: "Hotel", amount: 3116, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-        { id: "exp-paris-flight", label: "Paris flight", category: "Flight", amount: 3635, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-      ],
-    },
-    {
-      id: "trip-christmas-2026",
-      name: "Christmas",
-      year: 2026,
-      budget: 10000,
-      expenses: [
-        { id: "exp-xmas-hotel-1", label: "Christmas hotel 1", category: "Hotel", amount: 1721, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-        { id: "exp-xmas-hotel-2", label: "Christmas hotel 2", category: "Hotel", amount: 1617, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-        { id: "exp-xmas-flight", label: "Christmas Flight", category: "Flight", amount: 1736, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-        { id: "exp-xmas-hotel-3", label: "Christmas hotel 3", category: "Hotel", amount: 546, date: "", status: "booked", amountPaid: 0, paidDate: "" },
-      ],
-    },
-  ],
-};
-
 /* --- Migration seeds: trip metadata + booking refs for the original
        hardcoded trips. Used once by migrateToV2, kept as constants. --- */
 const TRIP_META = {
@@ -2901,7 +2995,9 @@ function normalizeTripMeta(trip) {
   trip.feePercent = Number.isFinite(fee) && fee >= 0 ? fee : 1;
 }
 
-/* v2: promote hardcoded trip meta + booking refs into persisted state */
+/* v2: promote hardcoded trip meta + booking refs into persisted state.
+   v2.1.0: TRIP_META / EXPENSE_REF stay although the seed data is gone — they are a one-time
+   migration keyed by the ORIGINAL device's legacy trip ids and are inert for anyone else. */
 function migrateToV2(data) {
   for (const trip of data.trips || []) {
     const meta = TRIP_META[trip.id];
@@ -3003,7 +3099,7 @@ function normalizeExpense(exp) {
    so renaming an expense would orphan its reservation, and renaming a trip would
    strand every item pointing at it.
 
-   Divergent local copies aren't destroyed — the caller writes PRE_JOIN_BACKUP_KEY
+   Divergent local copies aren't destroyed — the caller writes a "join" backup entry
    first, and reports the count so the user can restore. */
 
 /* Compare an entity's own scalar fields, ignoring nested collections that are
@@ -3319,20 +3415,12 @@ function migrateToV3(data) {
   return data;
 }
 
-/* One-time fund additions applied to existing saved data (keyed by id, never re-applied). */
-const PENDING_FUND_ADDITIONS = [
-  { id: "fund-2026-07-08", amount: 2716, date: "2026-07-08", note: "Funds addition" },
-];
-
-function applyPendingFundAdditions(data) {
-  if (!Array.isArray(data.fundHistory)) data.fundHistory = [];
-  for (const add of PENDING_FUND_ADDITIONS) {
-    if (!data.fundHistory.some((h) => h.id === add.id)) {
-      data.currentFunds = (Number(data.currentFunds) || 0) + add.amount;
-      data.fundHistory.push({ ...add });
-    }
-  }
-  return data;
+/* v2.1.0: a fresh device starts EMPTY. Until now first run fell back to a seed document
+   that was one family's real trips, funds and traveller names — and shipped to production
+   unchanged, so a second family opening the app saw them, and "Create a room" would have
+   uploaded them as that family's room. */
+function emptyState() {
+  return { currentFunds: 0, fundHistory: [], rollHistory: [], trips: [], items: [], checklist: [] };
 }
 
 function loadState() {
@@ -3341,19 +3429,19 @@ function loadState() {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.trips)) {
-        return normalizeState(applyPendingFundAdditions(parsed));
+        return normalizeState(parsed);
       }
     }
   } catch (err) {
-    console.error("loadState: falling back to seed data", err);
+    console.error("loadState: falling back to an empty document", err);
     // Only alarm the user if there WAS stored data we couldn't read — not on first run.
     try {
       if (localStorage.getItem(STORAGE_KEY)) {
-        alert("Your saved trip data couldn't be loaded, so default trips are shown. Your stored data was not deleted — reload to try again, or import a backup.");
+        alert("Your saved trip data couldn't be loaded, so the app is shown empty. Your stored data was not deleted — reload to try again, or import a backup.");
       }
     } catch { /* localStorage unavailable */ }
   }
-  return normalizeState(structuredClone(SEED_DATA));
+  return normalizeState(emptyState());
 }
 
 /* Warn once per session — a full quota fires on every keystroke otherwise. */
@@ -3396,9 +3484,9 @@ function saveState() {
   return ok;
 }
 
-/* State init lives here — after every const it depends on (SEED_DATA,
-   PENDING_FUND_ADDITIONS, ITEM_TYPES…) is initialized, so loadState
-   never hits a temporal-dead-zone error and silently falls back to seed. */
+/* State init lives here — after every const it depends on (TRIP_META,
+   ITEM_TYPES…) is initialized, so loadState
+   never hits a temporal-dead-zone error and silently falls back to an empty document. */
 let state = loadState();
 let selectedYear = "all";
 
@@ -3485,13 +3573,21 @@ function buildExpenseFromForm(form) {
   // Empty is zero — the field no longer starts at "0" (it had to be cleared before typing).
   const paidRaw = expenseFormField(form, "amountPaid").value.trim();
   let amountPaid = Math.min(amount, Math.max(0, paidRaw === "" ? 0 : Number(paidRaw) || 0));
-  let paidDate = expenseFormField(form, "paidDate").value;
+  /* v2.1.0: paidDate is no longer a field. It is carried over from the expense being edited
+     (never rewritten — for older expenses it records the day the card statement was checked)
+     and stamped only when an unpaid expense becomes paid. */
+  const tripId = expenseFormField(form, "tripId").value;
+  const expenseId = expenseFormField(form, "expenseId").value;
+  const existing = expenseId
+    ? state.trips.find((t) => t.id === tripId)?.expenses.find((x) => x.id === expenseId)
+    : null;
+  let paidDate = existing?.paidDate || "";
 
   if (!label || !CATEGORIES.includes(category) || amount <= 0) return null;
 
   if (status === "paid") {
     amountPaid = amount;
-    if (!paidDate) paidDate = todayISO();
+    if (!paidDate) paidDate = todayLocalISO();
   } else {
     amountPaid = Math.min(amount, Math.max(0, amountPaid));
     if (amountPaid >= amount && amount > 0) {
@@ -3518,14 +3614,6 @@ function buildExpenseFromForm(form) {
   return fields;
 }
 
-function syncExpensePaidDateVisibility() {
-  const form = $("form-expense");
-  if (!form) return;
-  const wrap = $("expense-paid-date-wrap");
-  const amountPaid = Number(expenseFormField(form, "amountPaid")?.value) || 0;
-  if (wrap) wrap.hidden = amountPaid <= 0;
-}
-
 /* Set the payment status and reconcile the fields that depend on it. This used to live in the
    form's `input` handler, keyed off `e.target.name === "status"`; a hidden input fires no input
    event when set from script, so the logic moved here and both the buttons and
@@ -3543,17 +3631,13 @@ function setExpenseStatus(value, silent) {
   if (!silent) {
     const amountEl = expenseFormField(form, "amount");
     const paidEl = expenseFormField(form, "amountPaid");
-    const paidDateEl = expenseFormField(form, "paidDate");
     const amount = Number(amountEl?.value) || 0;
     if (value === "paid" && amount > 0) {
       paidEl.value = amount;
-      if (!paidDateEl.value) paidDateEl.value = todayISO();
     } else if (value !== "paid" && Number(paidEl.value) >= amount && amount > 0) {
       paidEl.value = 0;
-      paidDateEl.value = "";
     }
   }
-  syncExpensePaidDateVisibility();
 }
 
 function getYears() {
@@ -4570,33 +4654,26 @@ function openExpenseDialog(tripId, expense = null, defaults = {}) {
     expenseFormField(form, "date").value = normalized.date || "";
     setExpenseStatus(normalized.status, true); // reflect only — the values are already coherent
     expenseFormField(form, "amountPaid").value = normalized.amountPaid;
-    expenseFormField(form, "paidDate").value = normalized.paidDate || "";
     setExpenseCurrency(normalized.currency || HOME_CURRENCY);
   } else {
     setExpenseStatus("booked", true);
     // No default 0 in amountPaid — empty reads as zero and saves a tap to clear it.
     expenseFormField(form, "amountPaid").value = "";
-    expenseFormField(form, "paidDate").value = "";
     if (defaults.label) expenseFormField(form, "label").value = defaults.label;
     if (defaults.category && CATEGORIES.includes(defaults.category)) expenseFormField(form, "category").value = defaults.category;
-    /* Date it TODAY while the trip is running. Of Isaac's 21 Paris expenses only 7 had
-       a date, and all 7 were the ones auto-linked to a booking; everything typed by hand
-       had none, which made "which day did we spend that" unanswerable and a day filter
-       impossible. paidDate is no substitute — 16 of those 21 carry 19 Sept because that
-       is when he reconciled, which describes the bookkeeping rather than the trip.
-       Only inside the trip's own dates: an expense booked months ahead is not "today". */
-    const todayIso = todayLocalISO();
-    const within = trip && getMeta(trip).startDate && getMeta(trip).endDate
-      && todayIso >= getMeta(trip).startDate && todayIso <= getMeta(trip).endDate;
-    if (defaults.date) expenseFormField(form, "date").value = defaults.date;
-    else if (within) expenseFormField(form, "date").value = todayIso;
+    /* Of the first 21 hand-typed expenses only the 7 auto-linked to a booking carried a
+       date, which made "which day did we spend that" unanswerable. paidDate is no
+       substitute — 16 of those 21 carry the day the statement was checked, which describes
+       the bookkeeping rather than the trip.
+       v2.1.0: always today, not only mid-trip — most expenses are typed the day they happen,
+       and today's Budget day chip is where they should land without a second tap. */
+    expenseFormField(form, "date").value = defaults.date || todayLocalISO();
     /* New expenses default to the trip's spend currency — in Paris you are typing
        euros all week and should never have to pick EUR twice. */
     setExpenseCurrency(trip ? trip.spendCurrency : HOME_CURRENCY);
   }
 
   renderSettledLine(trip, normalized);
-  syncExpensePaidDateVisibility();
   syncExpenseEstimate();
   openDialog($("dialog-expense"));
   // Prefilled from a booking: the only thing left to type is the amount.
@@ -4939,17 +5016,19 @@ function handleItemSubmit(e) {
     confirmation: (isFlight ? form.confirmationF.value : form.confirmation.value).trim(),
     notes: form.notes.value.trim(),
   });
-  if (!item || !item.title || !item.date) return;
+  if (!item || !item.title) return; // v2.1.0: a day is optional — undated places sit in Unscheduled
 
   /* Keep the manual position. This object is rebuilt from the form, which carries
      no sortIndex, so Object.assign was silently resetting it to 0 — every edit
-     threw away a reorder and the item snapped back to its time-derived slot. */
-  if (existing) item.sortIndex = existing.sortIndex;
+     threw away a reorder and the item snapped back to its time-derived slot.
+     v2.1.0: unless the item just got a day — an Unscheduled ordering must not
+     leak into the chosen day's manual order. */
+  if (existing && !(existing.date === "" && item.date)) item.sortIndex = existing.sortIndex;
   /* A new untimed reservation gets an explicit position at the end of its day.
      Without one it sits at the time-default of 1440 alongside every other untimed
      item, and the tiebreak is localeCompare on a random id — so they ordered
      arbitrarily and adding a third could reshuffle the first two. */
-  else if (!item.startTime) item.sortIndex = nextDayPosition(tripId, item.date);
+  else if (!item.startTime && item.date) item.sortIndex = nextDayPosition(tripId, item.date);
 
   /* v2.0: exactly the same hazard as sortIndex above — the form does not carry
      visitedAt, so without this every edit silently un-visits the place. */
@@ -4963,7 +5042,7 @@ function handleItemSubmit(e) {
      placeItemAtIndex reads the day's rendered order to work out the new
      sortIndex — an item that is not in the list yet cannot be placed within it. */
   const pos = form.afterItem ? form.afterItem.value : "";
-  if (pos) placeItemAfter(tripId, item.date, item.id, pos === "__first" ? "" : pos);
+  if (pos && item.date) placeItemAfter(tripId, item.date, item.id, pos === "__first" ? "" : pos);
 
   saveState();
   closeDialog($("dialog-item"));
@@ -5108,9 +5187,18 @@ function stripMapsNoise(text) {
 
 function extractMapsLink(text) {
   const t = stripMapsNoise(text);
-  const re = /https?:\/\/(?:maps\.app\.goo\.gl\/|goo\.gl\/maps\/|g\.co\/(?:maps\/)?|(?:www\.)?google\.[a-z.]+\/maps(?:\/|\?)|maps\.google\.[a-z.]+\/)[^\s<>"'）)\]]*/gi;
-  let m, last = "";
-  while ((m = re.exec(t))) last = m[0];
+  /* The apostrophe is IN the class of characters a Maps URL may contain, not outside it:
+     Google does not percent-encode it in a place name, so excluding it truncated
+     `…/maps/place/L'Entrecôte+de+Paris/@48.87,2.30…` to `…/maps/place/L` — a one-letter
+     name and no pin. It was excluded to cope with a link wrapped in quotes, which is
+     handled below by looking at what sits immediately before the match instead. */
+  const re = /https?:\/\/(?:maps\.app\.goo\.gl\/|goo\.gl\/maps\/|g\.co\/(?:maps\/)?|(?:www\.)?google\.[a-z.]+\/maps(?:\/|\?)|maps\.google\.[a-z.]+\/)[^\s<>"）)\]]*/gi;
+  let m, last = "", openedWithQuote = false;
+  while ((m = re.exec(t))) {
+    last = m[0];
+    openedWithQuote = t[m.index - 1] === "'";
+  }
+  if (openedWithQuote) last = last.replace(/'+$/, "");
   if (!last) {
     const bare = t.match(/(?:^|\s)((?:maps\.app\.goo\.gl|goo\.gl\/maps)\/[^\s<>"']+)/i);
     if (bare) last = "https://" + bare[1];
@@ -5206,6 +5294,240 @@ function applyMapsPaste(form, parsed, pasted) {
   if (!form.locationName.value.trim()) form.locationName.value = pasted;
   show(`📍 Location set from your paste (${parsed.lat.toFixed(4)}, ${parsed.lng.toFixed(4)})${name ? ` — “${escapeHtml(name)}”` : ""}. Just Save.`);
   return true;
+}
+
+/* ============================================================
+   BULK IMPORT FROM GOOGLE MAPS (v2.1.0)
+   ============================================================ */
+
+const LIST_LINK_RE = /\/maps\/placelists\/|!11m2!2s/i;
+
+/* One row per non-empty line. A line is a Maps link (with any other text on the line kept
+   as the title) or plain text (kept as a name to geocode). Pure — tests feed it strings. */
+function parseBulkPlaces(text) {
+  const rows = [];
+  const src = String(text || "").replace(/^\uFEFF/, "");
+  /* JSON from an AI (the Recipes app's import pattern): a screenshot of the Maps list goes
+     to a chatbot with the prompt below, and its array comes back here. Titles alone are
+     enough — the geocoder finds the pins after import. */
+  const jsonRows = parseBulkJson(src);
+  if (jsonRows) return jsonRows;
+  for (const rawLine of src.split(/\r?\n/)) {
+    const line = stripMapsNoise(rawLine).trim();
+    if (!line) continue;
+    const link = extractMapsLink(line);
+    const rest = link ? line.replace(link, "").replace(/^[\s\-–—:·]+|[\s\-–—:·]+$/g, "").trim() : "";
+    rows.push(bulkRowFromLink(link, rest || (link ? "" : line), ""));
+  }
+  return rows;
+}
+
+function parseBulkJson(src) {
+  const t = src.trim();
+  if (!/^[\[{]/.test(t)) return null;
+  let data;
+  try { data = JSON.parse(t); } catch { return null; }
+  const list = Array.isArray(data) ? data : Array.isArray(data?.places) ? data.places : null;
+  if (!list) return null;
+  return list.map((p) => {
+    if (typeof p === "string") return bulkRowFromLink("", p.trim(), "");
+    const title = String(p?.title ?? p?.name ?? "").trim();
+    const link = extractMapsLink(String(p?.url ?? p?.link ?? p?.maps ?? "")) || "";
+    const row = bulkRowFromLink(link, title, String(p?.note ?? p?.notes ?? "").trim());
+    const date = String(p?.date ?? p?.day ?? "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) row.date = date;
+    if (row.kind === "name" && p?.address) row.name = `${title}, ${String(p.address).trim()}`;
+    return row;
+  });
+}
+
+/* The note matters as much as the name: a Maps saved list carries the note YOU wrote under
+   each place ("book the rooftop", "closed Mondays"), and that is the part worth keeping.
+   The instruction has to say "copy it" rather than "anything useful", or a model writes its
+   own guidebook blurb instead. */
+const AI_IMPORT_PROMPT = `Here is a Google Maps saved list (a screenshot, or just the place names). Return ONLY a JSON array, no prose, one object per place:
+[{"title": "Place name", "address": "street, city (if visible)", "note": "the note saved under this place in the list — copy it word for word; empty string if it has none", "url": "the place's google.com/maps link if you have it, else omit", "date": "YYYY-MM-DD if I told you which day, else empty string"}]
+Rules:
+- Copy the names AND the notes exactly as they appear, in their original language.
+- Include every place in the list, in the order shown.
+- Never invent a place, a link or a note. An empty note is better than a guessed one.`;
+
+function bulkRowFromLink(link, title, note) {
+  const row = { title: title || "", note: note || "", url: link || "", kind: null, name: "", lat: null, lng: null, status: "", error: "", date: "" };
+  if (link && LIST_LINK_RE.test(link)) { row.kind = "list"; row.error = "This is a list link — share the places inside it, or show it to an AI and paste the JSON."; return row; }
+  if (!link) {
+    if (!title) { row.error = "Nothing to import on this line."; return row; }
+    row.kind = "name"; row.name = title; return row;
+  }
+  const parsed = parseMapsPaste(link);
+  if (!parsed) { row.kind = "bad"; row.error = "Couldn't read this link."; return row; }
+  row.kind = parsed.kind;
+  if (parsed.kind !== "short") {
+    row.url = parsed.url || "";
+    row.name = parsed.name || "";
+    if (parsed.lat != null) { row.lat = parsed.lat; row.lng = parsed.lng; }
+    if (!row.title) row.title = row.name;
+  }
+  return row;
+}
+
+/* Follow every short link through /api/expand, two at a time, then re-read the long URL.
+   `onRow(i)` repaints one row. Never throws — a failed row keeps kind "short" with an error. */
+async function expandBulkRows(rows, onRow) {
+  const queue = rows.map((r, i) => i).filter((i) => rows[i].kind === "short");
+  const worker = async () => {
+    while (queue.length) {
+      const i = queue.shift();
+      const row = rows[i];
+      row.status = "Opening short link…"; onRow?.(i);
+      try {
+        const r = await fetchWithTimeout(`/api/expand?url=${encodeURIComponent(row.url)}`, 6000);
+        if (!r.ok) throw new Error(String(r.status));
+        const { url } = await r.json();
+        const next = bulkRowFromLink(url, row.title, row.note);
+        if (next.kind === "short" || next.kind === "bad") {
+          // A name-only URL (…/maps/place/<Name>/data=…) has no pin; keep the name, geocode later.
+          const name = placeNameFromMapsUrl(url);
+          if (!name) throw new Error("unreadable");
+          Object.assign(next, { kind: "name", name, url, error: "", title: next.title || name });
+        }
+        Object.assign(row, next, { status: "", date: row.date });
+      } catch {
+        row.error = "Couldn't open this short link — open it in Google Maps and copy the full link instead.";
+        row.status = "";
+      }
+      onRow?.(i);
+    }
+  };
+  await Promise.all([worker(), worker()]);
+  return rows;
+}
+
+function bulkRowImportable(row) {
+  return !row.error && (row.kind === "place" || row.kind === "name" || row.kind === "coords") && Boolean(row.title || row.name);
+}
+
+/* Create the items. Rows carry an optional `date` (from the per-row picker); "" = Unscheduled.
+   One save for the batch; rows with a name but no pin geocode afterwards, one at a time. */
+function importBulkRows(tripId, rows) {
+  const created = [];
+  for (const row of rows) {
+    if (!bulkRowImportable(row)) continue;
+    const item = normalizeItem({
+      id: uid("item"),
+      tripId,
+      type: "attraction",
+      title: (row.title || row.name).trim(),
+      notes: row.note || "",
+      date: row.date || "",
+      location: { name: row.name || row.title, lat: row.lat, lng: row.lng, url: row.url },
+    });
+    if (!item) continue;
+    if (item.date && !item.startTime) item.sortIndex = nextDayPosition(tripId, item.date);
+    state.items.push(item);
+    created.push(item);
+  }
+  if (!created.length) return created;
+  bookingsGroupOpen.set(tripId, true);
+  saveState(); // notifies share.js itself
+  render();
+  const toGeocode = created.filter((i) => i.location.name && i.location.lat === null).map((i) => i.id);
+  (async () => {
+    for (const id of toGeocode) {
+      try { await geocodeItem(id); } catch { /* the row keeps its Locate button */ }
+      await new Promise((r) => setTimeout(r, 400)); // Photon fans out per destination — be gentle
+    }
+  })();
+  return created;
+}
+
+let bulkRows = [];
+function openImportPlacesDialog(tripId) {
+  const dlg = $("dialog-import-places");
+  const form = $("form-import-places");
+  if (!dlg || !form) return;
+  form.reset();
+  bulkRows = [];
+  const trips = sortTripsByUpcoming(state.trips.filter((t) => getMeta(t).startDate));
+  const chosen = trips.some((t) => t.id === tripId) ? tripId : trips[0]?.id || "";
+  form.tripId.value = chosen;
+  const box = $("import-trip-choice");
+  box.innerHTML = trips.map((t) => `<button type="button" data-import-trip="${escapeHtml(t.id)}" aria-pressed="${t.id === chosen ? "true" : "false"}">${escapeHtml(nameWithCity(t))}</button>`).join("")
+    || `<span class="field__hint">Give a trip start and end dates first.</span>`;
+  box.querySelectorAll("[data-import-trip]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      form.tripId.value = btn.getAttribute("data-import-trip");
+      box.querySelectorAll("[data-import-trip]").forEach((b) => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+      renderBulkRows(); // day pickers are clamped to the trip
+    })
+  );
+  renderBulkRows();
+  openDialog(dlg);
+}
+
+function renderBulkRows() {
+  const wrap = $("import-rows");
+  const form = $("form-import-places");
+  if (!wrap || !form) return;
+  const trip = state.trips.find((t) => t.id === form.tripId.value);
+  const min = trip ? getMeta(trip).startDate : "";
+  const max = trip ? getMeta(trip).endDate : "";
+  wrap.innerHTML = bulkRows.map((row, i) => {
+    const ok = bulkRowImportable(row);
+    const status = row.error ? escapeHtml(row.error)
+      : row.status ? escapeHtml(row.status)
+      : row.lat != null ? `✓ Pin found${row.name ? " · " + escapeHtml(row.name) : ""}`
+      : ok ? "Name only — the pin will be found after import" : "";
+    const note = row.note ? `<span class="import-row__note">“${escapeHtml(row.note)}”</span>` : "";
+    return `
+      <div class="import-row ${row.error ? "import-row--bad" : ok ? "import-row--ok" : ""}" data-row="${i}">
+        <input type="text" dir="auto" maxlength="120" data-row-title="${i}" value="${escapeHtml(row.title || row.name || "")}" placeholder="Name" ${row.error ? "disabled" : ""} />
+        <input type="date" data-row-date="${i}" value="${escapeHtml(row.date || "")}" min="${min}" max="${max}" title="Day (leave empty to decide later)" ${row.error ? "disabled" : ""} />
+        <button type="button" class="icon-btn icon-btn--stop" data-row-remove="${i}" aria-label="Remove this row" title="Remove"><svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+        <span class="import-row__status">${status}${note}</span>
+      </div>`;
+  }).join("");
+  wrap.querySelectorAll("[data-row-title]").forEach((el) => el.addEventListener("input", () => { bulkRows[Number(el.getAttribute("data-row-title"))].title = el.value; }));
+  wrap.querySelectorAll("[data-row-date]").forEach((el) => el.addEventListener("change", () => { bulkRows[Number(el.getAttribute("data-row-date"))].date = el.value; }));
+  wrap.querySelectorAll("[data-row-remove]").forEach((el) => el.addEventListener("click", () => { bulkRows.splice(Number(el.getAttribute("data-row-remove")), 1); renderBulkRows(); }));
+  const n = bulkRows.filter(bulkRowImportable).length;
+  const submit = $("import-places-submit");
+  submit.disabled = !n || !form.tripId.value || bulkRows.some((r) => r.status);
+  submit.textContent = n ? `Import ${n} place${n === 1 ? "" : "s"}` : "Import";
+}
+
+function bulkRowsChanged(rows) {
+  bulkRows = rows;
+  renderBulkRows();
+  expandBulkRows(bulkRows, () => renderBulkRows()).catch(() => renderBulkRows());
+}
+
+function bindImportPlaces() {
+  const form = $("form-import-places");
+  if (!form) return;
+  let typing = null;
+  form.links.addEventListener("input", () => {
+    clearTimeout(typing);
+    typing = setTimeout(() => bulkRowsChanged(parseBulkPlaces(form.links.value)), 350);
+  });
+  $("import-copy-prompt")?.addEventListener("click", async () => {
+    const hint = $("import-copy-prompt-hint");
+    try {
+      await navigator.clipboard.writeText(AI_IMPORT_PROMPT);
+      hint.textContent = "Copied — paste it to your AI together with the list.";
+    } catch {
+      hint.textContent = AI_IMPORT_PROMPT; // no clipboard (http, permissions): show it to copy by hand
+    }
+  });
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const created = importBulkRows(form.tripId.value, bulkRows);
+    closeDialog($("dialog-import-places"));
+    if (created.length) {
+      const undated = created.filter((i) => !i.date).length;
+      showToast(`${created.length} place${created.length === 1 ? "" : "s"} imported${undated ? ` · ${undated} without a day yet` : ""}.`, "view");
+    }
+  });
 }
 
 function photonLabel(f) {
@@ -5390,7 +5712,7 @@ function handleImportFile(e) {
       if (!confirm("Replace all data on this device with the imported file?")) return;
       /* v1.15.1: keep what was here. The same key the "Restore my old data" menu item reads, so
          the existing restore path covers a bad import too. */
-      try { localStorage.setItem(PRE_IMPORT_BACKUP_KEY, JSON.stringify(state)); } catch { /* full — the import itself will say so */ }
+      writeBackup("import", JSON.stringify(state)); // full → the import's own save will say so
       state = normalizeState(parsed);
       const saved = saveState();
       render();
@@ -5704,24 +6026,16 @@ function bindEvents() {
   restoreBtn.addEventListener("click", () => {
     const backup = pendingBackup();
     if (!backup) return;
-    if (backup.kind === "import") {
-      if (!confirm("Restore the data this device had before the import? The imported data will be replaced.")) return;
-      localStorage.setItem(STORAGE_KEY, backup.data);
-      localStorage.removeItem(PRE_IMPORT_BACKUP_KEY);
-      location.reload();
-      return;
-    }
-    if (!confirm("Restore the data this device had before joining the shared trip? This disconnects from the shared trip and brings back your old local data.")) return;
-    localStorage.setItem(STORAGE_KEY, backup.data);
-    localStorage.removeItem(PRE_JOIN_BACKUP_KEY);
-    localStorage.removeItem("travelhub-room");
-    const url = new URL(window.location.href);
-    url.searchParams.delete("room");
-    url.searchParams.delete("key");
-    window.history.replaceState({}, "", url);
-    location.reload();
+    const question = {
+      import: "Restore the data this device had before the import? The imported data will be replaced.",
+      reset: "Restore the data this device had before it was reset? What is on the device now will be replaced.",
+      join: "Restore the data this device had before joining the shared trip? This disconnects from the shared trip and brings back your old local data.",
+    }[backup.kind] || "Restore the older data on this device?";
+    if (!confirm(question)) return;
+    restoreBackup(backup);
   });
   $("btn-import-data").addEventListener("click", () => $("import-file-input").click());
+  bindImportPlaces();
   $("import-file-input").addEventListener("change", handleImportFile);
   $("btn-add-trip").addEventListener("click", () => openTripDialog());
   bindRollEvents();
@@ -5798,7 +6112,6 @@ function bindEvents() {
       if (paid > amount) paidEl.value = amount;
     }
     // Status is a segmented control now; its reconciliation lives in setExpenseStatus.
-    syncExpensePaidDateVisibility();
     if (e.target.name === "amount") syncExpenseEstimate();
   });
 
@@ -5813,10 +6126,6 @@ function bindEvents() {
     $("expense-settled-line").hidden = true;
   });
   $("form-settle").addEventListener("submit", handleSettleSubmit);
-
-  $("form-expense").addEventListener("change", (e) => {
-    if (e.target.form?.id === "form-expense") syncExpensePaidDateVisibility();
-  });
 
   $("trips-list").addEventListener("click", (e) => {
     if (e.target.closest(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense, .btn-settle-expense")) {
@@ -6097,6 +6406,14 @@ const MONUMENTS = {
         78h10 M28 88h152`,
   },
   /* Generic skyline — fallback for unmapped destinations */
+  /* Milano — Duomo di Milano · Galleria Vittorio Emanuele II */
+  milano: {
+    fg: `M99 45l3-27 3 27 M102 18v-4 M74 88V66h56v22 M74 66l28-22 28 22 M97 88V76a5 5 0 0 1 10 0v12
+        M98 58a4 4 0 1 0 8 0 4 4 0 1 0-8 0 M82 66V56l3-5 3 5v10 M116 66V56l3-5 3 5v10 M74 72h56`,
+    bg: `M34 88V70h24v18 M34 70l12-7 12 7 M40 88V78a6 6 0 0 1 12 0v10 M154 88v-14h16v14 M154 74h16
+        M158 80h8 M26 88h160`,
+  },
+
   generic: {
     fg: `M88 88v-46h18v46 M94 52h6 M94 64h6`,
     bg: `M52 88v-22h16v22 M72 88v-34h14v34 M110 88v-30h14v30 M128 88v-20h16v20 M76 62h6 M114 66h6 M56
@@ -6117,6 +6434,7 @@ const MONUMENT_ALIASES = {
   budapest: ["budapest"], berlin: ["berlin"],
   lisbon: ["lisbon", "lisboa"], madrid: ["madrid"],
   tokyo: ["tokyo", "tōkyō"], bangkok: ["bangkok", "krung thep"],
+  milano: ["milan", "milano", "mailand"],
 };
 
 function monumentFor(trip) {
@@ -7161,6 +7479,11 @@ function stopNumbers(trip, iso) {
   return numbers;
 }
 
+/* v2.1.0: items with no day. Sorted by title so the list is stable across devices. */
+function unscheduledItems(trip) {
+  return tripItems(trip).filter((i) => !i.date).sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+}
+
 function itemsForDay(trip, iso) {
   const out = [];
   for (const item of tripItems(trip)) {
@@ -7200,7 +7523,9 @@ function itemCard({ item, checkout }, stopNo) {
     subParts.push(ltr(`${item.departAirport} → ${item.arrivalAirport}`));
   }
   if (item.type === "flight" && item.flightNo) subParts.push(ltr(item.flightNo));
-  if (!checkout && item.location.name && item.type !== "flight") subParts.push(escapeHtml(item.location.name));
+  /* v2.1.0: an imported place is named after its location, so printing both put the same
+     string on two lines. */
+  if (!checkout && item.location.name && item.type !== "flight" && item.location.name !== title) subParts.push(escapeHtml(item.location.name));
   if (item.confirmation) subParts.push(`Conf: ${ltr(item.confirmation)}`);
   if (item.notes) subParts.push(escapeHtml(item.notes));
   const time = checkout ? item.endTime || "" : fmtTimeRange(item);
@@ -7308,9 +7633,22 @@ function renderTimelineTab(trip) {
 
   /* The strip lives in the sticky header now, not in the scrolling view, so the Timeline/Maps
      toggle stays put alongside it. Maps clears the slot. */
+  /* v2.1.0: places with no day yet — bulk-imported from Maps, or saved to sort out later.
+     Shown ABOVE the days so they get sorted rather than forgotten. Each card is the normal one
+     (tap or Edit opens the dialog, where "Day" is the field to fill). */
+  const undated = unscheduledItems(trip);
+  const unschedHtml = undated.length
+    ? `<section class="unsched" id="unscheduled" aria-label="Unscheduled places">
+        <div class="unsched__head"><span>Unscheduled <small>· ${undated.length} place${undated.length === 1 ? "" : "s"} without a day</small></span></div>
+        ${undated.map((item) => itemCard({ item, checkout: false })).join("")}
+      </section>`
+    : "";
+  const importBtn = `<button type="button" class="act act--add" data-import-places aria-label="Import places from Google Maps">${ICONS.explore}<span class="act__body"><span class="act__title">Import places from Google Maps</span><span class="act__sub">Paste share links, or JSON from an AI — pick days now or later</span></span></button>`;
+
   $("daystrip-slot").innerHTML = strip;
-  view.innerHTML = `${route}${dayHtml}${fab}`;
+  view.innerHTML = `${route}${unschedHtml}${dayHtml}${importBtn}${fab}`;
   bindItemActions(view, trip);
+  view.querySelector("[data-import-places]")?.addEventListener("click", () => openImportPlacesDialog(trip.id));
 
   view.querySelectorAll("[data-day-sheet]").forEach((btn) =>
     btn.addEventListener("click", (ev) => {
@@ -8090,6 +8428,32 @@ function renderMapsTab(trip) {
     }
   }
 
+  /* v2.1.0: undated places ride along when the whole trip is shown — grey, unnumbered pins,
+     so you can see where the unsorted ideas are relative to the days. */
+  const unsched = mapDayFilter === "all"
+    ? unscheduledItems(trip).filter((item) => isMappable({ item, checkout: false }))
+    : [];
+  if (unsched.length) {
+    sidebar += `<div class="map-day-head">Unscheduled</div>`;
+    for (const item of unsched) {
+      const geo = item.location.lat !== null;
+      entries.push({ item, checkout: false, label: "•", unscheduled: true });
+      sidebar += `
+        <div class="mapstop">
+          <button type="button" class="mapstop__focus" ${geo ? `data-focus-stop="${escapeHtml(item.id)}"` : "disabled"}
+                  aria-label="Show ${escapeHtml(item.title)} on the map">
+            <span class="mapstop__pin mapstop__pin--unsched${geo ? "" : " mapstop__pin--nogeo"}">•</span>
+            <span class="mapstop__body">
+              <span class="act__title">${escapeHtml(item.title)}</span>
+              <span class="act__sub">${escapeHtml(item.location.name)} · no day yet</span>
+            </span>
+          </button>
+          ${geo ? "" : `<button type="button" class="icon-btn icon-btn--stop" data-locate-item="${item.id}" aria-label="Find this place on the map" title="Locate"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg></button>`}
+          <a class="icon-btn icon-btn--stop" href="${gmapsLink(item, trip)}" target="_blank" rel="noopener" aria-label="Open in Google Maps" title="Open in Google Maps"><svg viewBox="0 0 24 24" fill="none"><path d="M14 5h5v5M19 5l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></a>
+        </div>`;
+    }
+  }
+
   const listHtml = sidebar ||
     `<p class="empty-state">No located bookings ${mapDayFilter === "all" ? "yet" : "on this day"}. Add a location to a booking to see it here.</p>`;
 
@@ -8196,7 +8560,7 @@ function renderMapsTab(trip) {
   located.forEach((e) => {
     const { lat, lng } = e.item.location;
     bounds.push([lat, lng]);
-    const icon = L.divIcon({ className: "", html: `<span class="map-pin">${e.label}</span>`, iconSize: [30, 30], iconAnchor: [15, 30] });
+    const icon = L.divIcon({ className: "", html: `<span class="map-pin${e.unscheduled ? " map-pin--unsched" : ""}">${e.label}</span>`, iconSize: [30, 30], iconAnchor: [15, 30] });
     // Keep the marker so a carousel tap can focus it; they used to be discarded.
     stopMarkers.set(e.item.id, L.marker([lat, lng], { icon })
       .addTo(leafletMap)
@@ -8448,10 +8812,11 @@ function renderFamily() {
 
   body.innerHTML = `
     <div class="section-head"><div><h2>Who's travelling</h2><p>Your family members and the trips they're on.</p></div></div>
-    <div class="members">${memberCards}</div>
+    ${members.length
+      ? `<div class="members">${memberCards}</div>`
+      : `<div class="empty-card"><h3>No one here yet</h3><p>Family members come from the <strong>Travellers</strong> on your trips — add names there and they appear here, where you can rename or remove them.</p><button type="button" class="btn btn--primary btn--small" id="family-add-trip">${state.trips.length ? "Edit a trip" : "Create your first trip"}</button></div>`}
 
-    <div class="section-head"><h2>Trips by travellers</h2></div>
-    ${tripRows}
+    ${tripRows ? `<div class="section-head"><h2>Trips by travellers</h2></div>${tripRows}` : ""}
 
     <div class="section-head" style="margin-top:1.6rem"><div><h2>Shared checklist</h2><p>Tick things off as you pack — everyone on the trip sees the same list.</p></div></div>
     <div class="card" style="padding:1.1rem 1.3rem">
@@ -8461,6 +8826,13 @@ function renderFamily() {
         <button type="button" class="btn btn--primary" id="checklist-add">Add</button>
       </div>
     </div>`;
+
+  /* The only route to a member is a trip's Travellers field, so send them there rather than
+     leaving a dead end. */
+  $("family-add-trip")?.addEventListener("click", () => {
+    const trip = sortTripsByUpcoming(state.trips)[0];
+    if (trip) openTripDialog(trip); else openTripDialog();
+  });
 
   const input = $("checklist-input");
   const addItem = () => {
@@ -8695,7 +9067,7 @@ function bindShellEvents() {
        Not shared → the only real choices are start one or join one.
        Shared     → saving is automatic, so "Save now" is noise; what you actually
                     want is the link, a manual check, or a way out. */
-    $("overflow-save-label").textContent = "Share my trips";
+    $("overflow-save-label").textContent = "Create a room";
     $("overflow-join-label").textContent = shared ? "Switch to a different trip" : "Join a shared trip";
     dlg.querySelector('[data-overflow="save"]').hidden = !sharingConfigured || shared;
     dlg.querySelector('[data-overflow="join"]').hidden = !sharingConfigured;
@@ -8706,7 +9078,7 @@ function bindShellEvents() {
     const backup = pendingBackup();
     const restoreRow = dlg.querySelector('[data-overflow="restore"]');
     restoreRow.hidden = !backup;
-    if (backup) restoreRow.lastChild.textContent = backup.kind === "import" ? " Restore data from before the import" : " Restore my old data";
+    if (backup) restoreRow.lastChild.textContent = " " + (BACKUP_LABELS[backup.kind] || BACKUP_LABELS.join);
     openDialog(dlg);
   });
   $("dialog-overflow").querySelectorAll("[data-overflow]").forEach((b) =>
@@ -8716,10 +9088,12 @@ function bindShellEvents() {
       if (act === "save") $("btn-share").click();
       else if (act === "join") openJoinDialog();
       else if (act === "leave") window.VacationShare?.leaveRoom?.();
+      else if (act === "reset") resetDevice();
       else if (act === "copy") $("btn-copy-link").click();
       else if (act === "sync") window.VacationShare?.syncNow?.();
       else if (act === "export") exportData();
       else if (act === "import") $("import-file-input").click();
+      else if (act === "import-places") openImportPlacesDialog(itineraryTripId || sortTripsByUpcoming(state.trips.filter((t) => getMeta(t).startDate))[0]?.id);
       else if (act === "restore") $("btn-restore-backup").click();
     })
   );
@@ -8728,7 +9102,7 @@ function bindShellEvents() {
   $("btn-room-badge").addEventListener("click", async () => {
     const id = window.VacationShare?.getRoomId?.();
     const badge = $("btn-room-badge");
-    if (!id) { badge.textContent = "Not shared — tap Share my trips"; return; }
+    if (!id) { badge.textContent = "Not shared — tap Create a room"; return; }
     const original = badge.textContent;
     try { await navigator.clipboard.writeText(id); badge.textContent = "Room id copied"; }
     catch { badge.textContent = id; }
@@ -8789,6 +9163,18 @@ function getDeviceName() {
   try { return localStorage.getItem(DEVICE_NAME_KEY) || ""; } catch { return ""; }
 }
 
+/* v2.1.0: the sidebar used to hard-code one person's name. It now shows whoever this device
+   said it was (the same answer that stamps shared changes), or a neutral placeholder. */
+function renderAccountChrome() {
+  const name = getDeviceName();
+  const nameEl = $("sidebar-name");
+  const avatar = $("sidebar-avatar");
+  if (nameEl) nameEl.textContent = name || "You";
+  if (avatar) avatar.textContent = (name || "?").trim().charAt(0).toUpperCase() || "?";
+  const acct = $("btn-appbar-account");
+  if (acct) acct.title = name ? `This device: ${name}` : "Who is using this device";
+}
+
 /* Ask once per device who is using it (travel-party buttons + free text). */
 function ensureDeviceName() {
   return new Promise((resolve) => {
@@ -8808,6 +9194,7 @@ function ensureDeviceName() {
       if (settled) return;
       settled = true;
       try { localStorage.setItem(DEVICE_NAME_KEY, name); } catch { /* private mode */ }
+      renderAccountChrome();
       dlg.close();
       resolve(name);
     };
@@ -9024,8 +9411,59 @@ function openChangesDialog() {
 /* ============================================================
    SHARING ADAPTER — used by share.js (optional, Supabase-backed)
    ============================================================ */
+/* v2.1.0 — "Start fresh on this device". Order is the whole point: nothing changes until a
+   backup is written AND read back. A failed write (quota, private mode) leaves state and
+   room membership exactly as they were. */
+function resetDevice(opts) {
+  const silent = opts && opts.silent;
+  const proceed = () => {
+    if (!writeBackup("reset")) {
+      showToast("Couldn't back up this device — nothing was changed.", "error");
+      return false;
+    }
+    window.VacationShare?.leaveRoom?.({ silent: true });
+    state = normalizeState(emptyState());
+    const saved = saveState(); // its own bar + alert explain a failure
+    render();
+    if (saved && !silent) showToast("This device is empty. Restore is in the ⋯ menu.", "view");
+    return saved;
+  };
+  if (silent) return proceed();
+  appConfirm(
+    "Remove every trip, plan and expense from this device? A backup is kept — Restore is in the ⋯ menu.",
+    (yes) => { if (yes) proceed(); },
+    { title: "Start fresh", okLabel: "Start fresh" }
+  );
+  return undefined;
+}
+
+/* Bring a snapshot back and reload. Every kind leaves the room: a snapshot predates whatever
+   room the device is in now, and reconnecting would merge it straight back. */
+function restoreBackup(backup) {
+  localStorage.setItem(STORAGE_KEY, backup.data);
+  clearBackup(backup);
+  ["travelhub-room", "travelhub-sync-base", "travelhub-last-sync"].forEach((k) => {
+    try { localStorage.removeItem(k); } catch { /* private mode */ }
+  });
+  const url = new URL(window.location.href);
+  url.searchParams.delete("room");
+  url.searchParams.delete("key");
+  window.history.replaceState({}, "", url);
+  location.reload();
+}
+
 window.VacationApp = {
   announce, // share.js reports sync results through the shared live region
+  writeBackup, // share.js snapshots before a join through the same entry
+  __emptyState: emptyState,
+  __parseBulkPlaces: parseBulkPlaces,
+  __aiImportPrompt: AI_IMPORT_PROMPT,
+  __importBulkRows: importBulkRows,
+  __expandBulkRows: expandBulkRows,
+  __openImportPlaces: openImportPlacesDialog,
+  __unscheduledItems: unscheduledItems,
+  __resetDevice: resetDevice,
+  __pendingBackup: pendingBackup,
   getPayload: () => state,
   setPayload: (payload) => {
     state = normalizeState(payload);
@@ -9108,6 +9546,7 @@ function versionLabel() {
    defined — this script is inline and would otherwise run before them. */
 function boot() {
   document.querySelectorAll("[data-app-version]").forEach((el) => { el.textContent = versionLabel(); });
+  renderAccountChrome();
   setupDialogCloseHandlers();
   bindEvents();
   buildNav();

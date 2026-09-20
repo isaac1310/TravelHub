@@ -45,20 +45,43 @@
   }
 
   /* Mobile chip mirrors the status pill in compact form. */
+  /* The chip is the phone's whole sync chrome: the desktop pill and room badge are
+     display:none below 900px. Status and room identity are written by different callers at
+     different times, so both go through one painter — writing className from two places is
+     exactly how #sync-status came to clobber anything added to it. */
+  let chipType = "";
+  let chipText = "";
   function setChip(text, type) {
+    chipType = type || "";
+    chipText = text || "";
+    paintChip();
+  }
+  function paintChip() {
     const chip = document.getElementById("sync-chip");
     if (!chip) return;
     chip.hidden = false;
     const label = document.getElementById("sync-chip-text");
     if (label) {
       label.textContent =
-        type === "ok" ? "✓" :
-        type === "busy" ? "…" :
-        type === "error" ? "!" :
-        type === "pending" ? "↻" : "✓";
+        chipType === "ok" ? "✓" :
+        chipType === "busy" ? "…" :
+        chipType === "error" ? "!" :
+        chipType === "pending" ? "↻" : "✓";
     }
-    chip.className = "sync-chip" + (type ? ` sync-chip--${type}` : "");
-    chip.title = text || "Sync now";
+    const stale = sharedMode && isStale(lastSyncAt);
+    const room = document.getElementById("sync-chip-room");
+    if (room) {
+      room.hidden = !sharedMode;
+      room.textContent = sharedMode ? shortRoom(roomId) : "";
+    }
+    chip.className = "sync-chip"
+      + (chipType ? ` sync-chip--${chipType}` : "")
+      + (stale ? " sync-chip--stale" : "");
+    const age = syncAgeLabel(lastSyncAt);
+    chip.title = sharedMode ? `${chipText || "Sync now"} · room ${shortRoom(roomId)} · last synced ${age}` : (chipText || "Sync now");
+    chip.setAttribute("aria-label", sharedMode
+      ? `Sync now. Room ${shortRoom(roomId)}, last synced ${age}${stale ? " — not synced for over a week" : ""}`
+      : "Sync now");
   }
 
   let statusClearTimer = null;
@@ -230,7 +253,7 @@
     if (!failed) {
       pendingSave = false;
       retryCount = 0;
-      lastSyncAt = Date.now();
+      noteSynced();
       setSyncStatus("Saved", "ok");
       return;
     }
@@ -303,7 +326,7 @@
         window.VacationApp.onRemoteChanges?.(prev, data.payload);
         pendingRemoteInfo = null;
         updateSyncDot(false);
-        lastSyncAt = Date.now();
+        noteSynced();
         setSyncStatus(`Updated — ${by} made changes`, "ok");
         window.VacationApp.showUpdateToast?.(by, { applied: true });
         return true;
@@ -432,7 +455,7 @@
       }
       pendingRemoteInfo = null;
       updateSyncDot(false);
-      lastSyncAt = Date.now();
+      noteSynced();
       setSyncStatus("Synced just now", "ok");
     } catch (err) {
       console.error(err);
@@ -443,6 +466,7 @@
 
   /* Keep the pill honest between events: "Synced Nm ago" (no flash). */
   setInterval(() => {
+    updateRoomChrome(); // badge age / staleness, even while the pill below stays quiet
     if (!sharedMode || !lastSyncAt || pendingSave || saveInFlight || pendingRemoteInfo) return;
     const el = document.getElementById("sync-status");
     if (!el || el.classList.contains("sync-status--error")) return;
@@ -486,6 +510,8 @@
     if (copy) copy.hidden = false;
     const sync = document.getElementById("btn-sync-now");
     if (sync) sync.hidden = false;
+    const leave = document.getElementById("btn-leave-room");
+    if (leave) leave.hidden = false;
   }
 
   /* Manual "Save now": flush any pending debounce and push immediately,
@@ -506,10 +532,10 @@
        second device makes a separate room that will never sync with the first. Both
        facts have to be in the prompt; the old copy promised the opposite. */
     if (!confirm(
-      "Put all the trips on this device into a new shared space?\n\n" +
+      "Create a room with all the trips on this device?\n\n" +
       "You'll get a link to send to the family.\n\n" +
       "If someone already shared with you, close this and tap \"Join a shared trip\" instead — " +
-      "sharing here creates a separate copy that won't sync with theirs."
+      "creating a room here makes a separate copy that won't sync with theirs."
     )) return;
     btn.disabled = true;
     await window.VacationApp.ensureDeviceName?.(); // who is stamping changes
@@ -530,7 +556,7 @@
       lastRemoteUpdatedAt = await fetchServerUpdatedAt();
       // The room was created from exactly this payload — it's the first base.
       writeMergeBase(window.VacationApp.getPayload());
-      lastSyncAt = Date.now();
+      noteSynced();
       stripCredentialsFromUrl();
       startUpdateChecks();
       markSavedChrome();
@@ -595,6 +621,13 @@
     if (syncBtn) {
       syncBtn.addEventListener("click", () => syncNow().catch(console.error));
     }
+    /* v2.1.0: leaving used to exist only in the phone overflow sheet; above 900px there was
+       no way out of a room but the console. */
+    const leaveBtn = document.getElementById("btn-leave-room");
+    if (leaveBtn) {
+      leaveBtn.addEventListener("click", () => leaveRoom());
+    }
+    lastSyncAt = readLastSync();
     updateRoomChrome(); // "Local only" until proven otherwise
 
     const params = new URLSearchParams(window.location.search);
@@ -634,7 +667,7 @@
            may never have been pushed. applyOrMerge keeps it instead of overwriting. */
         applyOrMerge(data.payload);
         if (pendingSave) saveRemote().catch(console.error); // merged edits still owe the server
-        lastSyncAt = Date.now();
+        noteSynced();
         markSavedChrome();
         setSyncStatus("Shared trip loaded", "ok");
         startUpdateChecks();
@@ -753,7 +786,7 @@
     stripCredentialsFromUrl();
     lastRemoteUpdatedAt = data.updated_at || null;
     lastEditorInfo = { by: data.payload.lastEditedBy || "", at: data.payload.lastEditedAt || "" };
-    lastSyncAt = Date.now();
+    noteSynced();
     markSavedChrome();
     startUpdateChecks();
     window.VacationApp.ensureDeviceName?.();
@@ -802,6 +835,8 @@
     lastRemoteUpdatedAt = null;
     lastNotifiedRemoteAt = null;
     try { localStorage.removeItem(ROOM_STORE_KEY); } catch { /* private mode */ }
+    try { localStorage.removeItem(LAST_SYNC_KEY); } catch { /* private mode */ }
+    lastSyncAt = null;
     clearMergeBase(); // a base from the room we just left would merge against the wrong history
     updateSyncDot(false);
     setSyncStatus("Not shared — this device only", "");
@@ -815,12 +850,14 @@
     if (copy) copy.hidden = true;
     const sync = document.getElementById("btn-sync-now");
     if (sync) sync.hidden = true;
+    const leave = document.getElementById("btn-leave-room");
+    if (leave) leave.hidden = true;
     const save = document.getElementById("btn-share");
     if (save) {
       save.hidden = false;
       save.disabled = false;
-      save.setAttribute("aria-label", "Share my trips");
-      save.setAttribute("title", "Share my trips — puts everything on this device into a shared space");
+      save.setAttribute("aria-label", "Create a room");
+      save.setAttribute("title", "Create a room — puts everything on this device into a shared space");
     }
   }
 
@@ -839,6 +876,7 @@
   }
 
   function backupBeforeJoin() {
+    if (window.VacationApp?.writeBackup) { window.VacationApp.writeBackup("join"); return; }
     try {
       const raw = localStorage.getItem("vacation-budget-planner-v1");
       if (raw) localStorage.setItem("vacation-budget-backup-before-join", raw);
@@ -851,10 +889,23 @@
      mismatch at a glance — the failure that made "sync is broken" so hard to see. */
   function updateRoomChrome() {
     const label = sharedMode ? `Shared · ${shortRoom(roomId)}` : "Local only";
+    const stale = sharedMode && isStale(lastSyncAt);
+    const age = syncAgeLabel(lastSyncAt);
     document.querySelectorAll("[data-room-identity]").forEach((el) => {
       el.textContent = label;
-      el.title = sharedMode ? `Synced to shared trip ${roomId}` : "Not shared — only on this device";
+      el.title = sharedMode
+        ? `Synced to shared trip ${roomId} · last synced ${age}`
+        : "Not shared — only on this device";
+      el.classList.toggle("room-badge--stale", stale);
     });
+    paintChip(); // the phone's copy of all of the above
+    const ageLine = document.getElementById("overflow-sync-age");
+    if (ageLine) {
+      ageLine.hidden = !sharedMode;
+      ageLine.textContent = sharedMode
+        ? (stale ? `⚠️ Last synced ${age} — open the app on your other device, or tap Sync now.` : `Last synced ${age}`)
+        : "";
+    }
     document.querySelectorAll("[data-when-shared]").forEach((el) => { el.hidden = !sharedMode; });
     document.querySelectorAll("[data-when-local]").forEach((el) => { el.hidden = sharedMode; });
   }
@@ -897,6 +948,30 @@
 
 
   const ROOM_STORE_KEY = "travelhub-room";
+
+  /* v2.1.0: the last successful sync used to live only in memory, so after a reload nothing
+     could say "this device has not talked to the room in three weeks" — the state that let
+     two devices drift apart for a month. Persisted per device, cleared on leave. */
+  const LAST_SYNC_KEY = "travelhub-last-sync";
+  const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+  function noteSynced() {
+    lastSyncAt = Date.now();
+    try { localStorage.setItem(LAST_SYNC_KEY, String(lastSyncAt)); } catch { /* private mode */ }
+    updateRoomChrome(); // a badge that went amber must clear the moment a sync lands
+  }
+  function readLastSync() {
+    try { const v = Number(localStorage.getItem(LAST_SYNC_KEY)); return v > 0 ? v : null; } catch { return null; }
+  }
+  function isStale(at) { return at == null ? true : Date.now() - at > STALE_AFTER_MS; }
+  function syncAgeLabel(at) {
+    if (at == null) return "never";
+    const mins = Math.floor((Date.now() - at) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+  }
   function storedRoom() {
     try { return JSON.parse(localStorage.getItem(ROOM_STORE_KEY) || "null"); } catch { return null; }
   }
@@ -960,6 +1035,12 @@
     copyLink,
     leaveRoom,
     refreshChrome: updateRoomChrome,
+    _shortRoom: shortRoom,
+    _syncAgeLabel: syncAgeLabel,
+    _isStale: isStale,
+    _noteSynced: noteSynced,
+    _paintChip: paintChip,
+    _staleAfterMs: STALE_AFTER_MS,
   };
 
   if (document.readyState === "loading") {

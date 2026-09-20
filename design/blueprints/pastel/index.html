@@ -94,8 +94,13 @@ header,main,footer{max-width:1440px;margin:auto;padding:0 5vw}header{padding-top
       <div class="caption"><div><h2>Bangkok</h2><p>Wat Arun prang · temple roofs · river boat</p></div><span class="number">18</span></div>
       <details><summary>Compare with original blueprint</summary><img class="original" src="../bangkok.svg" alt="Original Bangkok blueprint"></details>
     </article>
+<article class="card" data-name="milano">
+      <a class="art" href="milano.png" target="_blank" aria-label="Open Milano artwork"><img src="milano.png" alt="Pastel travel illustration of Milano" loading="lazy"></a>
+      <div class="caption"><div><h2>Milano</h2><p>Duomo di Milano · Piazza del Duomo</p></div><span class="number">19</span></div>
+      
+    </article>
 <article class="card" data-name="somewhere new">
       <a class="art" href="generic.png" target="_blank" aria-label="Open Somewhere new artwork"><img src="generic.png" alt="Pastel travel illustration of Somewhere new" loading="lazy"></a>
-      <div class="caption"><div><h2>Somewhere new</h2><p>fallback for unmapped destinations</p></div><span class="number">19</span></div>
+      <div class="caption"><div><h2>Somewhere new</h2><p>fallback for unmapped destinations</p></div><span class="number">20</span></div>
       <details><summary>Compare with original blueprint</summary><img class="original" src="../generic.svg" alt="Original Somewhere new blueprint"></details>
-    </article></div><p id="empty" hidden>No matching destinations.</p></main><footer>18 destinations + one fallback · Click any painting to open the full artwork.<br>Original blueprint comparison is available below each destination.</footer><script>document.querySelector('input').addEventListener('input',e=>{let count=0;document.querySelectorAll('.card').forEach(c=>{c.hidden=!c.dataset.name.includes(e.target.value.trim().toLowerCase());if(!c.hidden)count++});document.getElementById('empty').hidden=count>0});</script></body></html>
+    </article></div><p id="empty" hidden>No matching destinations.</p></main><footer>19 destinations + one fallback · Click any painting to open the full artwork.<br>Original blueprint comparison is available where a blueprint exists.</footer><script>document.querySelector('input').addEventListener('input',e=>{let count=0;document.querySelectorAll('.card').forEach(c=>{c.hidden=!c.dataset.name.includes(e.target.value.trim().toLowerCase());if(!c.hidden)count++});document.getElementById('empty').hidden=count>0});</script></body></html>

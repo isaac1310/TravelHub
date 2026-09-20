@@ -106,6 +106,22 @@
     const realSetItem = Storage.prototype.setItem;
     const realAlert = window.alert;
 
+    /* v2.1.0: a fresh device is empty now (no seed document), and a good third of this suite
+       renders against "whatever trip is first". Give it one. Restored with everything else. */
+    if (!state.trips.length) {
+      state = normalizeState({
+        currentFunds: 0, fundHistory: [], rollHistory: [], checklist: [],
+        trips: [makeTrip({ id: "selftest-trip", name: "Selftest", startDate: "2026-09-16", endDate: "2026-09-19",
+          expenses: [makeExpense({ id: "selftest-exp" })] })],
+        items: [
+          { id: "selftest-item-1", tripId: "selftest-trip", type: "attraction", title: "Selftest stop", date: "2026-09-17", startTime: "10:00", location: { name: "Louvre, Paris", lat: 48.8606, lng: 2.3376 } },
+          { id: "selftest-item-2", tripId: "selftest-trip", type: "restaurant", title: "Selftest dinner", date: "2026-09-17", location: { name: "Le Comptoir, Paris" } },
+        ],
+      });
+      saveState();
+      render();
+    }
+
     try {
       regressionGuards();
       syncTimestamps();
@@ -132,6 +148,7 @@
       releaseV1151();
       releaseV1152();
       releaseV1153();
+      releaseV210();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -1298,8 +1315,9 @@
     function submitExpense(tripId, over, expense) {
       openExpenseDialog(tripId, expense || null);
       const v = Object.assign(
+        // v2.1.0: paidDate is no longer a form field — one date per expense.
         { label: "Selftest row", category: "Food", amount: "120", date: "2026-09-17",
-          status: "booked", amountPaid: "0", paidDate: "" },
+          status: "booked", amountPaid: "0" },
         over || {}
       );
       for (const [k, val] of Object.entries(v)) fld(k).value = val;
@@ -4531,6 +4549,374 @@
         form.requestSubmit();
         return eq(state.items[0].location.url, FULL, "url survives an unrelated edit");
       } finally { if (document.getElementById("dialog-item").open) closeDialog(document.getElementById("dialog-item")); state.items = bi; saveState(); render(); }
+    });
+  }
+
+  /* ===== v2.1.0 — rooms you can see and leave, clean start, one expense date, bulk Maps import ===== */
+  function releaseV210() {
+    group("v2.1.0");
+    const A = window.VacationApp;
+    const S = window.VacationShare;
+    const laidOut = window.innerWidth > 0;
+    const DAY = 24 * 60 * 60 * 1000;
+
+    /* ---- A: leaving and seeing the room ---- */
+
+    check("Leave shared trip has a desktop button beside Share / Copy / Sync, hidden while local", () => {
+      const btn = document.getElementById("btn-leave-room");
+      if (!btn) return "#btn-leave-room missing";
+      if (!btn.closest(".appbar__actions")) return "not in the app bar actions";
+      if (!btn.hidden) return "visible while not in a room";
+      if (!laidOut) return skip("viewport not laid out — cannot measure display");
+      btn.hidden = false;
+      try {
+        const display = getComputedStyle(btn).display;
+        if (window.innerWidth > 900) return display !== "none" ? true : "desktop: display none";
+        return display === "none" ? true : "phone: the sheet row owns leaving, the button must hide";
+      } finally { btn.hidden = true; }
+    });
+
+    check("the app bar carries the room identity, painted by the same code as the sheet", () => {
+      const el = document.getElementById("appbar-room");
+      if (!el) return "#appbar-room missing";
+      if (!el.hasAttribute("data-room-identity") || !el.hasAttribute("data-when-shared")) return "missing data-room-identity / data-when-shared";
+      S.refreshChrome();
+      if (!el.hidden) return "shown while local";
+      const sheet = document.querySelector("#dialog-overflow [data-room-identity]");
+      return sheet && sheet.textContent === "Local only" ? true : `sheet badge reads ${sheet && sheet.textContent}`;
+    });
+
+    check("sync age: fresh is not stale, a week is, never is 'never'", () => {
+      if (typeof S._isStale !== "function") return "VacationShare._isStale missing";
+      const now = Date.now();
+      const r = [
+        eq(S._isStale(now - 3 * 60 * 60 * 1000), false, "3h"),
+        eq(S._isStale(now - 8 * DAY), true, "8d"),
+        eq(S._isStale(null), true, "never synced counts as stale"),
+        eq(S._syncAgeLabel(null), "never", "label never"),
+        eq(S._syncAgeLabel(now - 8 * DAY), "8d ago", "label 8d"),
+        eq(S._syncAgeLabel(now - 90 * 60 * 1000), "1h ago", "label 1h"),
+        eq(S._syncAgeLabel(now - 20 * 1000), "just now", "label just now"),
+      ].find((x) => x !== true);
+      return r || true;
+    });
+
+    check("noteSynced persists the time so it survives a reload", () => {
+      const before = localStorage.getItem("travelhub-last-sync");
+      try {
+        S._noteSynced();
+        const v = Number(localStorage.getItem("travelhub-last-sync"));
+        return Math.abs(Date.now() - v) < 5000 ? true : `stored ${v}`;
+      } finally {
+        if (before == null) localStorage.removeItem("travelhub-last-sync"); else localStorage.setItem("travelhub-last-sync", before);
+      }
+    });
+
+    /* ---- A2: the same three facts on the phone, where there is no hover ---- */
+
+    check("the phone chip carries the room code, not just a tick", () => {
+      const chip = document.getElementById("sync-chip");
+      const room = document.getElementById("sync-chip-room");
+      if (!chip || !room) return "#sync-chip-room missing";
+      if (!room.hidden) return "room code shown while this device is local";
+      if (!laidOut) return skip("viewport not laid out");
+      if (window.innerWidth > 900) return skip("desktop layout — the app-bar pill carries the room here");
+      return getComputedStyle(chip).display !== "none" ? true : "the chip is hidden at phone width";
+    });
+
+    check("nothing about the room hides in a tooltip on a touch device", () => {
+      /* A phone cannot hover, so the age has to be real text somewhere reachable. */
+      const line = document.getElementById("overflow-sync-age");
+      if (!line) return "#overflow-sync-age missing";
+      if (!line.hidden) return "sync age shown while local";
+      const chip = document.getElementById("sync-chip");
+      return chip && chip.getAttribute("aria-label") ? true : "the chip has no aria-label for screen readers";
+    });
+
+    check("one painter owns the chip, so a status update cannot wipe the room off it", () => {
+      /* The mistake #sync-status already made: two writers, one className. */
+      const src = String(window.VacationShare._paintChip || "");
+      if (!src) return "VacationShare._paintChip not exposed";
+      return /sync-chip--stale/.test(src) && /sync-chip-room/.test(src)
+        ? true : "paintChip does not own both the room code and the stale state";
+    });
+
+    check("a long toast keeps its text inside the bubble and its buttons usable", () => {
+      /* It did not: the text was a flex item with no basis, so it shrank to its longest word
+         while the buttons kept theirs — "5 places imported · 4 without a day yet." rendered in
+         a 58px column six lines deep, with the pill radius clipping what fell outside. */
+      if (!laidOut) return skip("viewport not laid out — cannot measure");
+      const t = document.getElementById("toast");
+      const txt = document.getElementById("toast-text");
+      const wasHidden = t.hidden;
+      try {
+        showToast("5 places imported · 4 without a day yet.", "view");
+        const tr = t.getBoundingClientRect();
+        const sr = txt.getBoundingClientRect();
+        if (sr.left < tr.left - 0.5 || sr.right > tr.right + 0.5) return "the text spills outside the bubble";
+        if (sr.top < tr.top - 0.5 || sr.bottom > tr.bottom + 0.5) return "the text spills above or below the bubble";
+        if (tr.left < -0.5 || tr.right > window.innerWidth + 0.5) return "the toast does not fit the viewport";
+        if (sr.width < 120) return `the text column collapsed to ${Math.round(sr.width)}px`;
+        const view = document.getElementById("toast-view").getBoundingClientRect();
+        if (view.width < 40) return `the action button was squeezed to ${Math.round(view.width)}px`;
+        return eq(getComputedStyle(txt).textAlign, "center", "text is centred");
+      } finally { t.hidden = wasHidden; }
+    });
+
+    /* ---- B: clean start ---- */
+
+    check("no seed document, no fund injection, nobody's name in the chrome", () => {
+      if (typeof SEED_DATA !== "undefined") return "SEED_DATA still defined";
+      if (typeof PENDING_FUND_ADDITIONS !== "undefined") return "PENDING_FUND_ADDITIONS still defined";
+      const e = A.__emptyState();
+      if (e.trips.length || e.items.length || e.currentFunds !== 0) return "emptyState is not empty";
+      if (document.querySelector(".avatar--Itzik")) return "sidebar still wears a hard-coded avatar";
+      const acct = document.getElementById("btn-appbar-account");
+      return acct && /Itzik/.test(acct.title) ? "account button still names a person" : true;
+    });
+
+    const snapshotStore = () => {
+      const out = {};
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); out[k] = localStorage.getItem(k); }
+      return out;
+    };
+    const restoreStore = (snap) => {
+      localStorage.clear();
+      Object.keys(snap).forEach((k) => Storage.prototype.setItem.call(localStorage, k, snap[k]));
+    };
+
+    check("Start fresh empties the device only after a backup is written and read back", () => {
+      const prevState = structuredClone(state);
+      const store = snapshotStore();
+      try {
+        localStorage.removeItem("vacation-budget-backup");
+        const ok = A.__resetDevice({ silent: true });
+        if (ok !== true) return `reset returned ${ok}`;
+        if (state.trips.length !== 0 || state.items.length !== 0) return "state not emptied";
+        const b = A.__pendingBackup();
+        if (!b || b.kind !== "reset") return `backup kind ${b && b.kind}`;
+        const restored = JSON.parse(b.data);
+        if (restored.trips.length !== prevState.trips.length) return "backup does not hold the previous document";
+        document.getElementById("btn-overflow").click();
+        const row = document.querySelector('#dialog-overflow [data-overflow="restore"]');
+        const label = row && !row.hidden ? row.textContent.trim() : "(hidden)";
+        closeDialog(document.getElementById("dialog-overflow"));
+        return /before the reset/.test(label) ? true : `restore row reads ${label}`;
+      } finally { restoreStore(store); state = normalizeState(prevState); render(); }
+    });
+
+    check("a reset backup is offered over older pre-join and pre-import snapshots", () => {
+      const prevState = structuredClone(state);
+      const store = snapshotStore();
+      try {
+        localStorage.removeItem("vacation-budget-backup");
+        localStorage.setItem("vacation-budget-backup-before-join", JSON.stringify({ trips: [] }));
+        localStorage.setItem("vacation-budget-backup-before-import", JSON.stringify({ trips: [] }));
+        if (A.__pendingBackup().kind !== "join") return "legacy join snapshot should be offered while it is the only kind with data";
+        A.__resetDevice({ silent: true });
+        return eq(A.__pendingBackup().kind, "reset", "newest wins");
+      } finally { restoreStore(store); state = normalizeState(prevState); render(); }
+    });
+
+    check("when the backup cannot be written, Start fresh changes nothing", () => {
+      const prevState = structuredClone(state);
+      const store = snapshotStore();
+      const realSet = Storage.prototype.setItem;
+      try {
+        localStorage.removeItem("vacation-budget-backup");
+        Storage.prototype.setItem = () => { const e = new Error("quota"); e.name = "QuotaExceededError"; throw e; };
+        const ok = quietly(() => A.__resetDevice({ silent: true }));
+        Storage.prototype.setItem = realSet;
+        if (ok !== false) return `reset returned ${ok}`;
+        if (state.trips.length !== prevState.trips.length) return "state was emptied without a backup";
+        if (A.__pendingBackup()) return "a half-written backup was left behind";
+        return eq(S.isShared(), false, "room membership unchanged");
+      } finally { Storage.prototype.setItem = realSet; restoreStore(store); state = normalizeState(prevState); render(); }
+    });
+
+    check("restoring any backup leaves the room and forgets its sync base", () => {
+      const src = String(restoreBackup);
+      return ["travelhub-room", "travelhub-sync-base", "travelhub-last-sync"].every((k) => src.includes(`"${k}"`))
+        ? true : "restoreBackup does not clear every room key";
+    });
+
+    check("every screen renders an empty document without throwing", () => {
+      const prevState = structuredClone(state);
+      try {
+        state = normalizeState(A.__emptyState());
+        render();
+        renderItinerary();
+        const trips = document.querySelector("#screen-trips .empty-card, #screen-trips .empty-state, #screen-trips [data-empty]");
+        return trips ? true : "Trips shows no empty state";
+      } catch (err) { return "threw: " + (err && err.message);
+      } finally { state = normalizeState(prevState); render(); }
+    });
+
+    /* ---- C: one expense date ---- */
+
+    check("the expense form has one date, prefilled with today even outside the trip", () => {
+      const form = document.getElementById("form-expense");
+      if (form.querySelector('[name="paidDate"]')) return "paidDate input still in the form";
+      const trip = state.trips[0];
+      if (!trip) return skip("no trip");
+      const meta = getMeta(trip);
+      const today = todayLocalISO();
+      if (meta.startDate && meta.endDate && today >= meta.startDate && today <= meta.endDate) return skip("today falls inside the fixture trip — cannot prove the outside case");
+      openExpenseDialog(trip.id);
+      try { return eq(form.querySelector('[name="date"]').value, today, "date defaults to today"); }
+      finally { closeDialog(document.getElementById("dialog-expense")); }
+    });
+
+    check("normalizeExpense never backfills date from paidDate", () => {
+      const e = normalizeExpense({ id: "x", label: "L", category: "Food", amount: 10, status: "paid", amountPaid: 10, date: "", paidDate: "2026-09-19" });
+      return eq(e.date, "", "date stays empty") === true && eq(e.paidDate, "2026-09-19", "paidDate kept") === true ? true : `date=${e.date} paidDate=${e.paidDate}`;
+    });
+
+    check("editing a paid expense keeps its paidDate; paying an unpaid one stamps today", () => {
+      const trip = state.trips[0];
+      if (!trip) return skip("no trip");
+      const be = trip.expenses.slice();
+      const form = document.getElementById("form-expense");
+      try {
+        const paid = normalizeExpense({ id: "selftest-paid", label: "Old", category: "Food", amount: 50, status: "paid", amountPaid: 50, paidDate: "2026-01-05", date: "2026-01-05" });
+        const open = normalizeExpense({ id: "selftest-open", label: "New", category: "Food", amount: 20, status: "booked", amountPaid: 0, paidDate: "", date: "2026-01-06" });
+        trip.expenses.push(paid, open);
+        openExpenseDialog(trip.id, paid);
+        form.querySelector('[name="label"]').value = "Old, renamed";
+        form.requestSubmit();
+        const after = trip.expenses.find((x) => x.id === "selftest-paid");
+        if (!after || after.paidDate !== "2026-01-05") return `paidDate became ${after && after.paidDate}`;
+        openExpenseDialog(trip.id, open);
+        setExpenseStatus("paid");
+        form.requestSubmit();
+        const nowPaid = trip.expenses.find((x) => x.id === "selftest-open");
+        return eq(nowPaid && nowPaid.paidDate, todayLocalISO(), "stamped today");
+      } finally {
+        if (document.getElementById("dialog-expense").open) closeDialog(document.getElementById("dialog-expense"));
+        trip.expenses = be; saveState(); render();
+      }
+    });
+
+    /* ---- D: bulk import ---- */
+
+    const FULL_URL = "https://www.google.com/maps/place/Louvre+Museum/@48.8606,2.3376,17z/data=!3m1!4b1!4m6!3m5!1s0x47e671d877937b0f:0xb975fcfa192f84d4!8m2!3d48.8606111!4d2.337644!16zL20vMDRnZHI";
+
+    check("parseBulkPlaces: one row per line — place, short link, plain name, and a list link that says why", () => {
+      const rows = A.__parseBulkPlaces(`${FULL_URL}\nhttps://maps.app.goo.gl/AbC12dEf\n\nMusée d'Orsay\nhttps://www.google.com/maps/placelists/list/abc123`);
+      if (rows.length !== 4) return `expected 4 rows, got ${rows.length}`;
+      const r = [
+        eq(rows[0].kind, "place", "full URL"), eq(rows[0].name, "Louvre Museum", "name from URL"), near(rows[0].lat, 48.8606111, 1e-6, "pin lat"),
+        eq(rows[1].kind, "short", "short link"),
+        eq(rows[2].kind, "name", "plain text"), eq(rows[2].name, "Musée d'Orsay", "plain name kept"),
+        eq(rows[3].kind, "list", "list link"), eq(/list link/.test(rows[3].error), true, "list link explains itself"),
+      ].find((x) => x !== true);
+      return r || true;
+    });
+
+    check("an apostrophe in a place name does not truncate the link", () => {
+      /* Real link from QA: maps.app.goo.gl/LgAWWEMNXP8NnXba7 expands to L'Entrecôte de Paris.
+         The extractor used to stop at the apostrophe and call the place "L", with no pin. */
+      const url = "https://www.google.com/maps/place/L'Entrec%C3%B4te+de+Paris/@48.8696162,2.3038845,606m/data=!3m2!1e3!4b1!4m6!3m5!1s0x47e66fc47e425811:0x4dfebe67c8ccb344!8m2!3d48.8696162!4d2.3064594!16s%2Fg%2F1tgw4b5p?authuser=2";
+      const link = extractMapsLink(url);
+      if (link !== url) return "the URL was truncated: " + link;
+      const parsed = parseMapsPaste(url);
+      if (!parsed || parsed.kind !== "place") return `kind ${parsed && parsed.kind}`;
+      const r = [
+        eq(parsed.name, "L'Entrecôte de Paris", "full name"),
+        near(parsed.lat, 48.8696162, 1e-6, "lat"),
+        near(parsed.lng, 2.3064594, 1e-6, "lng"),
+      ].find((x) => x !== true);
+      if (r) return r;
+      const row = A.__parseBulkPlaces(url)[0];
+      if (row.title !== "L'Entrecôte de Paris") return `bulk row title ${row.title}`;
+      // A link someone wrapped in single quotes must still lose the closing one.
+      return eq(extractMapsLink("'" + url + "'"), url, "quoted link trimmed");
+    });
+
+    check("parseBulkPlaces reads an AI's JSON array: titles, notes, days", () => {
+      const rows = A.__parseBulkPlaces(`[{"title":"Louvre","note":"book ahead","date":"2026-09-17"},{"name":"Orsay","url":"${FULL_URL}"},"Sainte-Chapelle"]`);
+      if (rows.length !== 3) return `expected 3 rows, got ${rows.length}`;
+      const r = [
+        eq(rows[0].kind, "name"), eq(rows[0].title, "Louvre"), eq(rows[0].note, "book ahead"), eq(rows[0].date, "2026-09-17", "day carried"),
+        eq(/copy it word for word/.test(A.__aiImportPrompt), true, "the prompt asks for the saved note, not a blurb"),
+        eq(/Never invent a place, a link or a note/.test(A.__aiImportPrompt), true, "the prompt forbids invented notes"),
+        eq(rows[1].kind, "place", "url row parsed"), eq(rows[1].title, "Orsay", "title from JSON wins"),
+        eq(rows[2].kind, "name"), eq(rows[2].title, "Sainte-Chapelle", "bare string row"),
+      ].find((x) => x !== true);
+      return r || true;
+    });
+
+    check("short rows ask /api/expand, never Photon", () => {
+      const realFetch = window.fetch; const calls = [];
+      window.fetch = (url) => { calls.push(String(url)); return new Promise(() => {}); };
+      try {
+        const rows = A.__parseBulkPlaces("https://maps.app.goo.gl/AbC12dEf\nhttps://maps.app.goo.gl/GhI34jKl");
+        A.__expandBulkRows(rows, () => {});
+        if (calls.length !== 2) return `${calls.length} request(s)`;
+        return calls.every((u) => /^\/api\/expand\?url=https%3A%2F%2Fmaps\.app\.goo\.gl%2F/.test(u)) ? true : `unexpected request ${calls[0]}`;
+      } finally { window.fetch = realFetch; }
+    });
+
+    check("importing rows creates places; the undated one sits in Unscheduled, the dated one on its day", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const iso = getMeta(trip).startDate;
+      const bi = state.items.slice(); const bId = itineraryTripId; const bTab = itinerarySubTab;
+      try {
+        const rows = [
+          { kind: "place", title: "Selftest A", name: "Selftest A", lat: 48.86, lng: 2.33, url: FULL_URL, date: iso, note: "" },
+          { kind: "place", title: "Selftest B", name: "Selftest B", lat: 48.87, lng: 2.34, url: "", date: "", note: "later" },
+          { kind: "list", error: "list", title: "", name: "" },
+        ];
+        const created = A.__importBulkRows(trip.id, rows);
+        if (created.length !== 2) return `created ${created.length}`;
+        const b = created.find((i) => i.title === "Selftest B");
+        if (b.date !== "") return "undated row got a date";
+        if (b.notes !== "later") return "note not carried";
+        setItineraryTrip(trip.id); itinerarySubTab = "timeline"; renderItinerary();
+        const fold = document.getElementById("unscheduled");
+        if (!fold || !/1 place/.test(fold.textContent)) return "Unscheduled fold missing or wrong count";
+        if (!fold.querySelector(`[data-item="${b.id}"]`)) return "undated place not in the fold";
+        const a = created.find((i) => i.title === "Selftest A");
+        return document.querySelector(`#day-${iso} [data-item="${a.id}"]`) ? true : "dated place not on its day";
+      } finally { state.items = bi; itineraryTripId = bId; itinerarySubTab = bTab; saveState(); render(); }
+    });
+
+    check("a booking no longer needs a day; giving an unscheduled one a day gives it a fresh position", () => {
+      const form = document.getElementById("form-item");
+      if (form.date.required) return "date is still required";
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const iso = getMeta(trip).startDate;
+      const bi = state.items.slice();
+      try {
+        const it = normalizeItem({ id: "selftest-unsched", tripId: trip.id, type: "attraction", title: "Later", date: "", sortIndex: 99999, location: { name: "" } });
+        state.items.push(it);
+        openItemDialog(trip.id, it);
+        form.date.value = iso;
+        form.requestSubmit();
+        const after = state.items.find((i) => i.id === "selftest-unsched");
+        if (!after) return "item vanished";
+        if (after.date !== iso) return `date ${after.date}`;
+        return after.sortIndex !== 99999 ? true : "the unscheduled ordering leaked into the day";
+      } finally {
+        if (document.getElementById("dialog-item").open) closeDialog(document.getElementById("dialog-item"));
+        state.items = bi; saveState(); render();
+      }
+    });
+
+    check("the Import places dialog opens on the itinerary trip with the copy-prompt button", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const dlg = document.getElementById("dialog-import-places");
+      A.__openImportPlaces(trip.id);
+      try {
+        if (!dlg.open) return "dialog did not open";
+        const pressed = dlg.querySelector('[data-import-trip][aria-pressed="true"]');
+        if (!pressed || pressed.getAttribute("data-import-trip") !== trip.id) return "trip not preselected";
+        if (!document.getElementById("import-copy-prompt")) return "no Copy prompt button";
+        return /JSON array/.test(A.__aiImportPrompt) ? true : "prompt does not ask for JSON";
+      } finally { closeDialog(dlg); }
     });
   }
 
