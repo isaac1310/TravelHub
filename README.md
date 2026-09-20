@@ -74,10 +74,10 @@ expose in client code. Trip data is protected by the per-trip secret embedded
 in each share link. Without `config.js` the app is fully local — no errors, no
 Save button.
 
-**Sharing: one person Shares, everyone else Joins.** These are different actions
-and only the first person does the first one:
+**Sharing: one person creates the room, everyone else Joins.** These are different
+actions and only the first person does the first one:
 
-- **Share my trips** creates a **new** shared space from everything on that device
+- **Create a room** makes a **new** shared space from everything on that device
   and copies a link. Exactly one person, exactly once.
 - **Join a shared trip** connects a device to an existing one — Menu → paste the
   link. Anyone who taps *Share* instead creates a **second, separate room** that
@@ -86,9 +86,19 @@ and only the first person does the first one:
 The link carries a room id and a secret; the app strips them from its own address
 bar once joined, so the secret isn't left on screen or leaked in outbound
 `Referer` headers. Use **Copy share link** when you need it again. You'll be asked
-who you are once per device, so changes are stamped with a name. The Menu shows
-which room you're in (`Shared · 3644ee`) — two devices showing different badges are
-in different rooms, which is the first thing to check if syncing seems broken.
+who you are once per device, so changes are stamped with a name. The room you're in
+(`Shared · 3644ee`) is shown in the app bar on a wide screen and at the top of the ⋯
+menu on a phone — two devices showing different codes are in different rooms, which
+is the first thing to check if syncing seems broken. The badge turns amber when a
+device hasn't synced for a week. **Leave shared trip** (the exit-arrow button, or the
+⋯ menu on a phone) disconnects and keeps your trips on the device.
+
+A device starts **empty**: there is no sample data, so a second family can install
+this and see only their own trips. **⋯ → Start fresh on this device** empties a
+device again — it takes a backup first and refuses to go ahead if that backup can't
+be written, and **Restore** in the same menu brings it back. One device belongs to
+one room at a time; see `design/MULTI-ROOM-PLAN.md` for what switching between
+several would take.
 
 **How syncing behaves:** your edits upload automatically, and incoming changes
 **apply on their own** within about 20 seconds while the tab is open (backgrounded
