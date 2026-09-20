@@ -2319,7 +2319,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </div>
         <label class="field">
           <span class="field__label">Travelers (comma separated)</span>
-          <input type="text" dir="auto" name="travelers" maxlength="200" placeholder="e.g. Itzik, Moran" />
+          <input type="text" dir="auto" name="travelers" maxlength="200" placeholder="e.g. Sam, Alex" />
         </label>
         <!-- Edit only (openTripDialog toggles it): a trip that is not happening drops into Past
              trips whatever its dates say. Its budget and expenses stay in Budget — a deposit
@@ -8831,10 +8831,11 @@ function renderFamily() {
 
   body.innerHTML = `
     <div class="section-head"><div><h2>Who's travelling</h2><p>Your family members and the trips they're on.</p></div></div>
-    <div class="members">${memberCards}</div>
+    ${members.length
+      ? `<div class="members">${memberCards}</div>`
+      : `<div class="empty-card"><h3>No one here yet</h3><p>Family members come from the <strong>Travellers</strong> on your trips — add names there and they appear here, where you can rename or remove them.</p><button type="button" class="btn btn--primary btn--small" id="family-add-trip">${state.trips.length ? "Edit a trip" : "Create your first trip"}</button></div>`}
 
-    <div class="section-head"><h2>Trips by travellers</h2></div>
-    ${tripRows}
+    ${tripRows ? `<div class="section-head"><h2>Trips by travellers</h2></div>${tripRows}` : ""}
 
     <div class="section-head" style="margin-top:1.6rem"><div><h2>Shared checklist</h2><p>Tick things off as you pack — everyone on the trip sees the same list.</p></div></div>
     <div class="card" style="padding:1.1rem 1.3rem">
@@ -8844,6 +8845,13 @@ function renderFamily() {
         <button type="button" class="btn btn--primary" id="checklist-add">Add</button>
       </div>
     </div>`;
+
+  /* The only route to a member is a trip's Travellers field, so send them there rather than
+     leaving a dead end. */
+  $("family-add-trip")?.addEventListener("click", () => {
+    const trip = sortTripsByUpcoming(state.trips)[0];
+    if (trip) openTripDialog(trip); else openTripDialog();
+  });
 
   const input = $("checklist-input");
   const addItem = () => {
