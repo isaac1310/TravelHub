@@ -2419,10 +2419,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <span class="field__label" id="expense-paid-label">Amount paid</span>
           <input type="number" name="amountPaid" min="0" step="0.01" inputmode="decimal" />
         </label>
-        <label class="field" id="expense-paid-date-wrap" hidden>
-          <span class="field__label">Paid date (optional)</span>
-          <input type="date" name="paidDate" />
-        </label>
+        <!-- v2.1.0: no separate "Paid date". One date per expense — the day it belongs to — is
+             what the Budget day chips group by; paidDate lives on as invisible bookkeeping. -->
         <label class="field">
           <!-- "Booking date" was wrong for the common case: on a trip this is the day you
                spent the money, which is what the day filter groups by. -->
@@ -3502,13 +3500,21 @@ function buildExpenseFromForm(form) {
   // Empty is zero — the field no longer starts at "0" (it had to be cleared before typing).
   const paidRaw = expenseFormField(form, "amountPaid").value.trim();
   let amountPaid = Math.min(amount, Math.max(0, paidRaw === "" ? 0 : Number(paidRaw) || 0));
-  let paidDate = expenseFormField(form, "paidDate").value;
+  /* v2.1.0: paidDate is no longer a field. It is carried over from the expense being edited
+     (never rewritten — for older expenses it records the day the card statement was checked)
+     and stamped only when an unpaid expense becomes paid. */
+  const tripId = expenseFormField(form, "tripId").value;
+  const expenseId = expenseFormField(form, "expenseId").value;
+  const existing = expenseId
+    ? state.trips.find((t) => t.id === tripId)?.expenses.find((x) => x.id === expenseId)
+    : null;
+  let paidDate = existing?.paidDate || "";
 
   if (!label || !CATEGORIES.includes(category) || amount <= 0) return null;
 
   if (status === "paid") {
     amountPaid = amount;
-    if (!paidDate) paidDate = todayISO();
+    if (!paidDate) paidDate = todayLocalISO();
   } else {
     amountPaid = Math.min(amount, Math.max(0, amountPaid));
     if (amountPaid >= amount && amount > 0) {
@@ -3535,14 +3541,6 @@ function buildExpenseFromForm(form) {
   return fields;
 }
 
-function syncExpensePaidDateVisibility() {
-  const form = $("form-expense");
-  if (!form) return;
-  const wrap = $("expense-paid-date-wrap");
-  const amountPaid = Number(expenseFormField(form, "amountPaid")?.value) || 0;
-  if (wrap) wrap.hidden = amountPaid <= 0;
-}
-
 /* Set the payment status and reconcile the fields that depend on it. This used to live in the
    form's `input` handler, keyed off `e.target.name === "status"`; a hidden input fires no input
    event when set from script, so the logic moved here and both the buttons and
@@ -3560,17 +3558,13 @@ function setExpenseStatus(value, silent) {
   if (!silent) {
     const amountEl = expenseFormField(form, "amount");
     const paidEl = expenseFormField(form, "amountPaid");
-    const paidDateEl = expenseFormField(form, "paidDate");
     const amount = Number(amountEl?.value) || 0;
     if (value === "paid" && amount > 0) {
       paidEl.value = amount;
-      if (!paidDateEl.value) paidDateEl.value = todayISO();
     } else if (value !== "paid" && Number(paidEl.value) >= amount && amount > 0) {
       paidEl.value = 0;
-      paidDateEl.value = "";
     }
   }
-  syncExpensePaidDateVisibility();
 }
 
 function getYears() {
@@ -4587,33 +4581,26 @@ function openExpenseDialog(tripId, expense = null, defaults = {}) {
     expenseFormField(form, "date").value = normalized.date || "";
     setExpenseStatus(normalized.status, true); // reflect only — the values are already coherent
     expenseFormField(form, "amountPaid").value = normalized.amountPaid;
-    expenseFormField(form, "paidDate").value = normalized.paidDate || "";
     setExpenseCurrency(normalized.currency || HOME_CURRENCY);
   } else {
     setExpenseStatus("booked", true);
     // No default 0 in amountPaid — empty reads as zero and saves a tap to clear it.
     expenseFormField(form, "amountPaid").value = "";
-    expenseFormField(form, "paidDate").value = "";
     if (defaults.label) expenseFormField(form, "label").value = defaults.label;
     if (defaults.category && CATEGORIES.includes(defaults.category)) expenseFormField(form, "category").value = defaults.category;
-    /* Date it TODAY while the trip is running. Of Isaac's 21 Paris expenses only 7 had
-       a date, and all 7 were the ones auto-linked to a booking; everything typed by hand
-       had none, which made "which day did we spend that" unanswerable and a day filter
-       impossible. paidDate is no substitute — 16 of those 21 carry 19 Sept because that
-       is when he reconciled, which describes the bookkeeping rather than the trip.
-       Only inside the trip's own dates: an expense booked months ahead is not "today". */
-    const todayIso = todayLocalISO();
-    const within = trip && getMeta(trip).startDate && getMeta(trip).endDate
-      && todayIso >= getMeta(trip).startDate && todayIso <= getMeta(trip).endDate;
-    if (defaults.date) expenseFormField(form, "date").value = defaults.date;
-    else if (within) expenseFormField(form, "date").value = todayIso;
+    /* Of the first 21 hand-typed expenses only the 7 auto-linked to a booking carried a
+       date, which made "which day did we spend that" unanswerable. paidDate is no
+       substitute — 16 of those 21 carry the day the statement was checked, which describes
+       the bookkeeping rather than the trip.
+       v2.1.0: always today, not only mid-trip — most expenses are typed the day they happen,
+       and today's Budget day chip is where they should land without a second tap. */
+    expenseFormField(form, "date").value = defaults.date || todayLocalISO();
     /* New expenses default to the trip's spend currency — in Paris you are typing
        euros all week and should never have to pick EUR twice. */
     setExpenseCurrency(trip ? trip.spendCurrency : HOME_CURRENCY);
   }
 
   renderSettledLine(trip, normalized);
-  syncExpensePaidDateVisibility();
   syncExpenseEstimate();
   openDialog($("dialog-expense"));
   // Prefilled from a booking: the only thing left to type is the amount.
@@ -5806,7 +5793,6 @@ function bindEvents() {
       if (paid > amount) paidEl.value = amount;
     }
     // Status is a segmented control now; its reconciliation lives in setExpenseStatus.
-    syncExpensePaidDateVisibility();
     if (e.target.name === "amount") syncExpenseEstimate();
   });
 
@@ -5821,10 +5807,6 @@ function bindEvents() {
     $("expense-settled-line").hidden = true;
   });
   $("form-settle").addEventListener("submit", handleSettleSubmit);
-
-  $("form-expense").addEventListener("change", (e) => {
-    if (e.target.form?.id === "form-expense") syncExpensePaidDateVisibility();
-  });
 
   $("trips-list").addEventListener("click", (e) => {
     if (e.target.closest(".btn-mark-paid, .btn-mark-unpaid, .btn-edit-expense, .btn-delete-expense, .btn-settle-expense")) {
