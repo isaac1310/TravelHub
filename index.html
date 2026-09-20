@@ -330,6 +330,11 @@ h1, h2, h3, h4, .brand__name {
 }
 .room-badge::before { content: "●"; color: var(--brand, #ef8e7f); font-size: 0.7em; }
 @media (hover: hover) { .room-badge:hover { background: var(--brand-soft, #fbe4de); } }
+/* v2.1.0: in the app bar the badge is a label, not a button; amber once the device has not
+   synced for a week — the quiet state that let two devices drift apart. */
+.room-badge--appbar { margin: 0; cursor: default; }
+.room-badge--stale { background: #fbf1dd; border-color: #ead9a8; color: #9a6a12; }
+.room-badge--stale::before { color: #d69a1c; }
 
 .app__body { min-width: 0; display: flex; flex-direction: column; }
 
@@ -1588,7 +1593,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .appbar__brand-mobile { display: none; }
         .appbar__eyebrow { display: block; font-size: 0.62rem; letter-spacing: 0.14em; }
         .appbar__title { display: block; font-size: 1.05rem; }
-        #sync-status, #btn-share, #btn-copy-link, #btn-sync-now, #btn-appbar-account { display: none; }
+        #sync-status, #appbar-room, #btn-share, #btn-copy-link, #btn-sync-now, #btn-leave-room, #btn-appbar-account { display: none; }
         /* See setActiveScreen: on Itinerary the FAB already adds a reservation, and two plus
            buttons on one screen with no way to tell them apart is worse than one. */
         #btn-appbar-add[data-duplicate-of-fab="true"] { display: none; }
@@ -1848,6 +1853,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <button type="button" class="icon-btn" id="btn-overflow" aria-label="More options" title="More">
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>
             </button>
+            <!-- v2.1.0: WHICH room, always visible on desktop. Painted by share.js updateRoomChrome();
+                 a sibling of #sync-status on purpose — setSyncStatus rewrites that element wholesale. -->
+            <span class="room-badge room-badge--appbar" id="appbar-room" data-room-identity data-when-shared hidden></span>
             <span class="sync-status" id="sync-status" hidden></span>
             <button type="button" class="icon-btn" id="btn-sync-now" aria-label="Check for family changes" title="Check now — family changes arrive automatically" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14.5 4.6M4 12a8 8 0 0 1 14.5-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M18.5 3.5v4h-4M5.5 20.5v-4h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -1856,7 +1864,10 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <button type="button" class="icon-btn" id="btn-copy-link" aria-label="Copy share link" title="Copy share link" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 14a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1.5 1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 10a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1.5-1.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
             </button>
-            <button type="button" class="icon-btn" id="btn-share" aria-label="Share my trips" title="Share my trips — puts everything on this device into a shared space" hidden>
+            <button type="button" class="icon-btn" id="btn-leave-room" aria-label="Leave shared trip" title="Leave shared trip — your trips stay on this device" hidden>
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M14 17l5-5-5-5M19 12H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" class="icon-btn" id="btn-share" aria-label="Create a room" title="Create a room — puts everything on this device into a shared space" hidden>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 19h9a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 5 9.5 3.5 3.5 0 0 0 6 19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 9v5m0 0-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </button>
             <button type="button" class="icon-btn" id="btn-appbar-add" aria-label="New trip" title="New trip">
@@ -1887,7 +1898,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
                 <strong>These trips are only on this device.</strong>
                 <span>Nothing is backed up or visible to the family until you share them.</span>
               </div>
-              <button type="button" class="btn btn--primary btn--small" id="btn-local-notice-share">Share my trips</button>
+              <button type="button" class="btn btn--primary btn--small" id="btn-local-notice-share">Create a room</button>
               <button type="button" class="icon-btn icon-btn--small" id="btn-local-notice-dismiss" aria-label="Dismiss this reminder" title="Dismiss">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
               </button>
@@ -2063,7 +2074,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <button type="button" class="room-badge" id="btn-room-badge" data-room-identity></button>
         <button type="button" class="sheet-item" data-overflow="save">
           <svg viewBox="0 0 24 24" fill="none"><path d="M6 19h9a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 5 9.5 3.5 3.5 0 0 0 6 19Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 9v5m0 0-2-2m2 2 2-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <span id="overflow-save-label">Share my trips</span>
+          <span id="overflow-save-label">Create a room</span>
         </button>
         <button type="button" class="sheet-item" data-overflow="join">
           <svg viewBox="0 0 24 24" fill="none"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M10 17l5-5-5-5M15 12H3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2591,7 +2602,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.0.0";
+const APP_VERSION = "v2.1.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* Snapshot of this device's data taken just before a shared trip replaced it */
 const PRE_JOIN_BACKUP_KEY = "vacation-budget-backup-before-join";
@@ -8695,7 +8706,7 @@ function bindShellEvents() {
        Not shared → the only real choices are start one or join one.
        Shared     → saving is automatic, so "Save now" is noise; what you actually
                     want is the link, a manual check, or a way out. */
-    $("overflow-save-label").textContent = "Share my trips";
+    $("overflow-save-label").textContent = "Create a room";
     $("overflow-join-label").textContent = shared ? "Switch to a different trip" : "Join a shared trip";
     dlg.querySelector('[data-overflow="save"]').hidden = !sharingConfigured || shared;
     dlg.querySelector('[data-overflow="join"]').hidden = !sharingConfigured;
@@ -8728,7 +8739,7 @@ function bindShellEvents() {
   $("btn-room-badge").addEventListener("click", async () => {
     const id = window.VacationShare?.getRoomId?.();
     const badge = $("btn-room-badge");
-    if (!id) { badge.textContent = "Not shared — tap Share my trips"; return; }
+    if (!id) { badge.textContent = "Not shared — tap Create a room"; return; }
     const original = badge.textContent;
     try { await navigator.clipboard.writeText(id); badge.textContent = "Room id copied"; }
     catch { badge.textContent = id; }
