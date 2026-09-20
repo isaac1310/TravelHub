@@ -4838,8 +4838,10 @@
       if (rows.length !== 3) return `expected 3 rows, got ${rows.length}`;
       const r = [
         eq(rows[0].kind, "name"), eq(rows[0].title, "Louvre"), eq(rows[0].note, "book ahead"), eq(rows[0].date, "2026-09-17", "day carried"),
-        eq(/copy it word for word/.test(A.__aiImportPrompt), true, "the prompt asks for the saved note, not a blurb"),
-        eq(/Never invent a place, a link or a note/.test(A.__aiImportPrompt), true, "the prompt forbids invented notes"),
+        eq(/word for word/.test(A.__aiImportPrompt), true, "the prompt asks for the saved note, not a blurb"),
+        eq(/Never invent a place or a link/.test(A.__aiImportPrompt), true, "the prompt forbids invented places"),
+        eq(/nothing else. Do not add suggestions of your own/.test(A.__aiImportPrompt), true, "the prompt rules out extra suggestions"),
+        eq(/agreed on in this chat/.test(A.__aiImportPrompt), true, "the prompt also covers a list planned in conversation"),
         eq(rows[1].kind, "place", "url row parsed"), eq(rows[1].title, "Orsay", "title from JSON wins"),
         eq(rows[2].kind, "name"), eq(rows[2].title, "Sainte-Chapelle", "bare string row"),
       ].find((x) => x !== true);
