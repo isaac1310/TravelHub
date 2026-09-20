@@ -2662,11 +2662,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <label class="field">
           <span class="field__label">Google Maps links, one per line — or JSON from an AI</span>
           <textarea name="links" rows="4" dir="auto" placeholder="https://maps.app.goo.gl/…&#10;https://maps.app.goo.gl/…&#10;or  [{&quot;title&quot;: &quot;Louvre&quot;, &quot;note&quot;: &quot;book ahead&quot;}, …]"></textarea>
-          <span class="field__hint">In Google Maps open the place → Share → Copy link. A whole list can't be shared to another app — share the places inside it, or show the list to an AI and paste the JSON it returns.</span>
+          <span class="field__hint">In Google Maps open the place → Share → Copy link. A whole list can't be shared to another app — share the places inside it, or get the list from an AI (a screenshot of it, or one you planned together) and paste the JSON it returns.</span>
         </label>
         <div class="field">
           <button type="button" class="btn btn--small btn--outline" id="import-copy-prompt">Copy prompt for AI</button>
-          <span class="field__hint" id="import-copy-prompt-hint">Paste it with a screenshot of your list (or the place names) into ChatGPT / Claude, then paste the JSON above.</span>
+          <span class="field__hint" id="import-copy-prompt-hint">Paste it into ChatGPT / Claude with a screenshot of your list — or at the end of a chat where you worked out where to go — then paste the JSON it returns into the box above.</span>
         </div>
         <div class="import-rows" id="import-rows" aria-live="polite"></div>
         <div class="dialog__actions">
@@ -2680,7 +2680,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.1.0";
+const APP_VERSION = "v2.1.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
    other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
@@ -5341,16 +5341,22 @@ function parseBulkJson(src) {
   });
 }
 
-/* The note matters as much as the name: a Maps saved list carries the note YOU wrote under
-   each place ("book the rooftop", "closed Mondays"), and that is the part worth keeping.
-   The instruction has to say "copy it" rather than "anything useful", or a model writes its
-   own guidebook blurb instead. */
-const AI_IMPORT_PROMPT = `Here is a Google Maps saved list (a screenshot, or just the place names). Return ONLY a JSON array, no prose, one object per place:
-[{"title": "Place name", "address": "street, city (if visible)", "note": "the note saved under this place in the list — copy it word for word; empty string if it has none", "url": "the place's google.com/maps link if you have it, else omit", "date": "YYYY-MM-DD if I told you which day, else empty string"}]
+/* Two ways people arrive here, and the prompt has to serve both: copying a Maps saved list
+   (where the note YOU wrote under each place is the part worth keeping, so it must say "copy
+   it" or a model writes its own guidebook blurb), and a list worked out in conversation with
+   the AI (where "never invent a place" would contradict what just happened). The shared rule
+   is the useful one: nothing that is not already on the list or agreed in the chat. */
+const AI_IMPORT_PROMPT = `Turn our list of places into JSON I can import into my trip planner.
+The list is either the Google Maps list I am showing you (a screenshot, or just the names), or the places we agreed on in this chat.
+
+Return ONLY a JSON array, no prose, one object per place:
+[{"title": "Place name", "address": "street, city — if you know it", "note": "the note saved on the place, or one short line of what we said about it; empty string if there is nothing", "url": "its google.com/maps link if you have one, else omit", "date": "YYYY-MM-DD if we agreed a day for it, else empty string"}]
+
 Rules:
-- Copy the names AND the notes exactly as they appear, in their original language.
-- Include every place in the list, in the order shown.
-- Never invent a place, a link or a note. An empty note is better than a guessed one.`;
+- Include every place we listed, in the order we listed them — and nothing else. Do not add suggestions of your own.
+- If you are copying a saved list, copy the names and the notes word for word, in their original language.
+- Keep each note to one short line.
+- Never invent a place or a link.`;
 
 function bulkRowFromLink(link, title, note) {
   const row = { title: title || "", note: note || "", url: link || "", kind: null, name: "", lat: null, lng: null, status: "", error: "", date: "" };
