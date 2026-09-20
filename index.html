@@ -1625,6 +1625,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         .sync-chip--ok { background: #e4f4ea; color: #1f7a44; border-color: #cfe8dd; }
         .sync-chip--busy { background: #fbf1dd; color: #9a6a12; border-color: #f0ddb8; }
         .sync-chip--error { background: var(--danger-bg); color: var(--danger-text); border-color: #f4cfca; }
+        /* Not synced for a week. Amber on the chip itself, because the phone has no hover and
+           the sheet badge is behind a tap. */
+        .sync-chip--stale { background: #fbf1dd; color: #9a6a12; border-color: #ead9a8; }
+        .sync-chip__room { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+        .sync-chip__room[hidden] { display: none; }
         .sync-chip__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--brand); flex: none; }
         .sync-chip__dot[hidden] { display: none; }
         .sync-chip[hidden] { display: none; }
@@ -1867,6 +1872,9 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <div class="appbar__actions">
             <button type="button" class="sync-chip" id="sync-chip" hidden aria-label="Sync now" title="Sync now">
               <span class="sync-chip__dot" id="sync-chip-dot" hidden></span>
+              <!-- v2.1.0: the room code, on the phone, without opening a menu. The desktop pill
+                   is display:none here, and a title tooltip does not exist on a touch device. -->
+              <span class="sync-chip__room" id="sync-chip-room" hidden></span>
               <span id="sync-chip-text">✓</span>
             </button>
             <button type="button" class="icon-btn" id="btn-overflow" aria-label="More options" title="More">
@@ -2087,6 +2095,8 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       <div style="padding: 0.9rem 1.2rem 0.4rem">
         <h3 class="dialog__title" id="overflow-title" style="margin-bottom:0.4rem">Menu</h3>
         <p class="dialog__hint" id="overflow-device" style="margin-bottom:0.2rem"></p>
+        <!-- v2.1.0: spelled out rather than hidden in a title — a phone cannot hover. -->
+        <p class="dialog__hint" id="overflow-sync-age" style="margin-bottom:0.2rem" hidden></p>
         <!-- Which room this device is in, where you'd actually look for it.
              Tap to copy the full id — the short form is for comparing two devices
              at a glance, the full one for matching against the database. -->
@@ -3468,7 +3478,7 @@ function saveState() {
 
 /* State init lives here — after every const it depends on (TRIP_META,
    ITEM_TYPES…) is initialized, so loadState
-   never hits a temporal-dead-zone error and silently falls back to seed. */
+   never hits a temporal-dead-zone error and silently falls back to an empty document. */
 let state = loadState();
 let selectedYear = "all";
 

@@ -4612,6 +4612,35 @@
       }
     });
 
+    /* ---- A2: the same three facts on the phone, where there is no hover ---- */
+
+    check("the phone chip carries the room code, not just a tick", () => {
+      const chip = document.getElementById("sync-chip");
+      const room = document.getElementById("sync-chip-room");
+      if (!chip || !room) return "#sync-chip-room missing";
+      if (!room.hidden) return "room code shown while this device is local";
+      if (!laidOut) return skip("viewport not laid out");
+      if (window.innerWidth > 900) return skip("desktop layout — the app-bar pill carries the room here");
+      return getComputedStyle(chip).display !== "none" ? true : "the chip is hidden at phone width";
+    });
+
+    check("nothing about the room hides in a tooltip on a touch device", () => {
+      /* A phone cannot hover, so the age has to be real text somewhere reachable. */
+      const line = document.getElementById("overflow-sync-age");
+      if (!line) return "#overflow-sync-age missing";
+      if (!line.hidden) return "sync age shown while local";
+      const chip = document.getElementById("sync-chip");
+      return chip && chip.getAttribute("aria-label") ? true : "the chip has no aria-label for screen readers";
+    });
+
+    check("one painter owns the chip, so a status update cannot wipe the room off it", () => {
+      /* The mistake #sync-status already made: two writers, one className. */
+      const src = String(window.VacationShare._paintChip || "");
+      if (!src) return "VacationShare._paintChip not exposed";
+      return /sync-chip--stale/.test(src) && /sync-chip-room/.test(src)
+        ? true : "paintChip does not own both the room code and the stale state";
+    });
+
     /* ---- B: clean start ---- */
 
     check("no seed document, no fund injection, nobody's name in the chrome", () => {

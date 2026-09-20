@@ -45,20 +45,43 @@
   }
 
   /* Mobile chip mirrors the status pill in compact form. */
+  /* The chip is the phone's whole sync chrome: the desktop pill and room badge are
+     display:none below 900px. Status and room identity are written by different callers at
+     different times, so both go through one painter — writing className from two places is
+     exactly how #sync-status came to clobber anything added to it. */
+  let chipType = "";
+  let chipText = "";
   function setChip(text, type) {
+    chipType = type || "";
+    chipText = text || "";
+    paintChip();
+  }
+  function paintChip() {
     const chip = document.getElementById("sync-chip");
     if (!chip) return;
     chip.hidden = false;
     const label = document.getElementById("sync-chip-text");
     if (label) {
       label.textContent =
-        type === "ok" ? "✓" :
-        type === "busy" ? "…" :
-        type === "error" ? "!" :
-        type === "pending" ? "↻" : "✓";
+        chipType === "ok" ? "✓" :
+        chipType === "busy" ? "…" :
+        chipType === "error" ? "!" :
+        chipType === "pending" ? "↻" : "✓";
     }
-    chip.className = "sync-chip" + (type ? ` sync-chip--${type}` : "");
-    chip.title = text || "Sync now";
+    const stale = sharedMode && isStale(lastSyncAt);
+    const room = document.getElementById("sync-chip-room");
+    if (room) {
+      room.hidden = !sharedMode;
+      room.textContent = sharedMode ? shortRoom(roomId) : "";
+    }
+    chip.className = "sync-chip"
+      + (chipType ? ` sync-chip--${chipType}` : "")
+      + (stale ? " sync-chip--stale" : "");
+    const age = syncAgeLabel(lastSyncAt);
+    chip.title = sharedMode ? `${chipText || "Sync now"} · room ${shortRoom(roomId)} · last synced ${age}` : (chipText || "Sync now");
+    chip.setAttribute("aria-label", sharedMode
+      ? `Sync now. Room ${shortRoom(roomId)}, last synced ${age}${stale ? " — not synced for over a week" : ""}`
+      : "Sync now");
   }
 
   let statusClearTimer = null;
@@ -875,8 +898,14 @@
         : "Not shared — only on this device";
       el.classList.toggle("room-badge--stale", stale);
     });
-    const chip = document.getElementById("sync-chip");
-    if (chip && sharedMode) chip.title = `Room ${shortRoom(roomId)} · last synced ${age}`;
+    paintChip(); // the phone's copy of all of the above
+    const ageLine = document.getElementById("overflow-sync-age");
+    if (ageLine) {
+      ageLine.hidden = !sharedMode;
+      ageLine.textContent = sharedMode
+        ? (stale ? `⚠️ Last synced ${age} — open the app on your other device, or tap Sync now.` : `Last synced ${age}`)
+        : "";
+    }
     document.querySelectorAll("[data-when-shared]").forEach((el) => { el.hidden = !sharedMode; });
     document.querySelectorAll("[data-when-local]").forEach((el) => { el.hidden = sharedMode; });
   }
@@ -1010,6 +1039,7 @@
     _syncAgeLabel: syncAgeLabel,
     _isStale: isStale,
     _noteSynced: noteSynced,
+    _paintChip: paintChip,
     _staleAfterMs: STALE_AFTER_MS,
   };
 

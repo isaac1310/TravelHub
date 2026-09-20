@@ -56,9 +56,18 @@ The whole point: your brother installs this and sees **nothing of yours**.
 - **Expect:** a pill reading **Shared · <6 chars>** next to the sync controls, and a new
   **exit-arrow** button beside Sync / Copy link. ☐
 - **Expect:** hovering the pill shows `… · last synced <age>`. ☐
-2.2 📱 Phone: ⋯ menu.
-- **Expect:** the badge at the top shows the **same six characters** as the Mac. If they differ,
-  the two devices are in different rooms — which is exactly what this release surfaces. ☐
+2.2 📱 **Phone — this is the device that drifted, so it matters most.** Look at the app bar
+without opening anything.
+- **Expect:** the sync chip shows the **room code** beside the tick (`a3f9c1 ✓`). Compare it with
+  the Mac's pill at a glance — that is the whole point. ☐
+- **Expect:** it fits on one line at your phone's width with the ⋯ and + buttons, no squashing
+  and no horizontal scroll. ☐
+2.2b 📱 ⋯ menu on the phone.
+- **Expect:** the badge shows the same code, and underneath it a line in words: *Last synced 3m
+  ago* — not hidden in a tooltip, since a phone cannot hover. ☐
+- **Expect:** **Leave shared trip**, **Start fresh on this device**, **Import places from Maps**
+  and **Restore** are all present here. Every new action in this release must be reachable from
+  the phone. ☐
 2.3 Narrow the Mac window below 900px.
 - **Expect:** the pill and the exit button disappear (the ⋯ sheet owns leaving on phones); the ⋯
   button is present at **both** widths now. ☐
@@ -69,11 +78,14 @@ The whole point: your brother installs this and sees **nothing of yours**.
 - **Expect:** status reads *"Not shared — this device only"*, the pill and the exit button go,
   and **every trip is still there**. ☐
 - **Expect:** rejoining with the link works and the pill comes back. ☐
-2.6 Staleness: in the console run
+2.6 Staleness (do this **on the phone** too — Chrome on Android → ⋮ → the address bar works, or
+just let it sit): in the console run
   `localStorage.setItem('travelhub-last-sync', String(Date.now() - 9*24*3600*1000))` then
   `VacationShare.refreshChrome()`.
-- **Expect:** the pill turns **amber**, tooltip says `9d ago`. ☐
-- **Expect:** pressing **Sync now** clears the amber immediately. ☐
+- **Expect:** the Mac pill turns **amber**, tooltip says `9d ago`. ☐
+- 📱 **Expect:** the phone's chip turns **amber** too, and the ⋯ menu spells out *⚠️ Last synced
+  9d ago — open the app on your other device, or tap Sync now.* ☐
+- **Expect:** tapping the chip (Sync now) clears the amber immediately on both. ☐
 
 ---
 
