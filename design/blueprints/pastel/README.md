@@ -2,7 +2,7 @@
 
 Open `index.html` to browse the collection and expand the original blueprint comparison beneath each destination.
 
-This alternative contains 18 destination paintings plus a generic fallback, keyed to the existing `../blueprints.json` catalog. The original SVGs and live application are preserved so the new direction can be reviewed as a complete collection.
+This alternative contains 19 destination paintings plus a generic fallback. Milano is an additional pastel-only destination; the other entries are keyed to the existing `../blueprints.json` catalog. The original SVGs and live application are preserved so the new direction can be reviewed as a complete collection.
 
 ## Art direction
 

@@ -6443,6 +6443,14 @@ const MONUMENTS = {
         78h10 M28 88h152`,
   },
   /* Generic skyline — fallback for unmapped destinations */
+  /* Milano — Duomo di Milano · Galleria Vittorio Emanuele II */
+  milano: {
+    fg: `M99 45l3-27 3 27 M102 18v-4 M74 88V66h56v22 M74 66l28-22 28 22 M97 88V76a5 5 0 0 1 10 0v12
+        M98 58a4 4 0 1 0 8 0 4 4 0 1 0-8 0 M82 66V56l3-5 3 5v10 M116 66V56l3-5 3 5v10 M74 72h56`,
+    bg: `M34 88V70h24v18 M34 70l12-7 12 7 M40 88V78a6 6 0 0 1 12 0v10 M154 88v-14h16v14 M154 74h16
+        M158 80h8 M26 88h160`,
+  },
+
   generic: {
     fg: `M88 88v-46h18v46 M94 52h6 M94 64h6`,
     bg: `M52 88v-22h16v22 M72 88v-34h14v34 M110 88v-30h14v30 M128 88v-20h16v20 M76 62h6 M114 66h6 M56
@@ -6463,6 +6471,7 @@ const MONUMENT_ALIASES = {
   budapest: ["budapest"], berlin: ["berlin"],
   lisbon: ["lisbon", "lisboa"], madrid: ["madrid"],
   tokyo: ["tokyo", "tōkyō"], bangkok: ["bangkok", "krung thep"],
+  milano: ["milan", "milano", "mailand"],
 };
 
 function monumentFor(trip) {
