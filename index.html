@@ -248,6 +248,9 @@ h1, h2, h3, h4, .brand__name {
   font-weight: 700; font-size: 0.85rem; color: var(--heading);
   font-family: "Poppins", sans-serif;
   box-shadow: 0 0 0 2px var(--surface);
+  /* v2.1.0: a default fill. The three named colours below cover one family; anyone else's
+     initial used to sit on a transparent circle. */
+  background: #e3cdbf;
 }
 .avatar--me { background: var(--brand, #ef8e7f); }
 .avatar--Itzik { background: #ef8e7f; }
@@ -2636,7 +2639,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </div>
         <label class="field">
           <span class="field__label">Google Maps links, one per line — or JSON from an AI</span>
-          <textarea name="links" rows="4" dir="ltr" placeholder="https://maps.app.goo.gl/…&#10;https://maps.app.goo.gl/…&#10;or  [{&quot;title&quot;: &quot;Louvre&quot;, &quot;note&quot;: &quot;book ahead&quot;}, …]"></textarea>
+          <textarea name="links" rows="4" dir="auto" placeholder="https://maps.app.goo.gl/…&#10;https://maps.app.goo.gl/…&#10;or  [{&quot;title&quot;: &quot;Louvre&quot;, &quot;note&quot;: &quot;book ahead&quot;}, …]"></textarea>
           <span class="field__hint">In Google Maps open the place → Share → Copy link. A whole list can't be shared to another app — share the places inside it, upload the list's Takeout CSV, or show the list to an AI and paste the JSON it returns.</span>
         </label>
         <div class="field">
@@ -7529,7 +7532,9 @@ function itemCard({ item, checkout }, stopNo) {
     subParts.push(ltr(`${item.departAirport} → ${item.arrivalAirport}`));
   }
   if (item.type === "flight" && item.flightNo) subParts.push(ltr(item.flightNo));
-  if (!checkout && item.location.name && item.type !== "flight") subParts.push(escapeHtml(item.location.name));
+  /* v2.1.0: an imported place is named after its location, so printing both put the same
+     string on two lines. */
+  if (!checkout && item.location.name && item.type !== "flight" && item.location.name !== title) subParts.push(escapeHtml(item.location.name));
   if (item.confirmation) subParts.push(`Conf: ${ltr(item.confirmation)}`);
   if (item.notes) subParts.push(escapeHtml(item.notes));
   const time = checkout ? item.endTime || "" : fmtTimeRange(item);
@@ -9456,6 +9461,7 @@ window.VacationApp = {
   __aiImportPrompt: AI_IMPORT_PROMPT,
   __parseTakeoutCsv: parseTakeoutCsv,
   __importBulkRows: importBulkRows,
+  __expandBulkRows: expandBulkRows,
   __openImportPlaces: openImportPlacesDialog,
   __unscheduledItems: unscheduledItems,
   __resetDevice: resetDevice,
