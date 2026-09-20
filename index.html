@@ -5179,9 +5179,18 @@ function stripMapsNoise(text) {
 
 function extractMapsLink(text) {
   const t = stripMapsNoise(text);
-  const re = /https?:\/\/(?:maps\.app\.goo\.gl\/|goo\.gl\/maps\/|g\.co\/(?:maps\/)?|(?:www\.)?google\.[a-z.]+\/maps(?:\/|\?)|maps\.google\.[a-z.]+\/)[^\s<>"'）)\]]*/gi;
-  let m, last = "";
-  while ((m = re.exec(t))) last = m[0];
+  /* The apostrophe is IN the class of characters a Maps URL may contain, not outside it:
+     Google does not percent-encode it in a place name, so excluding it truncated
+     `…/maps/place/L'Entrecôte+de+Paris/@48.87,2.30…` to `…/maps/place/L` — a one-letter
+     name and no pin. It was excluded to cope with a link wrapped in quotes, which is
+     handled below by looking at what sits immediately before the match instead. */
+  const re = /https?:\/\/(?:maps\.app\.goo\.gl\/|goo\.gl\/maps\/|g\.co\/(?:maps\/)?|(?:www\.)?google\.[a-z.]+\/maps(?:\/|\?)|maps\.google\.[a-z.]+\/)[^\s<>"）)\]]*/gi;
+  let m, last = "", openedWithQuote = false;
+  while ((m = re.exec(t))) {
+    last = m[0];
+    openedWithQuote = t[m.index - 1] === "'";
+  }
+  if (openedWithQuote) last = last.replace(/'+$/, "");
   if (!last) {
     const bare = t.match(/(?:^|\s)((?:maps\.app\.goo\.gl|goo\.gl\/maps)\/[^\s<>"']+)/i);
     if (bare) last = "https://" + bare[1];

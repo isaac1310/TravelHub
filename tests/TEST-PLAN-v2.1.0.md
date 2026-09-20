@@ -136,6 +136,11 @@ Import places from Maps).
 5.2 Paste **five** share links, one per line — include one `maps.app.goo.gl` short link.
 - **Expect:** a row per line; the short one briefly says *Opening short link…* then resolves to a
   name, most rows show **✓ Pin found**. ☐
+5.2b Paste a place whose name has an **apostrophe** — `https://maps.app.goo.gl/LgAWWEMNXP8NnXba7`
+(L'Entrecôte de Paris).
+- **Expect:** the full name and **✓ Pin found**. It used to come through as a place called
+  "L" with no pin, in the ordinary single-place paste too — anything like L'As du Fallafel
+  or L'Avenue hit it. ☐
 5.3 Paste a **saved-list** link (the one for a whole list).
 - **Expect:** that row explains it is a list link and what to do instead — not a silent failure
   and not a bogus place. ☐

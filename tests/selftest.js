@@ -4791,6 +4791,26 @@
       return r || true;
     });
 
+    check("an apostrophe in a place name does not truncate the link", () => {
+      /* Real link from QA: maps.app.goo.gl/LgAWWEMNXP8NnXba7 expands to L'Entrecôte de Paris.
+         The extractor used to stop at the apostrophe and call the place "L", with no pin. */
+      const url = "https://www.google.com/maps/place/L'Entrec%C3%B4te+de+Paris/@48.8696162,2.3038845,606m/data=!3m2!1e3!4b1!4m6!3m5!1s0x47e66fc47e425811:0x4dfebe67c8ccb344!8m2!3d48.8696162!4d2.3064594!16s%2Fg%2F1tgw4b5p?authuser=2";
+      const link = extractMapsLink(url);
+      if (link !== url) return "the URL was truncated: " + link;
+      const parsed = parseMapsPaste(url);
+      if (!parsed || parsed.kind !== "place") return `kind ${parsed && parsed.kind}`;
+      const r = [
+        eq(parsed.name, "L'Entrecôte de Paris", "full name"),
+        near(parsed.lat, 48.8696162, 1e-6, "lat"),
+        near(parsed.lng, 2.3064594, 1e-6, "lng"),
+      ].find((x) => x !== true);
+      if (r) return r;
+      const row = A.__parseBulkPlaces(url)[0];
+      if (row.title !== "L'Entrecôte de Paris") return `bulk row title ${row.title}`;
+      // A link someone wrapped in single quotes must still lose the closing one.
+      return eq(extractMapsLink("'" + url + "'"), url, "quoted link trimmed");
+    });
+
     check("parseBulkPlaces reads an AI's JSON array: titles, notes, days", () => {
       const rows = A.__parseBulkPlaces(`[{"title":"Louvre","note":"book ahead","date":"2026-09-17"},{"name":"Orsay","url":"${FULL_URL}"},"Sainte-Chapelle"]`);
       if (rows.length !== 3) return `expected 3 rows, got ${rows.length}`;
