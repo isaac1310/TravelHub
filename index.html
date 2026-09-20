@@ -1445,6 +1445,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .import-row input[type="text"] { grid-column: 1; min-width: 0; }
 .import-row input[type="date"] { font-size: 0.8rem; padding: 0.3rem 0.4rem; }
 .import-row__status { grid-column: 1 / -1; font-size: 0.75rem; color: var(--muted, #8a7a70); }
+.import-row__note { display: block; color: var(--ink, #3b2b26); font-style: italic; }
 .import-row--ok .import-row__status { color: #1f7a44; }
 .import-row--bad { opacity: 0.85; }
 .import-row--bad .import-row__status { color: #c0392b; }
@@ -2659,6 +2660,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         <label class="field">
           <span class="field__label">…or a Google Takeout “Saved” CSV</span>
           <input type="file" name="csv" accept=".csv,text/csv" />
+          <span class="field__hint">takeout.google.com → Deselect all → tick <strong>Saved</strong> → Export. The zip holds one CSV per list, with your notes.</span>
         </label>
         <div class="import-rows" id="import-rows" aria-live="polite"></div>
         <div class="dialog__actions">
@@ -5333,9 +5335,16 @@ function parseBulkJson(src) {
   });
 }
 
-const AI_IMPORT_PROMPT = `Here is a Google Maps saved list (screenshot or names). Return ONLY a JSON array, no prose, one object per place:
-[{"title": "Place name", "address": "street, city (if visible)", "note": "anything useful, or empty", "url": "the place's google.com/maps link if you have it, else omit", "date": "YYYY-MM-DD if I said which day, else empty"}]
-Keep the names exactly as written. Do not invent places or links.`;
+/* The note matters as much as the name: a Maps saved list carries the note YOU wrote under
+   each place ("book the rooftop", "closed Mondays"), and that is the part worth keeping.
+   The instruction has to say "copy it" rather than "anything useful", or a model writes its
+   own guidebook blurb instead. */
+const AI_IMPORT_PROMPT = `Here is a Google Maps saved list (a screenshot, or just the place names). Return ONLY a JSON array, no prose, one object per place:
+[{"title": "Place name", "address": "street, city (if visible)", "note": "the note saved under this place in the list — copy it word for word; empty string if it has none", "url": "the place's google.com/maps link if you have it, else omit", "date": "YYYY-MM-DD if I told you which day, else empty string"}]
+Rules:
+- Copy the names AND the notes exactly as they appear, in their original language.
+- Include every place in the list, in the order shown.
+- Never invent a place, a link or a note. An empty note is better than a guessed one.`;
 
 function bulkRowFromLink(link, title, note) {
   const row = { title: title || "", note: note || "", url: link || "", kind: null, name: "", lat: null, lng: null, status: "", error: "", date: "" };
@@ -5502,12 +5511,13 @@ function renderBulkRows() {
       : row.status ? escapeHtml(row.status)
       : row.lat != null ? `✓ Pin found${row.name ? " · " + escapeHtml(row.name) : ""}`
       : ok ? "Name only — the pin will be found after import" : "";
+    const note = row.note ? `<span class="import-row__note">“${escapeHtml(row.note)}”</span>` : "";
     return `
       <div class="import-row ${row.error ? "import-row--bad" : ok ? "import-row--ok" : ""}" data-row="${i}">
         <input type="text" dir="auto" maxlength="120" data-row-title="${i}" value="${escapeHtml(row.title || row.name || "")}" placeholder="Name" ${row.error ? "disabled" : ""} />
         <input type="date" data-row-date="${i}" value="${escapeHtml(row.date || "")}" min="${min}" max="${max}" title="Day (leave empty to decide later)" ${row.error ? "disabled" : ""} />
         <button type="button" class="icon-btn icon-btn--stop" data-row-remove="${i}" aria-label="Remove this row" title="Remove"><svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-        <span class="import-row__status">${status}</span>
+        <span class="import-row__status">${status}${note}</span>
       </div>`;
   }).join("");
   wrap.querySelectorAll("[data-row-title]").forEach((el) => el.addEventListener("input", () => { bulkRows[Number(el.getAttribute("data-row-title"))].title = el.value; }));
