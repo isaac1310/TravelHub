@@ -5433,6 +5433,22 @@
       return true;
     });
 
+    check("unknown European cities use their country painting before generic", () => {
+      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
+      const expected = [
+        ["Reykjavik, Iceland", "country/iceland.jpg"],
+        ["Ghent, Belgium", "country/belgium.jpg"],
+        ["Alba, Italy", "alba.jpg"],
+        ["Nowhere, Atlantis", "generic.jpg"],
+      ];
+      for (const [destination, file] of expected) {
+        if (coverFileFor(t(destination)) !== file) {
+          return `${destination} resolved to ${coverFileFor(t(destination))}, not ${file}`;
+        }
+      }
+      return true;
+    });
+
     check("a missing painting falls back to the line art instead of a hole", () => {
       /* An unbuilt cover must degrade to exactly what v1.15.3 shipped: the blueprint,
          the plain gradient, no empty box and no doubled scrim. */

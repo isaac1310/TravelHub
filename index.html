@@ -2680,7 +2680,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.1.1";
+const APP_VERSION = "v2.2.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
    other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
@@ -6440,7 +6440,202 @@ const MONUMENT_ALIASES = {
   budapest: ["budapest"], berlin: ["berlin"],
   lisbon: ["lisbon", "lisboa"], madrid: ["madrid"],
   tokyo: ["tokyo", "tōkyō"], bangkok: ["bangkok", "krung thep"],
-  milano: ["milan", "milano", "mailand"],
+  milano: ["milan", "milano", "mailand"], alba: ["alba"],
+};
+
+/* Country paintings are the second-level fallback for cities without their own art.
+   City aliases remain first so "Paris, France" keeps the Paris composition. */
+const COUNTRY_COVER_ALIASES = {
+  albania: [
+    "albania",
+    "shqipëri"
+  ],
+  andorra: [
+    "andorra"
+  ],
+  armenia: [
+    "armenia"
+  ],
+  austria: [
+    "austria",
+    "österreich"
+  ],
+  azerbaijan: [
+    "azerbaijan"
+  ],
+  belarus: [
+    "belarus"
+  ],
+  belgium: [
+    "belgium",
+    "belgië",
+    "belgique"
+  ],
+  "bosnia-herzegovina": [
+    "bosnia and herzegovina",
+    "bosnia",
+    "herzegovina"
+  ],
+  bulgaria: [
+    "bulgaria"
+  ],
+  croatia: [
+    "croatia",
+    "hrvatska"
+  ],
+  cyprus: [
+    "cyprus"
+  ],
+  czechia: [
+    "czechia",
+    "czech republic",
+    "česko"
+  ],
+  denmark: [
+    "denmark",
+    "danmark"
+  ],
+  estonia: [
+    "estonia",
+    "eesti"
+  ],
+  finland: [
+    "finland",
+    "suomi"
+  ],
+  france: [
+    "france"
+  ],
+  georgia: [
+    "georgia"
+  ],
+  germany: [
+    "germany",
+    "deutschland"
+  ],
+  greece: [
+    "greece",
+    "hellas"
+  ],
+  hungary: [
+    "hungary",
+    "magyarország"
+  ],
+  iceland: [
+    "iceland",
+    "ísland"
+  ],
+  ireland: [
+    "ireland",
+    "éire"
+  ],
+  italy: [
+    "italy",
+    "italia"
+  ],
+  kazakhstan: [
+    "kazakhstan"
+  ],
+  kosovo: [
+    "kosovo"
+  ],
+  latvia: [
+    "latvia",
+    "latvija"
+  ],
+  liechtenstein: [
+    "liechtenstein"
+  ],
+  lithuania: [
+    "lithuania",
+    "lietuva"
+  ],
+  luxembourg: [
+    "luxembourg"
+  ],
+  malta: [
+    "malta"
+  ],
+  moldova: [
+    "moldova"
+  ],
+  monaco: [
+    "monaco"
+  ],
+  montenegro: [
+    "montenegro"
+  ],
+  netherlands: [
+    "netherlands",
+    "holland"
+  ],
+  "north-macedonia": [
+    "north macedonia",
+    "macedonia"
+  ],
+  norway: [
+    "norway",
+    "norge"
+  ],
+  poland: [
+    "poland",
+    "polska"
+  ],
+  portugal: [
+    "portugal"
+  ],
+  romania: [
+    "romania"
+  ],
+  russia: [
+    "russia"
+  ],
+  "san-marino": [
+    "san marino"
+  ],
+  serbia: [
+    "serbia"
+  ],
+  slovakia: [
+    "slovakia",
+    "slovensko"
+  ],
+  slovenia: [
+    "slovenia"
+  ],
+  spain: [
+    "spain",
+    "españa"
+  ],
+  sweden: [
+    "sweden",
+    "sverige"
+  ],
+  switzerland: [
+    "switzerland",
+    "schweiz",
+    "suisse",
+    "svizzera"
+  ],
+  turkey: [
+    "turkey",
+    "türkiye"
+  ],
+  ukraine: [
+    "ukraine"
+  ],
+  "united-kingdom": [
+    "united kingdom",
+    "great britain",
+    "england",
+    "scotland",
+    "wales",
+    "northern ireland"
+  ],
+  "vatican-city": [
+    "vatican city",
+    "vatican"
+  ]
 };
 
 function monumentFor(trip) {
@@ -6457,6 +6652,17 @@ function monumentKeyFor(trip) {
     if (names.some((n) => s.includes(n))) return key;
   }
   return "generic";
+}
+
+function coverFileFor(trip) {
+  const cityKey = monumentKeyFor(trip);
+  if (cityKey !== "generic") return `${cityKey}.jpg`;
+  const dest = (getMeta(trip).destinations || [])[0] || getMeta(trip).destination || trip.name || "";
+  const s = String(dest).toLowerCase();
+  for (const [countryKey, names] of Object.entries(COUNTRY_COVER_ALIASES)) {
+    if (names.some((name) => s.includes(name))) return `country/${countryKey}.jpg`;
+  }
+  return "generic.jpg";
 }
 
 /* One SVG for both crops. `xMaxYMax meet` keeps the monument right-aligned and
@@ -6486,14 +6692,14 @@ const COVER_INK_SOFT = "rgba(38,24,18,.30)";
 function coverArt(trip, opts) {
   const o = opts || {};
   const mon = monumentFor(trip);
-  const key = monumentKeyFor(trip);
+  const file = coverFileFor(trip);
   return `
     <svg class="cover__art" viewBox="0 0 210 100" preserveAspectRatio="xMaxYMax meet" aria-hidden="true"
          fill="none" stroke-linecap="round" stroke-linejoin="round">
       <path d="${mon.bg}" stroke="${o.bg || COVER_INK_SOFT}" stroke-width="1.2"/>
       <path d="${mon.fg}" stroke="${o.fg || COVER_INK}" stroke-width="2.2"/>
     </svg>
-    <img class="cover__photo" src="assets/covers/${encodeURIComponent(key)}.jpg" alt="" aria-hidden="true"
+    <img class="cover__photo" src="assets/covers/${file.split("/").map(encodeURIComponent).join("/")}" alt="" aria-hidden="true"
          loading="lazy" decoding="async" onerror="this.closest('.hero,.tripcard__cover')?.classList.add('cover--nophoto'); this.remove();">
     <span class="cover__scrim" aria-hidden="true"></span>`;
 }

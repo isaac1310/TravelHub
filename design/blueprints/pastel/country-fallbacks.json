@@ -1,0 +1,520 @@
+{
+  "scope": "Europe",
+  "count": 51,
+  "definition": "50 sovereign states plus Kosovo; includes transcontinental countries commonly grouped with Europe",
+  "fallbackOrder": [
+    "city",
+    "country",
+    "generic"
+  ],
+  "countries": [
+    {
+      "key": "albania",
+      "label": "Albania",
+      "landmark": "Skanderbeg Square in Tirana with the historic Et'hem Bey Mosque and clock tower",
+      "src": "country-fallbacks/albania.png",
+      "aliases": [
+        "albania",
+        "shqipëri"
+      ]
+    },
+    {
+      "key": "andorra",
+      "label": "Andorra",
+      "landmark": "Sant Esteve Church and the stone old town of Andorra la Vella against the Pyrenees",
+      "src": "country-fallbacks/andorra.png",
+      "aliases": [
+        "andorra"
+      ]
+    },
+    {
+      "key": "armenia",
+      "label": "Armenia",
+      "landmark": "Garni Temple framed by the Armenian highlands",
+      "src": "country-fallbacks/armenia.png",
+      "aliases": [
+        "armenia"
+      ]
+    },
+    {
+      "key": "austria",
+      "label": "Austria",
+      "landmark": "St. Stephen's Cathedral and Vienna skyline",
+      "src": "vienna.png",
+      "aliases": [
+        "austria",
+        "österreich"
+      ],
+      "reusedFrom": "vienna"
+    },
+    {
+      "key": "azerbaijan",
+      "label": "Azerbaijan",
+      "landmark": "Baku Flame Towers above the historic stone city and Caspian waterfront",
+      "src": "country-fallbacks/azerbaijan.png",
+      "aliases": [
+        "azerbaijan"
+      ]
+    },
+    {
+      "key": "belarus",
+      "label": "Belarus",
+      "landmark": "Mir Castle with its red brick towers reflected in the lake",
+      "src": "country-fallbacks/belarus.png",
+      "aliases": [
+        "belarus"
+      ]
+    },
+    {
+      "key": "belgium",
+      "label": "Belgium",
+      "landmark": "Brussels Grand Place with the ornate Gothic Town Hall",
+      "src": "country-fallbacks/belgium.png",
+      "aliases": [
+        "belgium",
+        "belgië",
+        "belgique"
+      ]
+    },
+    {
+      "key": "bosnia-herzegovina",
+      "label": "Bosnia and Herzegovina",
+      "landmark": "Mostar Old Bridge over the Neretva with stone Ottoman houses",
+      "src": "country-fallbacks/bosnia-herzegovina.png",
+      "aliases": [
+        "bosnia and herzegovina",
+        "bosnia",
+        "herzegovina"
+      ]
+    },
+    {
+      "key": "bulgaria",
+      "label": "Bulgaria",
+      "landmark": "Alexander Nevsky Cathedral in Sofia with its gold domes",
+      "src": "country-fallbacks/bulgaria.png",
+      "aliases": [
+        "bulgaria"
+      ]
+    },
+    {
+      "key": "croatia",
+      "label": "Croatia",
+      "landmark": "Dubrovnik old city walls and terracotta roofs above the Adriatic",
+      "src": "country-fallbacks/croatia.png",
+      "aliases": [
+        "croatia",
+        "hrvatska"
+      ]
+    },
+    {
+      "key": "cyprus",
+      "label": "Cyprus",
+      "landmark": "Petra tou Romiou sea stack on the Cyprus coast",
+      "src": "country-fallbacks/cyprus.png",
+      "aliases": [
+        "cyprus"
+      ]
+    },
+    {
+      "key": "czechia",
+      "label": "Czechia",
+      "landmark": "Charles Bridge and Prague castle spires",
+      "src": "prague.png",
+      "aliases": [
+        "czechia",
+        "czech republic",
+        "česko"
+      ],
+      "reusedFrom": "prague"
+    },
+    {
+      "key": "denmark",
+      "label": "Denmark",
+      "landmark": "Nyhavn's colorful historic harbor houses in Copenhagen",
+      "src": "country-fallbacks/denmark.png",
+      "aliases": [
+        "denmark",
+        "danmark"
+      ]
+    },
+    {
+      "key": "estonia",
+      "label": "Estonia",
+      "landmark": "Tallinn old town skyline with Alexander Nevsky Cathedral and medieval towers",
+      "src": "country-fallbacks/estonia.png",
+      "aliases": [
+        "estonia",
+        "eesti"
+      ]
+    },
+    {
+      "key": "finland",
+      "label": "Finland",
+      "landmark": "Helsinki Cathedral rising above Senate Square",
+      "src": "country-fallbacks/finland.png",
+      "aliases": [
+        "finland",
+        "suomi"
+      ]
+    },
+    {
+      "key": "france",
+      "label": "France",
+      "landmark": "Eiffel Tower above Paris rooftops",
+      "src": "paris.png",
+      "aliases": [
+        "france"
+      ],
+      "reusedFrom": "paris"
+    },
+    {
+      "key": "georgia",
+      "label": "Georgia",
+      "landmark": "Gergeti Trinity Church beneath Mount Kazbek",
+      "src": "country-fallbacks/georgia.png",
+      "aliases": [
+        "georgia"
+      ]
+    },
+    {
+      "key": "germany",
+      "label": "Germany",
+      "landmark": "Brandenburg Gate and Berlin Fernsehturm",
+      "src": "berlin.png",
+      "aliases": [
+        "germany",
+        "deutschland"
+      ],
+      "reusedFrom": "berlin"
+    },
+    {
+      "key": "greece",
+      "label": "Greece",
+      "landmark": "Parthenon on the Acropolis",
+      "src": "athens.png",
+      "aliases": [
+        "greece",
+        "hellas"
+      ],
+      "reusedFrom": "athens"
+    },
+    {
+      "key": "hungary",
+      "label": "Hungary",
+      "landmark": "Hungarian Parliament beside the Danube",
+      "src": "budapest.png",
+      "aliases": [
+        "hungary",
+        "magyarország"
+      ],
+      "reusedFrom": "budapest"
+    },
+    {
+      "key": "iceland",
+      "label": "Iceland",
+      "landmark": "Hallgrimskirkja church above Reykjavik",
+      "src": "country-fallbacks/iceland.png",
+      "aliases": [
+        "iceland",
+        "ísland"
+      ]
+    },
+    {
+      "key": "ireland",
+      "label": "Ireland",
+      "landmark": "Cliffs of Moher with O'Brien's Tower above the Atlantic",
+      "src": "country-fallbacks/ireland.png",
+      "aliases": [
+        "ireland",
+        "éire"
+      ]
+    },
+    {
+      "key": "italy",
+      "label": "Italy",
+      "landmark": "Colosseum and Roman rooftops",
+      "src": "rome.png",
+      "aliases": [
+        "italy",
+        "italia"
+      ],
+      "reusedFrom": "rome"
+    },
+    {
+      "key": "kazakhstan",
+      "label": "Kazakhstan",
+      "landmark": "Bayterek Tower in Astana with the modern city skyline",
+      "src": "country-fallbacks/kazakhstan.png",
+      "aliases": [
+        "kazakhstan"
+      ]
+    },
+    {
+      "key": "kosovo",
+      "label": "Kosovo",
+      "landmark": "Prizren stone bridge, riverside houses and Sinan Pasha Mosque",
+      "src": "country-fallbacks/kosovo.png",
+      "aliases": [
+        "kosovo"
+      ]
+    },
+    {
+      "key": "latvia",
+      "label": "Latvia",
+      "landmark": "Riga House of the Black Heads and St Peter's Church spire",
+      "src": "country-fallbacks/latvia.png",
+      "aliases": [
+        "latvia",
+        "latvija"
+      ]
+    },
+    {
+      "key": "liechtenstein",
+      "label": "Liechtenstein",
+      "landmark": "Vaduz Castle on its wooded hill above the town and Alps",
+      "src": "country-fallbacks/liechtenstein.png",
+      "aliases": [
+        "liechtenstein"
+      ]
+    },
+    {
+      "key": "lithuania",
+      "label": "Lithuania",
+      "landmark": "Vilnius Cathedral and bell tower with Gediminas Tower in the distance",
+      "src": "country-fallbacks/lithuania.png",
+      "aliases": [
+        "lithuania",
+        "lietuva"
+      ]
+    },
+    {
+      "key": "luxembourg",
+      "label": "Luxembourg",
+      "landmark": "Luxembourg City's old fortifications and Adolphe Bridge across the gorge",
+      "src": "country-fallbacks/luxembourg.png",
+      "aliases": [
+        "luxembourg"
+      ]
+    },
+    {
+      "key": "malta",
+      "label": "Malta",
+      "landmark": "Valletta's honey-colored waterfront with St Paul's Cathedral dome",
+      "src": "country-fallbacks/malta.png",
+      "aliases": [
+        "malta"
+      ]
+    },
+    {
+      "key": "moldova",
+      "label": "Moldova",
+      "landmark": "Orheiul Vechi monastery above the Raut river valley",
+      "src": "country-fallbacks/moldova.png",
+      "aliases": [
+        "moldova"
+      ]
+    },
+    {
+      "key": "monaco",
+      "label": "Monaco",
+      "landmark": "Monte Carlo Casino with Belle Epoque façade and Mediterranean gardens",
+      "src": "country-fallbacks/monaco.png",
+      "aliases": [
+        "monaco"
+      ]
+    },
+    {
+      "key": "montenegro",
+      "label": "Montenegro",
+      "landmark": "Kotor old town and bay beneath steep mountains",
+      "src": "country-fallbacks/montenegro.png",
+      "aliases": [
+        "montenegro"
+      ]
+    },
+    {
+      "key": "netherlands",
+      "label": "Netherlands",
+      "landmark": "Amsterdam canal houses and bridge",
+      "src": "amsterdam.png",
+      "aliases": [
+        "netherlands",
+        "holland"
+      ],
+      "reusedFrom": "amsterdam"
+    },
+    {
+      "key": "north-macedonia",
+      "label": "North Macedonia",
+      "landmark": "Church of Saint John at Kaneo above Lake Ohrid",
+      "src": "country-fallbacks/north-macedonia.png",
+      "aliases": [
+        "north macedonia",
+        "macedonia"
+      ]
+    },
+    {
+      "key": "norway",
+      "label": "Norway",
+      "landmark": "Bryggen's colorful wooden wharf houses in Bergen with mountains behind",
+      "src": "country-fallbacks/norway.png",
+      "aliases": [
+        "norway",
+        "norge"
+      ]
+    },
+    {
+      "key": "poland",
+      "label": "Poland",
+      "landmark": "Wawel Castle above the Vistula in Krakow",
+      "src": "country-fallbacks/poland.png",
+      "aliases": [
+        "poland",
+        "polska"
+      ]
+    },
+    {
+      "key": "portugal",
+      "label": "Portugal",
+      "landmark": "Lisbon tram and hillside rooftops",
+      "src": "lisbon.png",
+      "aliases": [
+        "portugal"
+      ],
+      "reusedFrom": "lisbon"
+    },
+    {
+      "key": "romania",
+      "label": "Romania",
+      "landmark": "Bran Castle rising above a forested Transylvanian valley",
+      "src": "country-fallbacks/romania.png",
+      "aliases": [
+        "romania"
+      ]
+    },
+    {
+      "key": "russia",
+      "label": "Russia",
+      "landmark": "Saint Basil's Cathedral in Moscow with its colorful onion domes",
+      "src": "country-fallbacks/russia.png",
+      "aliases": [
+        "russia"
+      ]
+    },
+    {
+      "key": "san-marino",
+      "label": "San Marino",
+      "landmark": "Guaita fortress tower on Monte Titano overlooking the countryside",
+      "src": "country-fallbacks/san-marino.png",
+      "aliases": [
+        "san marino"
+      ]
+    },
+    {
+      "key": "serbia",
+      "label": "Serbia",
+      "landmark": "Belgrade Fortress and the Victor monument above the Danube and Sava",
+      "src": "country-fallbacks/serbia.png",
+      "aliases": [
+        "serbia"
+      ]
+    },
+    {
+      "key": "slovakia",
+      "label": "Slovakia",
+      "landmark": "Bratislava Castle above the Danube",
+      "src": "bratislava.png",
+      "aliases": [
+        "slovakia",
+        "slovensko"
+      ],
+      "reusedFrom": "bratislava"
+    },
+    {
+      "key": "slovenia",
+      "label": "Slovenia",
+      "landmark": "Lake Bled island church and castle beneath the Julian Alps",
+      "src": "country-fallbacks/slovenia.png",
+      "aliases": [
+        "slovenia"
+      ]
+    },
+    {
+      "key": "spain",
+      "label": "Spain",
+      "landmark": "Puerta de Alcalá in Madrid",
+      "src": "madrid.png",
+      "aliases": [
+        "spain",
+        "españa"
+      ],
+      "reusedFrom": "madrid"
+    },
+    {
+      "key": "sweden",
+      "label": "Sweden",
+      "landmark": "Stockholm City Hall and waterfront at golden hour",
+      "src": "country-fallbacks/sweden.png",
+      "aliases": [
+        "sweden",
+        "sverige"
+      ]
+    },
+    {
+      "key": "switzerland",
+      "label": "Switzerland",
+      "landmark": "Chapel Bridge in Lucerne with Mount Pilatus behind",
+      "src": "country-fallbacks/switzerland.png",
+      "aliases": [
+        "switzerland",
+        "schweiz",
+        "suisse",
+        "svizzera"
+      ]
+    },
+    {
+      "key": "turkey",
+      "label": "Turkey",
+      "landmark": "Hagia Sophia in Istanbul with its dome and minarets",
+      "src": "country-fallbacks/turkey.png",
+      "aliases": [
+        "turkey",
+        "türkiye"
+      ]
+    },
+    {
+      "key": "ukraine",
+      "label": "Ukraine",
+      "landmark": "Saint Sophia Cathedral in Kyiv with green and gold domes",
+      "src": "country-fallbacks/ukraine.png",
+      "aliases": [
+        "ukraine"
+      ]
+    },
+    {
+      "key": "united-kingdom",
+      "label": "United Kingdom",
+      "landmark": "Elizabeth Tower and Parliament beside the Thames",
+      "src": "london.png",
+      "aliases": [
+        "united kingdom",
+        "great britain",
+        "england",
+        "scotland",
+        "wales",
+        "northern ireland"
+      ],
+      "reusedFrom": "london"
+    },
+    {
+      "key": "vatican-city",
+      "label": "Vatican City",
+      "landmark": "Saint Peter's Basilica and the curving colonnades of Saint Peter's Square",
+      "src": "country-fallbacks/vatican-city.png",
+      "aliases": [
+        "vatican city",
+        "vatican"
+      ]
+    }
+  ]
+}
