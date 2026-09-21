@@ -112,10 +112,22 @@
       "landmark": "Wat Arun prang \u00b7 temple roofs \u00b7 river boat"
     },
     {
+      "key": "alba",
+      "label": "Alba, Italy",
+      "src": "alba.png",
+      "landmark": "Cathedral of San Lorenzo \u00b7 Medieval towers"
+    },
+    {
       "key": "milano",
       "label": "Milano",
       "src": "milano.png",
       "landmark": "Duomo di Milano \u00b7 Piazza del Duomo"
+    },
+    {
+      "key": "milano-v2",
+      "label": "Milano \u2014 Alternative 02",
+      "src": "milano-v2.png",
+      "landmark": "Duomo di Milano \u00b7 Framed by the Galleria"
     },
     {
       "key": "generic",

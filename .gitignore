@@ -12,3 +12,5 @@ node_modules/
 # shipped covers are assets/covers/*.jpg (~1.8MB, built by tools/build-covers.sh), and
 # prompts.json beside these files regenerates the originals if they are ever needed.
 design/blueprints/pastel/*.png
+# Same for the 51 European country fallback paintings and their sources.
+design/blueprints/pastel/country-fallbacks/*.png

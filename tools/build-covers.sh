@@ -24,4 +24,22 @@ swiftc -O -o "$BIN" tools/encode-cover.swift
 for f in "$SRC"/*.png; do
   "$BIN" "$f" "$OUT/$(basename "$f" .png).jpg" 840 0.60
 done
-echo "covers: $(ls "$OUT" | wc -l | tr -d ' ') files, $(du -sh "$OUT" | cut -f1)"
+# The 51 European country fallbacks, same treatment. A raw painting is ~690KB against ~95KB
+# built, and there are fifty of them — the difference is the whole repo several times over.
+if [ -d "$SRC/country-fallbacks" ]; then
+  mkdir -p "$OUT/country"
+  for f in "$SRC"/country-fallbacks/*.png; do
+    [ -e "$f" ] || continue
+    "$BIN" "$f" "$OUT/country/$(basename "$f" .png).jpg" 840 0.60
+  done
+fi
+# Twelve countries already have a city painting good enough to stand for the whole country,
+# so they reuse it rather than carrying a near-duplicate: France is the Paris canvas, Italy the
+# Rome one, and so on. Copied, not re-encoded — the source is already built at 840/0.60.
+for pair in austria:vienna czechia:prague france:paris germany:berlin greece:athens \
+            hungary:budapest italy:rome netherlands:amsterdam portugal:lisbon \
+            slovakia:bratislava spain:madrid united-kingdom:london; do
+  country=${pair%%:*}; city=${pair##*:}
+  [ -f "$OUT/$city.jpg" ] && cp "$OUT/$city.jpg" "$OUT/country/$country.jpg"
+done
+echo "covers: $(find "$OUT" -name '*.jpg' | wc -l | tr -d ' ') files, $(du -sh "$OUT" | cut -f1)"

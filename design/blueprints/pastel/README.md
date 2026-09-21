@@ -2,7 +2,7 @@
 
 Open `index.html` to browse the collection and expand the original blueprint comparison beneath each destination.
 
-This alternative contains 19 destination paintings plus a generic fallback. Milano is an additional pastel-only destination; the other entries are keyed to the existing `../blueprints.json` catalog. The original SVGs and live application are preserved so the new direction can be reviewed as a complete collection.
+This alternative contains 21 destination paintings covering 20 cities, plus 51 European country fallbacks and the legacy generic fallback. Milano has two pastel-only alternatives. Alba has a dedicated Cathedral of San Lorenzo design. The live app chooses dedicated city art first, country art second, and the legacy generic image only when neither can be identified.
 
 ## Art direction
 
@@ -16,6 +16,9 @@ The images are wide, full-bleed artwork with a target aspect ratio of 2.1:1, mat
 - `artworks.json`: destination-to-image mapping.
 - `prompts.json`: exact prompts used with the built-in image generation tool.
 - `index.html`: standalone responsive review gallery with search and blueprint comparisons.
+- `country-fallbacks.html`: searchable review gallery for every European country fallback.
+- `country-fallbacks.json`: country names, aliases, landmarks, and image mapping.
+- `country-fallback-prompts.json`: exact prompts for newly generated country art.
 - `build-gallery.py`: rebuilds the gallery and manifest from the existing blueprint catalog.
 
 Generation used the built-in `image_gen` tool. All final artwork is stored here in the project; there are no external image dependencies.
