@@ -2680,7 +2680,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.2.0";
+const APP_VERSION = "v2.2.1";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
    other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
@@ -6444,7 +6444,14 @@ const MONUMENT_ALIASES = {
 };
 
 /* Country paintings are the second-level fallback for cities without their own art.
-   City aliases remain first so "Paris, France" keeps the Paris composition. */
+   City aliases remain first so "Paris, France" keeps the Paris composition.
+
+   The entries are not only country names. People write where they are going, not which state
+   it belongs to — "Tuscany", "Provence", "the Dolomites" — and the match is a plain substring,
+   so a region with no country beside it fell all the way through to the generic skyline. The
+   well-travelled regions and islands are listed under the country whose painting they should
+   borrow, until any of them earns art of its own. "Lapland" spans four countries; it resolves to
+   Finland, which is the one people mean when they write it alone. */
 const COUNTRY_COVER_ALIASES = {
   albania: [
     "albania",
@@ -6458,7 +6465,12 @@ const COUNTRY_COVER_ALIASES = {
   ],
   austria: [
     "austria",
-    "österreich"
+    "österreich",
+    "tyrol",
+    "tirol",
+    "salzkammergut",
+    "styria",
+    "vorarlberg"
   ],
   azerbaijan: [
     "azerbaijan"
@@ -6481,7 +6493,11 @@ const COUNTRY_COVER_ALIASES = {
   ],
   croatia: [
     "croatia",
-    "hrvatska"
+    "hrvatska",
+    "dalmatia",
+    "istria",
+    "hvar",
+    "dubrovnik riviera"
   ],
   cyprus: [
     "cyprus"
@@ -6489,7 +6505,9 @@ const COUNTRY_COVER_ALIASES = {
   czechia: [
     "czechia",
     "czech republic",
-    "česko"
+    "česko",
+    "bohemia",
+    "moravia"
   ],
   denmark: [
     "denmark",
@@ -6501,21 +6519,59 @@ const COUNTRY_COVER_ALIASES = {
   ],
   finland: [
     "finland",
-    "suomi"
+    "suomi",
+    "lapland",
+    "åland"
   ],
   france: [
-    "france"
+    "france",
+    "provence",
+    "normandy",
+    "normandie",
+    "brittany",
+    "bretagne",
+    "alsace",
+    "loire",
+    "burgundy",
+    "bourgogne",
+    "dordogne",
+    "corsica",
+    "corse",
+    "riviera",
+    "côte d'azur",
+    "cote d'azur",
+    "camargue"
   ],
   georgia: [
     "georgia"
   ],
   germany: [
     "germany",
-    "deutschland"
+    "deutschland",
+    "bavaria",
+    "bayern",
+    "black forest",
+    "schwarzwald",
+    "rhineland",
+    "moselle",
+    "saxony"
   ],
   greece: [
     "greece",
-    "hellas"
+    "hellas",
+    "crete",
+    "kriti",
+    "santorini",
+    "mykonos",
+    "rhodes",
+    "corfu",
+    "kerkyra",
+    "peloponnese",
+    "cyclades",
+    "ionian islands",
+    "naxos",
+    "paros",
+    "zakynthos"
   ],
   hungary: [
     "hungary",
@@ -6523,15 +6579,46 @@ const COUNTRY_COVER_ALIASES = {
   ],
   iceland: [
     "iceland",
-    "ísland"
+    "ísland",
+    "reykjanes",
+    "westfjords",
+    "golden circle"
   ],
   ireland: [
     "ireland",
-    "éire"
+    "éire",
+    "connemara",
+    "ring of kerry",
+    "dingle",
+    "donegal",
+    "galway"
   ],
   italy: [
     "italy",
-    "italia"
+    "italia",
+    "tuscany",
+    "toscana",
+    "umbria",
+    "piedmont",
+    "piemonte",
+    "langhe",
+    "lombardy",
+    "lombardia",
+    "veneto",
+    "sicily",
+    "sicilia",
+    "sardinia",
+    "sardegna",
+    "puglia",
+    "apulia",
+    "amalfi",
+    "dolomites",
+    "dolomiti",
+    "cinque terre",
+    "lake como",
+    "lago di como",
+    "capri",
+    "tyrrhenian"
   ],
   kazakhstan: [
     "kazakhstan"
@@ -6567,7 +6654,10 @@ const COUNTRY_COVER_ALIASES = {
   ],
   netherlands: [
     "netherlands",
-    "holland"
+    "holland",
+    "zeeland",
+    "frisia",
+    "texel"
   ],
   "north-macedonia": [
     "north macedonia",
@@ -6575,17 +6665,34 @@ const COUNTRY_COVER_ALIASES = {
   ],
   norway: [
     "norway",
-    "norge"
+    "norge",
+    "lofoten",
+    "fjords",
+    "svalbard",
+    "tromsø",
+    "tromso"
   ],
   poland: [
     "poland",
-    "polska"
+    "polska",
+    "masuria",
+    "tatra",
+    "silesia"
   ],
   portugal: [
-    "portugal"
+    "portugal",
+    "algarve",
+    "madeira",
+    "azores",
+    "açores",
+    "douro",
+    "alentejo"
   ],
   romania: [
-    "romania"
+    "romania",
+    "transylvania",
+    "bucovina",
+    "maramureș"
   ],
   russia: [
     "russia"
@@ -6601,25 +6708,60 @@ const COUNTRY_COVER_ALIASES = {
     "slovensko"
   ],
   slovenia: [
-    "slovenia"
+    "slovenia",
+    "julian alps",
+    "bled",
+    "piran"
   ],
   spain: [
     "spain",
-    "españa"
+    "españa",
+    "andalusia",
+    "andalucía",
+    "catalonia",
+    "cataluña",
+    "catalunya",
+    "basque country",
+    "país vasco",
+    "galicia",
+    "costa brava",
+    "costa del sol",
+    "mallorca",
+    "majorca",
+    "menorca",
+    "ibiza",
+    "canary islands",
+    "tenerife",
+    "lanzarote",
+    "gran canaria",
+    "balearics"
   ],
   sweden: [
     "sweden",
-    "sverige"
+    "sverige",
+    "gotland",
+    "öland"
   ],
   switzerland: [
     "switzerland",
     "schweiz",
     "suisse",
-    "svizzera"
+    "svizzera",
+    "engadin",
+    "valais",
+    "ticino",
+    "jungfrau",
+    "zermatt",
+    "interlaken"
   ],
   turkey: [
     "turkey",
-    "türkiye"
+    "türkiye",
+    "cappadocia",
+    "kapadokya",
+    "anatolia",
+    "aegean coast",
+    "lycian"
   ],
   ukraine: [
     "ukraine"
@@ -6630,7 +6772,16 @@ const COUNTRY_COVER_ALIASES = {
     "england",
     "scotland",
     "wales",
-    "northern ireland"
+    "northern ireland",
+    "cotswolds",
+    "highlands",
+    "scottish highlands",
+    "lake district",
+    "cornwall",
+    "yorkshire",
+    "snowdonia",
+    "isle of skye",
+    "hebrides"
   ],
   "vatican-city": [
     "vatican city",

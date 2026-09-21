@@ -5449,6 +5449,29 @@
       return true;
     });
 
+    check("a region on its own finds its country's painting, not the skyline", () => {
+      /* The match is a plain substring over the alias table, so "Tuscany" with no country beside
+         it used to fall all the way through to generic — and nobody writes the country when the
+         region IS the destination. */
+      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
+      const expected = [
+        ["Tuscany", "country/italy.jpg"],
+        ["Toscana", "country/italy.jpg"],
+        ["Provence", "country/france.jpg"],
+        ["Santorini", "country/greece.jpg"],
+        ["Cotswolds", "country/united-kingdom.jpg"],
+        ["Lapland", "country/finland.jpg"],
+        ["Paris, France", "paris.jpg"],
+        ["Nowhere, Atlantis", "generic.jpg"],
+      ];
+      for (const [destination, file] of expected) {
+        if (coverFileFor(t(destination)) !== file) {
+          return `${destination} resolved to ${coverFileFor(t(destination))}, not ${file}`;
+        }
+      }
+      return true;
+    });
+
     check("a missing painting falls back to the line art instead of a hole", () => {
       /* An unbuilt cover must degrade to exactly what v1.15.3 shipped: the blueprint,
          the plain gradient, no empty box and no doubled scrim. */
