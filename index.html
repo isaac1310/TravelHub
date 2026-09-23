@@ -1143,6 +1143,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 .act--visited { opacity: 0.62; }
 .act--visited .act__title { text-decoration: none; }
 .act__stopno--visited { background: #3f8a63; color: #fff; }
+/* v2.5.2 — dark coral on soft coral, 4.73:1 (the pair the contrast table already vouches for). */
+.flag-reserved {
+  display: inline-block; vertical-align: middle; margin-inline-start: 0.35rem; padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-pill, 999px); background: var(--brand-soft); color: var(--brand-text);
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.02em; line-height: 1.5; white-space: nowrap;
+}
 .visited-tick {
   display: inline-block; margin-inline-start: 0.3rem; color: #3f8a63;
   font-weight: 700; font-size: 0.85em; vertical-align: baseline;
@@ -2733,7 +2739,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.5.1";
+const APP_VERSION = "v2.5.2";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
    other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
@@ -3009,6 +3015,13 @@ function normalizeItem(it) {
    reserved = you ticked Reserved
    planned  = has a date
    idea     = everything else */
+/* v2.5.2: the visible "Reserved" flag on an item's preview card. Text, not a tooltip — a phone
+   cannot hover. Only for things you ticked: flights and hotels are booked by nature and their
+   icon already says so. */
+function reservedFlag(it) {
+  return itemStatus(it) === "reserved" ? ` <span class="flag-reserved">Reserved</span>` : "";
+}
+
 function itemStatus(it) {
   if (it.type === "flight" || it.type === "hotel") return "booked";
   if (it.reservation) return "reserved";
@@ -6542,6 +6555,15 @@ const MONUMENT_ALIASES = {
   milano: ["milan", "milano", "mailand"], alba: ["alba"],
 };
 
+/* v2.5.2: regional paintings sit between a city and its country — a trip to Munich or the
+   Alps is Bavaria, not Berlin; Florence or Siena is Tuscany, not Rome. Checked after the city
+   aliases (a city with its own canvas keeps it) and before the countries. Cities with no
+   painting of their own are listed under their region so they borrow it. */
+const REGION_COVER_ALIASES = {
+  bavaria: ["bavaria", "bayern", "munich", "münchen", "neuschwanstein", "füssen", "fussen", "garmisch", "berchtesgaden", "nuremberg", "nürnberg"],
+  tuscany: ["tuscany", "toscana", "florence", "firenze", "siena", "pisa", "lucca", "chianti", "san gimignano", "montepulciano"],
+};
+
 /* Country paintings are the second-level fallback for cities without their own art.
    City aliases remain first so "Paris, France" keeps the Paris composition.
 
@@ -6909,6 +6931,9 @@ function coverFileFor(trip) {
   if (cityKey !== "generic") return `${cityKey}.jpg`;
   const dest = (getMeta(trip).destinations || [])[0] || getMeta(trip).destination || trip.name || "";
   const s = String(dest).toLowerCase();
+  for (const [regionKey, names] of Object.entries(REGION_COVER_ALIASES)) {
+    if (names.some((name) => s.includes(name))) return `region/${regionKey}.jpg`;
+  }
   for (const [countryKey, names] of Object.entries(COUNTRY_COVER_ALIASES)) {
     if (names.some((name) => s.includes(name))) return `country/${countryKey}.jpg`;
   }
@@ -8013,7 +8038,7 @@ function itemCard({ item, checkout }, stopNo) {
       <span class="act__icon act__icon--${item.type}">${itemTypeIcon(item.type)}</span>
       ${stopNo ? `<span class="act__stopno${visited ? " act__stopno--visited" : ""}" aria-label="Map stop ${stopNo}${visited ? ", visited" : ""}">${stopNo}</span>` : ""}
       <span class="act__body">
-        <span class="act__title">${escapeHtml(title)}${visited ? ` <span class="visited-tick" title="Visited">✓</span>` : ""}</span>
+        <span class="act__title">${escapeHtml(title)}${visited ? ` <span class="visited-tick" title="Visited">✓</span>` : ""}${checkout ? "" : reservedFlag(item)}</span>
         <span class="act__sub">${subParts.join(" · ")}</span>
       </span>
       ${time ? `<span class="act__time">${escapeHtml(time)}</span>` : ""}
@@ -8709,7 +8734,11 @@ function pickDayFor(trip, item) {
     live.date = iso;
     if (!live.startTime) live.sortIndex = nextDayPosition(trip.id, iso);
     saveState();
-    renderItinerary();
+    /* v2.5.2: the same refresh the item form's Save does. renderItinerary() alone left the day
+       strip and scroll where they were, so the place looked like it had not moved until you
+       tapped a day chip. render() rebuilds every screen; landOnDay takes you to the day. */
+    render();
+    if (itinerarySubTab === "timeline") landOnDay(iso, { chosen: true });
     showToast(`${live.title} added to ${days.find((d) => d.value === iso).label}`);
   });
 }
@@ -8968,7 +8997,7 @@ function renderMapsTab(trip) {
                   aria-label="Show ${escapeHtml(e.item.title)} on the map">
             <span class="mapstop__pin ${geo ? "" : "mapstop__pin--nogeo"}${visited ? " act__stopno--visited" : ""}">${e.label}</span>
             <span class="mapstop__body">
-              <span class="act__title">${escapeHtml(e.item.title)}${visited ? ` <span class="visited-tick" title="Visited">✓</span>` : ""}</span>
+              <span class="act__title">${escapeHtml(e.item.title)}${visited ? ` <span class="visited-tick" title="Visited">✓</span>` : ""}${reservedFlag(e.item)}</span>
               <span class="act__sub">${escapeHtml(e.item.location.name)}${when ? " · " + escapeHtml(when) : ""}</span>
               ${noteLine ? `<span class="act__sub mapstop__note">${noteLine}</span>` : ""}
             </span>
@@ -9220,7 +9249,7 @@ function renderBookings() {
             <div class="booking" data-item="${escapeHtml(it.id)}">
               <span class="booking__icon booking__icon--${it.type}">${icon}</span>
               <div class="booking__body">
-                <p class="booking__title"><button type="button" class="booking__open" data-booking-open>${escapeHtml(it.title)}</button>${when ? ` <span class="booking__when">· ${escapeHtml(when)}</span>` : ""}</p>
+                <p class="booking__title"><button type="button" class="booking__open" data-booking-open>${escapeHtml(it.title)}</button>${when ? ` <span class="booking__when">· ${escapeHtml(when)}</span>` : ""}${reservedFlag(it)}</p>
                 ${sub ? `<p class="booking__ref">${escapeHtml(sub)}</p>` : ""}
                 ${notes}
                 ${foot}

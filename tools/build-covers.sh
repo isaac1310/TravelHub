@@ -33,6 +33,15 @@ if [ -d "$SRC/country-fallbacks" ]; then
     "$BIN" "$f" "$OUT/country/$(basename "$f" .png).jpg" 840 0.60
   done
 fi
+# Regional paintings (v2.5.2): a region between the city and the country — Bavaria is not
+# Berlin, Tuscany is not Rome. Same treatment as the country set.
+if [ -d "$SRC/region-fallbacks" ]; then
+  mkdir -p "$OUT/region"
+  for f in "$SRC"/region-fallbacks/*.png; do
+    [ -e "$f" ] || continue
+    "$BIN" "$f" "$OUT/region/$(basename "$f" .png).jpg" 840 0.60
+  done
+fi
 # Twelve countries already have a city painting good enough to stand for the whole country,
 # so they reuse it rather than carrying a near-duplicate: France is the Paris canvas, Italy the
 # Rome one, and so on. Copied, not re-encoded — the source is already built at 840/0.60.
