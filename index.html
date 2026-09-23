@@ -504,7 +504,7 @@ h1, h2, h3, h4, .brand__name {
 .today__title { font-weight: 700; color: var(--heading); overflow-wrap: anywhere; }
 .today__time { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 0.25rem; }
 .today__sub { font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
-.today__maps { font-weight: 700; color: var(--brand-text); text-decoration: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; padding: 0 0.3rem; }
+.today__maps { font: inherit; font-weight: 700; color: var(--brand-text); background: none; border: none; cursor: pointer; text-decoration: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; padding: 0; }
 .today__empty, .today__also { margin: 0; font-size: 0.9rem; color: var(--muted); }
 .today__full { justify-self: start; }
 .hero__travellers .avatar { box-shadow: 0 0 0 2px rgba(255,255,255,0.6); }
@@ -807,6 +807,8 @@ h1, h2, h3, .hero h1, .hero p {
 .booking__icon--other { background: var(--cream); color: #8a7f74; }
 .booking__body { flex: 1; min-width: 0; }
 .booking__title { font-weight: 600; margin: 0; font-size: 0.95rem; }
+.import-more { margin: 0 0 0.8rem; }
+.import-more summary { cursor: pointer; font-weight: 600; color: var(--brand-text); min-height: 44px; display: flex; align-items: center; }
 .booking__open { padding: 0; border: none; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer; }
 .booking__open:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
 .booking__ref { color: var(--muted); font-size: 0.82rem; margin: 0.15rem 0 0.5rem; }
@@ -1490,6 +1492,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transform: rotate(0deg);
         direction: ltr; font-variant-numeric: tabular-nums;
       }
+      .map-pin--day { font-size: 0.72rem; white-space: nowrap; border-radius: 15px 15px 15px 4px; }
       .map-day-head { font-weight: 700; font-size: 0.85rem; margin: 0.5rem 0 0.1rem; color: var(--ink, #3b2b26); }
       .map-day-head:first-child { margin-top: 0; }
       .map-nostay { margin: 0 0 0.25rem; font-size: 0.8rem; color: var(--muted); }
@@ -2090,6 +2093,17 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
       </div>
     </dialog>
 
+    <!-- ===== v2.4.0: a short list to choose from (travel mode, a day). Built by appPick. ===== -->
+    <dialog id="dialog-pick" class="dialog" aria-labelledby="pick-title">
+      <div style="padding: 0.9rem 1.2rem 0.4rem">
+        <h3 class="dialog__title" id="pick-title" style="margin-bottom:0.6rem">Choose</h3>
+        <div id="pick-list"></div>
+        <div class="dialog__actions">
+          <button type="button" class="btn btn--ghost" data-dialog-close style="flex:1;justify-content:center">Cancel</button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- ===== Who-are-you (device identity for shared trips) ===== -->
     <dialog id="dialog-whoami" class="dialog" aria-labelledby="whoami-title">
       <form id="form-whoami" method="dialog">
@@ -2205,6 +2219,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
           <svg viewBox="0 0 24 24" fill="none"><path d="M4 20h4L19 9l-4-4L4 16v4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
           Edit
         </button>
+        <!-- v2.4.0: schedule an unscheduled place without the full edit form. -->
+        <button type="button" class="sheet-item" data-item-action="assign-day" hidden>
+          <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="5.5" width="16" height="14" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          Assign to day
+        </button>
         <button type="button" class="sheet-item" data-item-action="move-up">
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 19V5m0 0-5 5m5-5 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Move up
@@ -2215,7 +2234,11 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
         </button>
         <button type="button" class="sheet-item" data-item-action="maps" hidden>
           <svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg>
-          Open in Google Maps
+          Place details in Google Maps
+        </button>
+        <button type="button" class="sheet-item" data-item-action="directions" hidden>
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 21 12l-9 9-9-9 9-9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 14v-2.5a1.5 1.5 0 0 1 1.5-1.5H15m0 0-2-2m2 2-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Directions
         </button>
         <button type="button" class="sheet-item" data-item-action="visited">
           <svg viewBox="0 0 24 24" fill="none"><path d="m5 13 4 4 10-10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -2662,25 +2685,31 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
          per line, or the JSON an AI reads back from a screenshot of the list. -->
     <dialog id="dialog-import-places" class="dialog dialog--wide" aria-labelledby="import-places-title">
       <form id="form-import-places" method="dialog">
-        <h3 class="dialog__title" id="import-places-title">Import places</h3>
+        <h3 class="dialog__title" id="import-places-title">Add places</h3>
         <input type="hidden" name="tripId" />
         <div class="field" id="import-trip-field" role="group" aria-labelledby="import-trip-label">
           <span class="field__label" id="import-trip-label">Trip</span>
           <div class="trip-choice" id="import-trip-choice"></div>
         </div>
+        <!-- v2.4.0: links first. The AI/JSON route and the saved-list caveat competed with the
+             one thing most people paste, so they fold under "More import options". -->
         <label class="field">
-          <span class="field__label">Google Maps links, one per line — or JSON from an AI</span>
-          <textarea name="links" rows="4" dir="auto" placeholder="https://maps.app.goo.gl/…&#10;https://maps.app.goo.gl/…&#10;or  [{&quot;title&quot;: &quot;Louvre&quot;, &quot;note&quot;: &quot;book ahead&quot;}, …]"></textarea>
-          <span class="field__hint">In Google Maps open the place → Share → Copy link. A whole list can't be shared to another app — share the places inside it, or get the list from an AI (a screenshot of it, or one you planned together) and paste the JSON it returns.</span>
+          <span class="field__label">Paste place links, one per line</span>
+          <textarea name="links" rows="4" dir="auto" placeholder="https://maps.app.goo.gl/…&#10;https://maps.app.goo.gl/…"></textarea>
+          <span class="field__hint">In Google Maps: open a place → Share → Copy link.</span>
         </label>
-        <div class="field">
-          <button type="button" class="btn btn--small btn--outline" id="import-copy-prompt">Copy prompt for AI</button>
-          <span class="field__hint" id="import-copy-prompt-hint">Paste it into ChatGPT / Claude with a screenshot of your list — or at the end of a chat where you worked out where to go — then paste the JSON it returns into the box above.</span>
-        </div>
+        <details class="import-more">
+          <summary>More import options</summary>
+          <p class="field__hint">TravelHub can't import a Google Maps saved-list link directly yet. Share the places inside it one by one, or ask an AI for the list and paste the JSON it returns into the box above.</p>
+          <div class="field">
+            <button type="button" class="btn btn--small btn--outline" id="import-copy-prompt">Copy prompt for AI</button>
+            <span class="field__hint" id="import-copy-prompt-hint">Paste it into ChatGPT / Claude with a screenshot of your list — or at the end of a chat where you worked out where to go.</span>
+          </div>
+        </details>
         <div class="import-rows" id="import-rows" aria-live="polite"></div>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
-          <button type="submit" class="btn btn--primary" id="import-places-submit" disabled>Import</button>
+          <button type="submit" class="btn btn--primary" id="import-places-submit" disabled>Add</button>
         </div>
       </form>
     </dialog>
@@ -2689,7 +2718,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.3.0";
+const APP_VERSION = "v2.4.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
    other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
@@ -5501,7 +5530,7 @@ function renderBulkRows() {
     const ok = bulkRowImportable(row);
     const status = row.error ? escapeHtml(row.error)
       : row.status ? escapeHtml(row.status)
-      : row.lat != null && !(row.title || row.name) ? "✓ Pin found — type a name to import it"
+      : row.lat != null && !(row.title || row.name) ? "✓ Pin found — type a name to add it"
       : row.lat != null ? `✓ Pin found${row.name ? " · " + escapeHtml(row.name) : ""}`
       : ok ? "Name only — the pin will be found after import" : "";
     const note = row.note ? `<span class="import-row__note">“${escapeHtml(row.note)}”</span>` : "";
@@ -5521,7 +5550,7 @@ function renderBulkRows() {
   const n = bulkRows.filter(bulkRowImportable).length;
   const submit = $("import-places-submit");
   submit.disabled = !n || !form.tripId.value || bulkRows.some((r) => r.status);
-  submit.textContent = n ? `Import ${n} place${n === 1 ? "" : "s"}` : "Import";
+  submit.textContent = n ? `Add ${n} place${n === 1 ? "" : "s"}` : "Add";
 }
 
 function bulkRowsChanged(rows) {
@@ -7244,6 +7273,10 @@ function renderTripsScreen() {
     hero.querySelector("[data-edit-trip]")?.addEventListener("click", () => openTripDialog(trip));
     hero.querySelector("[data-today-add]")?.addEventListener("click", () =>
       openItemDialog(trip.id, null, { date: todayLocalISO() }));
+    hero.querySelectorAll("[data-today-dir]").forEach((b) => b.addEventListener("click", () => {
+      const item = state.items.find((i) => i.id === b.getAttribute("data-today-dir"));
+      if (item) openDirections(item, trip);
+    }));
   } else {
     hero.innerHTML = "";
   }
@@ -7257,7 +7290,7 @@ function renderTripsScreen() {
      saved list from Google Maps and filling the fields from it — is parked for v2, where it
      needs a POI source Photon cannot provide. */
   const steps = [
-    { icon: ICONS.daybyday, title: "Day by Day", desc: "Edit your day-by-day schedule in a timeline view.", go: "itinerary", subtab: "timeline", cta: "Start now" },
+    { icon: ICONS.daybyday, title: "Day by Day", desc: "Edit your day-by-day schedule.", go: "itinerary", subtab: "timeline", cta: "Start now" },
     { icon: ICONS.route, title: "Route", desc: "See the trip in route mode, by dates and location.", go: "itinerary", subtab: "maps", cta: "Start now" },
     { icon: ICONS.checklist, title: "Checklist", desc: "Create a shared family checklist so nothing is missed.", go: "family", cta: "Start now" },
     { icon: ICONS.reservations, title: "Bookings", desc: "Keep track of all your bookings and confirmations.", go: "bookings", cta: "Start now" },
@@ -7380,8 +7413,10 @@ function renderTodayCard(trip, todayIso, nowMin) {
       ? [it.departAirport && it.arrivalAirport ? `${it.departAirport} → ${it.arrivalAirport}` : "", it.flightNo].filter(Boolean).join(" · ")
       : it.location?.name || "";
     const conf = it.confirmation ? `Conf: ${it.confirmation}` : "";
-    const maps = it.type !== "flight" && (it.location?.lat != null || it.location?.name)
-      ? `<a class="today__maps" href="${gmapsLink(it, trip)}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(it.title)} in Google Maps">Maps ↗</a>`
+    /* v2.4.0: on the day itself the question is "how do I get there", so the row offers
+       Directions; the place card is still one tap away on the timeline and the map list. */
+    const maps = !e.checkout && it.type !== "flight" && (it.location?.lat != null || it.location?.name)
+      ? `<button type="button" class="today__maps" data-today-dir="${escapeHtml(it.id)}" aria-label="Directions to ${escapeHtml(it.title)}">Directions</button>`
       : "";
     return `
       <div class="today__row" data-today-row="${escapeHtml(label.toLowerCase())}">
@@ -7390,8 +7425,8 @@ function renderTodayCard(trip, todayIso, nowMin) {
         <div class="today__body">
           <div class="today__title">${escapeHtml(title)}${time ? ` <span class="today__time">${escapeHtml(time)}</span>` : ""}</div>
           ${sub || conf ? `<div class="today__sub ltr">${[sub, conf].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
+          ${maps /* under the address, not beside the title: "Directions" in its own column squeezed a long title to three words a line on a phone */}
         </div>
-        ${maps}
       </div>`;
   };
 
@@ -7646,8 +7681,8 @@ function renderItinerary() {
     </div>
     <div class="itin-sticky" id="itin-sticky">
       <div class="switcher switcher--sub" role="tablist" aria-label="Itinerary view">
-        ${subTabButton("timeline", "Timeline")}
-        ${subTabButton("maps", "Maps")}
+        ${subTabButton("timeline", "Day by Day")}
+        ${subTabButton("maps", "Route")}
       </div>
       <div id="daystrip-slot"></div>
     </div>
@@ -8039,7 +8074,7 @@ function renderTimelineTab(trip) {
         ${undated.map((item) => itemCard({ item, checkout: false })).join("")}
       </section>`
     : "";
-  const importBtn = `<button type="button" class="act act--add" data-import-places aria-label="Import places from Google Maps">${ICONS.explore}<span class="act__body"><span class="act__title">Import places from Google Maps</span><span class="act__sub">Paste share links, or JSON from an AI — pick days now or later</span></span></button>`;
+  const importBtn = `<button type="button" class="act act--add" data-import-places aria-label="Add places from Google Maps">${ICONS.explore}<span class="act__body"><span class="act__title">Add places from Google Maps</span><span class="act__sub">Paste share links — pick days now or later</span></span></button>`;
 
   $("daystrip-slot").innerHTML = strip;
   view.innerHTML = `${route}${unschedHtml}${dayHtml}${importBtn}${fab}`;
@@ -8273,6 +8308,8 @@ function openItemActionsSheet(trip, itemId, opts = {}) {
   // Only offer Maps for somewhere you could actually go.
   const hasPlace = Boolean(item.location?.name || item.location?.lat != null);
   dlg.querySelector('[data-item-action="maps"]').hidden = !hasPlace;
+  dlg.querySelector('[data-item-action="directions"]').hidden = !hasPlace || item.type === "flight";
+  dlg.querySelector('[data-item-action="assign-day"]').hidden = Boolean(item.date) || !eachDay(trip).length;
   // Move up/down order a day on the timeline; from Bookings there is no day to move within.
   const reorder = opts.reorder !== false;
   dlg.querySelector('[data-item-action="move-up"]').hidden = !reorder;
@@ -8295,6 +8332,8 @@ function openItemActionsSheet(trip, itemId, opts = {}) {
       else if (action === "move-down") moveItemInDay(trip, itemId, 1);
       else if (action === "visited") toggleVisited(itemId);
       else if (action === "maps") window.open(gmapsLink(item, trip), "_blank", "noopener");
+      else if (action === "directions") openDirections(item, trip);
+      else if (action === "assign-day") pickDayFor(trip, item);
       else if (action === "delete") deleteItem(itemId);
     };
   });
@@ -8585,6 +8624,70 @@ function gmapsLink(item, trip) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
+/* v2.4.0: directions, not the place card. Google's documented Maps URL (no API key): with no
+   origin it starts from wherever the phone is. Coordinates when we have them — a name alone can
+   resolve to another branch — else the name biased by the trip's destination. */
+const TRAVEL_MODES = [
+  { value: "walking", label: "Walking" },
+  { value: "transit", label: "Transit" },
+  { value: "driving", label: "Driving" },
+];
+function gdirLink(item, trip, mode) {
+  const loc = item.location || {};
+  const dest = loc.lat != null && loc.lng != null
+    ? `${loc.lat},${loc.lng}`
+    : `${loc.name || item.title || ""}, ${trip?.destination || ""}`.replace(/,\s*$/, "").replace(/^,\s*/, "");
+  const m = TRAVEL_MODES.some((t) => t.value === mode) ? mode : "walking";
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}&travelmode=${m}`;
+}
+
+/* The mode you picked last goes first — a per-device convenience, so localStorage, and a
+   failed read just means Walking first. */
+const DIR_MODE_KEY = "travelhub-directions-mode";
+function lastTravelMode() {
+  try { return localStorage.getItem(DIR_MODE_KEY) || "walking"; } catch { return "walking"; }
+}
+function openDirections(item, trip) {
+  const last = lastTravelMode();
+  const modes = [...TRAVEL_MODES].sort((a, b) => (b.value === last) - (a.value === last));
+  appPick(`Directions to ${item.title}`, modes, (mode) => {
+    try { localStorage.setItem(DIR_MODE_KEY, mode); } catch { /* convenience only */ }
+    window.open(gdirLink(item, trip, mode), "_blank", "noopener");
+  });
+}
+
+/* v2.4.0: schedule an unscheduled place in one tap. Lands at the end of the day, the same slot
+   the FAB and the import use; Move up/down or drag refine it from there. */
+function pickDayFor(trip, item) {
+  const days = eachDay(trip).map((d) => ({ value: isoOf(d), label: `${fmtDow(d)}, ${fmtDay(d)}` }));
+  appPick(`Assign ${item.title} to…`, days, (iso) => {
+    const live = state.items.find((i) => i.id === item.id);
+    if (!live || live.date) return; // scheduled elsewhere meanwhile — do not move it
+    live.date = iso;
+    if (!live.startTime) live.sortIndex = nextDayPosition(trip.id, iso);
+    saveState();
+    renderItinerary();
+    showToast(`${live.title} added to ${days.find((d) => d.value === iso).label}`);
+  });
+}
+
+/* A short choose-one sheet. The option buttons settle directly (no reliance on the async
+   `close` event, which a hidden tab never fires). */
+function appPick(title, options, cb) {
+  const dlg = $("dialog-pick");
+  $("pick-title").textContent = title;
+  const list = $("pick-list");
+  list.innerHTML = options.map((o, i) =>
+    `<button type="button" class="sheet-item" data-pick="${i}">${escapeHtml(o.label)}</button>`).join("");
+  list.querySelectorAll("[data-pick]").forEach((b) => {
+    b.onclick = () => {
+      closeDialog(dlg);
+      cb(options[Number(b.getAttribute("data-pick"))].value);
+    };
+  });
+  openDialog(dlg);
+}
+
 /* Marks a view change as ours, so the dragstart/zoomstart it emits isn't counted
    as the user taking over the map. */
 function withViewGuard(fn) {
@@ -8796,6 +8899,10 @@ function renderMapsTab(trip) {
          it indexed the unfiltered list while iterating the filtered one, so list
          and map agreed only by accident. */
       e.label = numbers.get(e.item.id);
+      /* v2.4.0: numbers restart every day, so on All two "2" pins were indistinguishable. The pin
+         carries its weekday there; the list keeps the bare number under its day heading, the
+         same one the timeline shows. A single day needs no prefix. */
+      e.pinLabel = mapDayFilter === "all" ? `${fmtDow(d)} · ${e.label}` : String(e.label);
       entries.push(e);
       const geo = e.item.location.lat !== null;
       const leg = prevLoc && geo ? legLabel(prevLoc, e.item.location) : "";
@@ -8824,7 +8931,8 @@ function renderMapsTab(trip) {
             </span>
           </button>
           ${geo ? "" : `<button type="button" class="icon-btn icon-btn--stop" data-locate-item="${e.item.id}" aria-label="Find this place on the map" title="Locate"><svg viewBox="0 0 24 24" fill="none"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.4" stroke="currentColor" stroke-width="1.6"/></svg></button>`}
-          <a class="icon-btn icon-btn--stop" href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener" aria-label="Open in Google Maps" title="Open in Google Maps"><svg viewBox="0 0 24 24" fill="none"><path d="M14 5h5v5M19 5l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></a>
+          <a class="icon-btn icon-btn--stop" href="${gmapsLink(e.item, trip)}" target="_blank" rel="noopener" aria-label="Place details for ${escapeHtml(e.item.title)} in Google Maps" title="Place details"><svg viewBox="0 0 24 24" fill="none"><path d="M14 5h5v5M19 5l-8 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></a>
+          <button type="button" class="icon-btn icon-btn--stop" data-dir-item="${escapeHtml(e.item.id)}" aria-label="Directions to ${escapeHtml(e.item.title)}" title="Directions"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 21 12l-9 9-9-9 9-9Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M10 14v-2.5a1.5 1.5 0 0 1 1.5-1.5H15m0 0-2-2m2 2-2 2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         </div>`;
       if (geo) prevLoc = e.item.location;
     }
@@ -8910,6 +9018,12 @@ function renderMapsTab(trip) {
   view.querySelectorAll("[data-day]").forEach((b) =>
     b.addEventListener("click", () => { mapDayFilter = b.getAttribute("data-day"); renderItinerary(); })
   );
+  view.querySelectorAll("[data-dir-item]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const item = state.items.find((i) => i.id === b.getAttribute("data-dir-item"));
+      if (item) openDirections(item, trip);
+    })
+  );
   view.querySelectorAll("[data-locate-item]").forEach((b) =>
     b.addEventListener("click", async () => {
       b.disabled = true;
@@ -8974,7 +9088,10 @@ function renderMapsTab(trip) {
   located.forEach((e) => {
     const { lat, lng } = e.item.location;
     bounds.push([lat, lng]);
-    const icon = L.divIcon({ className: "", html: `<span class="map-pin${e.unscheduled ? " map-pin--unsched" : ""}">${e.label}</span>`, iconSize: [30, 30], iconAnchor: [15, 30] });
+    const wide = !e.unscheduled && e.pinLabel && e.pinLabel !== String(e.label);
+    const icon = wide
+      ? L.divIcon({ className: "", html: `<span class="map-pin map-pin--day">${escapeHtml(e.pinLabel)}</span>`, iconSize: [60, 30], iconAnchor: [30, 30] })
+      : L.divIcon({ className: "", html: `<span class="map-pin${e.unscheduled ? " map-pin--unsched" : ""}">${e.label}</span>`, iconSize: [30, 30], iconAnchor: [15, 30] });
     // Keep the marker so a carousel tap can focus it; they used to be discarded.
     stopMarkers.set(e.item.id, L.marker([lat, lng], { icon })
       .addTo(leafletMap)
