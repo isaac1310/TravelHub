@@ -504,7 +504,7 @@ h1, h2, h3, h4, .brand__name {
 .today__title { font-weight: 700; color: var(--heading); overflow-wrap: anywhere; }
 .today__time { font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 0.25rem; }
 .today__sub { font-size: 0.82rem; color: var(--muted); overflow-wrap: anywhere; }
-.today__maps { font: inherit; font-weight: 700; color: var(--brand-text); background: none; border: none; cursor: pointer; text-decoration: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; padding: 0 0.3rem; }
+.today__maps { font: inherit; font-weight: 700; color: var(--brand-text); background: none; border: none; cursor: pointer; text-decoration: none; white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; padding: 0; }
 .today__empty, .today__also { margin: 0; font-size: 0.9rem; color: var(--muted); }
 .today__full { justify-self: start; }
 .hero__travellers .avatar { box-shadow: 0 0 0 2px rgba(255,255,255,0.6); }
@@ -7420,8 +7420,8 @@ function renderTodayCard(trip, todayIso, nowMin) {
         <div class="today__body">
           <div class="today__title">${escapeHtml(title)}${time ? ` <span class="today__time">${escapeHtml(time)}</span>` : ""}</div>
           ${sub || conf ? `<div class="today__sub ltr">${[sub, conf].filter(Boolean).map(escapeHtml).join(" · ")}</div>` : ""}
+          ${maps /* under the address, not beside the title: "Directions" in its own column squeezed a long title to three words a line on a phone */}
         </div>
-        ${maps}
       </div>`;
   };
 
