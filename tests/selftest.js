@@ -150,6 +150,7 @@
       releaseV1153();
       releaseV210();
       releaseV230();
+      releaseV240();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -707,7 +708,8 @@
         .map((el) => el.textContent.trim());
       const pins = [...document.querySelectorAll(".map-pin")]
         .filter((el) => !el.classList.contains("map-pin--hotel"))
-        .map((el) => el.textContent.trim());
+        // v2.4.0: on All a pin reads "Thu · 2" — its number must still be the row's number.
+        .map((el) => el.textContent.trim().replace(/^.* · /, ""));
       if (!pins.length) return skip("nothing geocoded in the seed data");
       return eq(pins.join(","), rows.join(","), "pin labels vs row labels");
     });
@@ -4039,10 +4041,13 @@
       } finally { location.hash = hash; itinerarySubTab = sub; timelineDayIso = day; }
     });
 
-    check("Today rows link to Google Maps by coordinates", () => {
+    check("Today rows route to the place by its coordinates", () => {
       const html = card([timed("Louvre", "09:00", "11:00", { location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } })], 10 * 60);
-      // v1.15.2: the link is the place anchored at its coordinates, not a bare coordinate search.
-      return /@48\.8606,2\.3376/.test(html) ? true : "no coordinate-anchored Maps link in the Now row";
+      /* v2.4.0: the row offers Directions (a button → gdirLink) rather than the place card.
+         Directions must go to the coordinates, not a name that could match another branch. */
+      if (!/data-today-dir=/.test(html)) return "no Directions button in the Now row";
+      return /destination=48\.8606%2C2\.3376/.test(gdirLink({ title: "Louvre", location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } }, null, "walking"))
+        ? true : "directions do not use the coordinates";
     });
   }
 
@@ -4662,7 +4667,7 @@
     check("a pin-only import row asks for a name instead of using the coordinates", () => {
       const row = bulkRowFromLink("https://www.google.com/maps/@48.8584,2.2945,15z", "", "");
       if (row.name || row.title) return `row named "${row.name || row.title}"`;
-      return /type a name to import it/.test(String(renderBulkRows)) ? true : "preview gives no naming hint";
+      return /type a name to add it/.test(String(renderBulkRows)) ? true : "preview gives no naming hint";
     });
 
     check("booking cards contain no nested interactive controls", () => {
@@ -4695,6 +4700,119 @@
       if (!/aria-label="Rename \$\{escapeHtml\(name\)\}"/.test(String(renderFamily))) return "Rename has no name";
       if (!/aria-label="Remove \$\{escapeHtml\(name\)\}"/.test(String(renderFamily))) return "Remove has no name";
       return document.getElementById("btn-add-funds")?.classList.contains("btn--primary") ? "Add funds is still the primary button" : true;
+    });
+  }
+
+  /* ===== v2.4.0 — Directions, Assign to day, simpler import, All-days pin labels ===== */
+  function releaseV240() {
+    group("v2.4.0");
+    // appPick / window.open are globals; swap them for the duration of one check.
+    const withStubs = (pickValue, fn) => {
+      const realPick = window.appPick, realOpen = window.open;
+      const opened = [];
+      window.appPick = (title, options, cb) => { opened.title = title; opened.options = options; if (pickValue !== undefined) cb(typeof pickValue === "function" ? pickValue(options) : pickValue); };
+      window.open = (url) => { opened.push(url); return null; };
+      try { return fn(opened); } finally { window.appPick = realPick; window.open = realOpen; }
+    };
+
+    check("gdirLink builds a Google directions URL: coordinates first, mode validated", () => {
+      const trip = makeTrip();
+      const at = { title: "Louvre", location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } };
+      const named = { title: "Le Comptoir", location: { name: "Le Comptoir", lat: null, lng: null } };
+      const a = gdirLink(at, trip, "transit");
+      if (a !== "https://www.google.com/maps/dir/?api=1&destination=48.8606%2C2.3376&travelmode=transit") return `coords: ${a}`;
+      if (!/travelmode=walking$/.test(gdirLink(at, trip, "teleport"))) return "an unknown mode was passed through";
+      const b = gdirLink(named, trip, "driving");
+      return /destination=Le%20Comptoir%2C%20Paris%2C%20France&travelmode=driving$/.test(b) ? true : `name: ${b}`;
+    });
+
+    check("Directions offers the three modes, last-used first, and remembers the choice", () => {
+      const trip = makeTrip();
+      const item = { id: "v240-dir", title: "Louvre", location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } };
+      let before;
+      try { before = localStorage.getItem(DIR_MODE_KEY); } catch { before = null; }
+      try {
+        const first = withStubs("transit", (opened) => { openDirections(item, trip); return opened; });
+        if (first.options.map((o) => o.value).sort().join() !== "driving,transit,walking") return "wrong mode list";
+        if (!/travelmode=transit/.test(first[0] || "")) return `opened ${first[0]}`;
+        const second = withStubs(undefined, (opened) => { openDirections(item, trip); return opened; });
+        return eq(second.options[0].value, "transit", "last-used mode first");
+      } finally {
+        try { before == null ? localStorage.removeItem(DIR_MODE_KEY) : localStorage.setItem(DIR_MODE_KEY, before); } catch { /* ignore */ }
+      }
+    });
+
+    check("the item sheet offers Assign to day only when unscheduled, Directions not for flights", () => {
+      const trip = makeTrip({ id: "v240-trip" });
+      const bi = state.items, bt = state.trips;
+      const mk = (id, over) => normalizeItem(Object.assign({ id, tripId: "v240-trip", type: "attraction", title: id, date: "", location: { name: "Somewhere", lat: 48.86, lng: 2.33 } }, over));
+      state.trips = [trip];
+      state.items = [mk("v240-unsched"), mk("v240-sched", { date: "2026-09-17" }), mk("v240-flight", { type: "flight", date: "2026-09-16" })];
+      const dlg = document.getElementById("dialog-item-actions");
+      const vis = (a) => !dlg.querySelector(`[data-item-action="${a}"]`).hidden;
+      try {
+        openItemActionsSheet(trip, "v240-unsched");
+        if (!vis("assign-day")) return "unscheduled place has no Assign to day";
+        if (!vis("directions")) return "a place has no Directions";
+        closeDialog(dlg);
+        openItemActionsSheet(trip, "v240-sched");
+        if (vis("assign-day")) return "a scheduled item offers Assign to day";
+        closeDialog(dlg);
+        openItemActionsSheet(trip, "v240-flight");
+        return vis("directions") ? "a flight offers Directions" : true;
+      } finally { closeDialog(dlg); dlg.open && dlg.close(); state.items = bi; state.trips = bt; }
+    });
+
+    check("Assign to day schedules the place at the end of the chosen day, and only if still unscheduled", () => {
+      const trip = makeTrip({ id: "v240-trip2" });
+      const bi = state.items, bt = state.trips, realSave = window.saveState, realRender = window.renderItinerary, realToast = window.showToast;
+      state.trips = [trip];
+      state.items = [
+        normalizeItem({ id: "v240-a", tripId: "v240-trip2", type: "attraction", title: "A", date: "2026-09-17", location: { name: "" } }),
+        normalizeItem({ id: "v240-b", tripId: "v240-trip2", type: "attraction", title: "B", date: "", location: { name: "" } }),
+      ];
+      window.saveState = () => {}; window.renderItinerary = () => {}; window.showToast = () => {};
+      try {
+        const b = state.items.find((i) => i.id === "v240-b");
+        withStubs((opts) => { if (opts.length !== 4) throw new Error(`offered ${opts.length} days`); return "2026-09-17"; }, () => pickDayFor(trip, b));
+        if (b.date !== "2026-09-17") return `date is "${b.date}"`;
+        const a = state.items.find((i) => i.id === "v240-a");
+        if (!(b.sortIndex > (a.sortIndex ?? 0))) return "not placed after the day's existing stop";
+        // Already scheduled (e.g. by another device) — a stale pick must not move it.
+        withStubs("2026-09-18", () => pickDayFor(trip, b));
+        return eq(b.date, "2026-09-17", "stale pick");
+      } finally {
+        state.items = bi; state.trips = bt; window.saveState = realSave; window.renderItinerary = realRender; window.showToast = realToast;
+      }
+    });
+
+    check("Today rows offer Directions instead of a bare Maps link", () => {
+      const trip = makeTrip({ id: "v240-today", startDate: "2026-09-16", endDate: "2026-09-19" });
+      const bi = state.items;
+      state.items = [normalizeItem({ id: "v240-t1", tripId: "v240-today", type: "attraction", title: "Louvre", date: "2026-09-17", startTime: "10:00", endTime: "12:00", location: { name: "Louvre", lat: 48.86, lng: 2.33 } })];
+      try {
+        const html = renderTodayCard(trip, "2026-09-17", 9 * 60);
+        if (/Maps ↗/.test(html)) return "still a Maps ↗ link";
+        return /data-today-dir="v240-t1"[^>]*>Directions</.test(html) ? true : "no Directions button on the row";
+      } finally { state.items = bi; }
+    });
+
+    check("the import sheet leads with links; AI/JSON and the saved-list note are folded away", () => {
+      const dlg = document.getElementById("dialog-import-places");
+      const ta = dlg.querySelector("textarea[name=links]");
+      if (/title/.test(ta.getAttribute("placeholder"))) return "JSON example still in the main box";
+      const more = dlg.querySelector("details.import-more");
+      if (!more || !more.querySelector("#import-copy-prompt")) return "Copy prompt is not under More import options";
+      if (/can't be shared/.test(dlg.textContent)) return "the absolute saved-list claim is back";
+      return /saved-list link directly yet/.test(more.textContent) ? true : "no precise saved-list note";
+    });
+
+    check("views are named Day by Day / Route, and All-days pins carry their weekday", () => {
+      const it = String(renderItinerary);
+      if (!/subTabButton\("timeline", "Day by Day"\)/.test(it) || !/subTabButton\("maps", "Route"\)/.test(it)) return "sub-tabs not renamed";
+      const m = String(renderMapsTab);
+      if (!/pinLabel = mapDayFilter === "all" \? `\$\{fmtDow\(d\)\} · \$\{e\.label\}`/.test(m)) return "All-days pins have no weekday";
+      return /map-pin--day/.test(m) ? true : "wide day pin not used";
     });
   }
 
