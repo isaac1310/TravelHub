@@ -4576,7 +4576,9 @@ function openFundsDialog(entry = null) {
   form.reset();
   /* Rollovers are not editable here: the amount is bound to trip budgets that
      reduceSourceBudgets already changed, so changing it would leave the two disagreeing. */
-  const editable = entry && entry.type !== "rollover" ? entry : null;
+  /* An entry is only an entry if it has an id. Anything else — an Event, most likely — opens
+     the dialog for a new addition instead of an edit that can never be saved. */
+  const editable = entry && entry.id && entry.type !== "rollover" ? entry : null;
   form.fundId.value = editable ? editable.id : "";
   form.amount.value = editable ? editable.amount : "";
   form.date.value = editable ? editable.date || todayISO() : todayISO();
@@ -6108,8 +6110,11 @@ function bindEvents() {
     render();
   });
 
-  /* v2.3.0: wrapped. Passed bare, the click Event arrived as `entry`, was taken for a fund row to
-     edit, and every save looked up fund id "undefined" and silently did nothing. */
+  /* Wrapped, not passed bare: a listener hands its function the click event, and
+     openFundsDialog's first parameter is the entry to edit. Passed bare, the event was taken
+     for an entry, its missing id was written into the form as the string "undefined", and Save
+     looked for a fund addition called "undefined", found none and did nothing. Broken from
+     v1.11.1, when editing gave the function that parameter, until v2.2.2. */
   $("btn-add-funds").addEventListener("click", () => openFundsDialog());
   /* <details> has no "dismiss" behaviour of its own — it stays open until the summary is
      clicked again, so it would sit over the Overview panel after you picked something and
