@@ -152,6 +152,7 @@
       releaseV210();
       releaseV230();
       releaseV240();
+      releaseV250();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -4814,6 +4815,126 @@
       const m = String(renderMapsTab);
       if (!/pinLabel = mapDayFilter === "all" \? `\$\{fmtDow\(d\)\} · \$\{e\.label\}`/.test(m)) return "All-days pins have no weekday";
       return /map-pin--day/.test(m) ? true : "wide day pin not used";
+    });
+  }
+
+  /* ===== v2.5.0 — reservation state: ideas vs. bookings ===== */
+  function releaseV250() {
+    group("v2.5.0");
+    const raw = (over) => Object.assign({ id: "v250-x", tripId: "v250-t", type: "attraction", title: "X", date: "", confirmation: "", location: { name: "" } }, over);
+
+    check("pre-v2.5 items infer reserved: flights, hotels, a day or a confirmation", () => {
+      const cases = [
+        [{ type: "flight" }, true], [{ type: "hotel" }, true], [{ date: "2026-09-17" }, true],
+        [{ confirmation: "AB12" }, true], [{ confirmation: "   " }, false], [{}, false], [{ type: "restaurant" }, false],
+      ];
+      for (const [over, want] of cases) {
+        const it = normalizeItem(raw(over));
+        if (it.reserved !== want) return `${JSON.stringify(over)} → ${it.reserved}, wanted ${want}`;
+      }
+      return true;
+    });
+
+    check("an explicit choice survives normalize — a dated idea stays an idea", () => {
+      const once = normalizeItem(raw({ date: "2026-09-17", reserved: false }));
+      const twice = normalizeItem(JSON.parse(JSON.stringify(once)));
+      if (once.reserved !== false || twice.reserved !== false) return "reserved:false was overwritten by the inference";
+      return eq(normalizeItem(raw({ reserved: true })).reserved, true, "undated but reserved");
+    });
+
+    check("merge keeps a local 'idea' against a remote from before v2.5 (no field)", () => {
+      const base = { trips: [makeTrip({ id: "v250-t" })], items: [raw({ id: "v250-m", date: "2026-09-17" })] };          // pre-v2.5: no field
+      const local = { trips: [makeTrip({ id: "v250-t" })], items: [{ ...raw({ id: "v250-m", date: "2026-09-17" }), reserved: false }] };
+      const remote = { trips: [makeTrip({ id: "v250-t" })], items: [raw({ id: "v250-m", date: "2026-09-17", title: "Renamed" })] }; // old device edit
+      const out = merge3(base, local, remote).state;
+      const m = normalizeState(out).items.find((i) => i.id === "v250-m");
+      if (!m) return "item lost in merge";
+      if (m.title !== "Renamed") return "remote title edit lost";
+      return eq(m.reserved, false, "local idea choice");
+    });
+
+    check("What's new reports a reservation change", () => {
+      const doc = (reserved) => ({ currentFunds: 0, trips: [makeTrip({ id: "v250-t" })], items: [{ ...raw({ date: "2026-09-17" }), reserved }] });
+      if (diffStates(doc(true), doc(true)).length) return "fixture is not quiet on its own";
+      const lines = diffStates(doc(true), doc(false));
+      return lines.some((l) => (l.screens || []).includes("bookings")) ? true : "no change line for reserved";
+    });
+
+    check("the item form pre-ticks Reserved from day/confirmation, and never overrides your choice", () => {
+      const trip = makeTrip({ id: "v250-t" });
+      const bt = state.trips, bi = state.items;
+      state.trips = [trip]; state.items = [];
+      const form = document.getElementById("form-item");
+      const dlg = document.getElementById("dialog-item");
+      const fire = (el, type) => el.dispatchEvent(new Event(type, { bubbles: true }));
+      try {
+        openItemDialog("v250-t", null, { date: "2026-09-17" });
+        if (!form.reserved.checked) return "a new item with a day is not pre-ticked";
+        closeDialog(dlg);
+        openItemDialog("v250-t", null, {});
+        if (form.reserved.checked) return "a new undated place is pre-ticked";
+        form.confirmation.value = "X1"; fire(form.confirmation, "input");
+        if (!form.reserved.checked) return "typing a confirmation did not tick it";
+        closeDialog(dlg);
+        openItemDialog("v250-t", null, {});
+        form.reserved.checked = false; fire(form.reserved, "change");      // you decided: idea
+        form.date.value = "2026-09-18"; fire(form.date, "change");
+        if (form.reserved.checked) return "a day overrode an explicit untick";
+        closeDialog(dlg);
+        const idea = normalizeItem(raw({ id: "v250-e", tripId: "v250-t", date: "2026-09-17", reserved: false }));
+        state.items = [idea];
+        openItemDialog("v250-t", idea);
+        return form.reserved.checked ? "editing a dated idea shows it reserved" : true;
+      } finally { closeDialog(dlg); dlg.open && dlg.close(); state.trips = bt; state.items = bi; }
+    });
+
+    check("saving the form stores the switch", () => {
+      const trip = makeTrip({ id: "v250-t" });
+      const bt = state.trips, bi = state.items;
+      state.trips = [trip]; state.items = [];
+      const form = document.getElementById("form-item");
+      const dlg = document.getElementById("dialog-item");
+      try {
+        openItemDialog("v250-t", null, { date: "2026-09-17" });
+        form.title.value = "v250 saved idea";
+        form.reserved.checked = false;
+        form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+        const it = state.items.find((i) => i.title === "v250 saved idea");
+        if (!it) return "item not saved";
+        return eq(it.reserved, false, "saved reserved");
+      } finally { closeDialog(dlg); dlg.open && dlg.close(); state.trips = bt; state.items = bi; render(); }
+    });
+
+    check("Bookings splits Reserved and Ideas, both folded, and counts only reservations", () => {
+      const trip = makeTrip({ id: "v250-bk" });
+      const bt = state.trips, bi = state.items;
+      state.trips = [trip];
+      state.items = [
+        normalizeItem({ id: "v250-r", tripId: "v250-bk", type: "hotel", title: "Hotel R", date: "2026-09-16", location: { name: "" } }),
+        normalizeItem({ id: "v250-i", tripId: "v250-bk", type: "attraction", title: "Idea I", date: "", location: { name: "" } }),
+      ];
+      bookingsGroupOpen.set("v250-bk", true);
+      try {
+        renderBookings();
+        const sec = (k) => document.querySelector(`[data-booking-section="v250-bk:${k}"]`);
+        if (!sec("reserved") || !sec("ideas")) return "missing a section";
+        if (sec("reserved").open || sec("ideas").open) return "a section starts unfolded";
+        if (!sec("reserved").querySelector('[data-item="v250-r"]') || !sec("ideas").querySelector('[data-item="v250-i"]')) return "item in the wrong section";
+        const badge = document.querySelector('[data-trip-group="v250-bk"] .badge').textContent;
+        return /^1 booking · 1 idea$/.test(badge) ? true : `badge "${badge}"`;
+      } finally { state.trips = bt; state.items = bi; bookingsGroupOpen.delete("v250-bk"); renderBookings(); }
+    });
+
+    check("Assign to day marks the place reserved", () => {
+      const trip = makeTrip({ id: "v250-as" });
+      const bt = state.trips, bi = state.items, realPick = window.appPick, realSave = window.saveState, realR = window.renderItinerary, realT = window.showToast;
+      state.trips = [trip];
+      state.items = [normalizeItem({ id: "v250-u", tripId: "v250-as", type: "attraction", title: "U", date: "", location: { name: "" } })];
+      window.appPick = (t, o, cb) => cb("2026-09-17"); window.saveState = () => {}; window.renderItinerary = () => {}; window.showToast = () => {};
+      try {
+        pickDayFor(trip, state.items[0]);
+        return eq(state.items[0].reserved, true, "reserved after assigning a day");
+      } finally { state.trips = bt; state.items = bi; window.appPick = realPick; window.saveState = realSave; window.renderItinerary = realR; window.showToast = realT; }
     });
   }
 
