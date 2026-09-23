@@ -809,6 +809,15 @@ h1, h2, h3, .hero h1, .hero p {
 .booking__title { font-weight: 600; margin: 0; font-size: 0.95rem; }
 .import-more { margin: 0 0 0.8rem; }
 .import-more summary { cursor: pointer; font-weight: 600; color: var(--brand-text); min-height: 44px; display: flex; align-items: center; }
+.booking-section { margin: 0.4rem 0 0.6rem; }
+.booking-section > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: var(--text); }
+.booking-section > summary { list-style: none; }
+.booking-section > summary::-webkit-details-marker { display: none; }
+/* Folded by default, so the heading has to look like something you open. */
+.booking-section > summary::after { content: "▾"; margin-inline-start: auto; color: var(--muted); transform: rotate(-90deg); transition: transform 0.15s; }
+.booking-section[open] > summary::after { transform: none; }
+@media (prefers-reduced-motion: reduce) { .booking-section > summary::after { transition: none; } }
+.booking-section__hint { margin: 0 0 0.5rem; font-size: 0.82rem; color: var(--muted); }
 .booking__open { padding: 0; border: none; background: none; font: inherit; color: inherit; text-align: start; cursor: pointer; }
 .booking__open:focus-visible { outline: none; box-shadow: var(--ring); border-radius: 4px; }
 .booking__ref { color: var(--muted); font-size: 0.82rem; margin: 0.15rem 0 0.5rem; }
@@ -2672,6 +2681,12 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
             <input type="text" dir="auto" name="notes" maxlength="300" />
           </label>
         </details>
+        <!-- v2.5.0: outside the fold, so what Bookings will do with this item is always visible.
+             Ticks itself when the item gets a day or a confirmation, unless you set it yourself. -->
+        <label class="field field--check">
+          <input type="checkbox" name="reserved" />
+          <span>Reserved — booked, ticketed or committed</span>
+        </label>
         <div class="dialog__actions">
           <button type="button" class="btn btn--ghost" data-dialog-close>Cancel</button>
           <button type="submit" class="btn btn--primary">Save</button>
@@ -2718,7 +2733,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.4.0";
+const APP_VERSION = "v2.5.0";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
    other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
@@ -2981,7 +2996,19 @@ function normalizeItem(it) {
        Like sortIndex, the form does not carry it — handleItemSubmit must copy it
        forward explicitly or every edit silently un-visits the place. */
     visitedAt: typeof it.visitedAt === "string" ? it.visitedAt : "",
+    /* v2.5.0: an idea you might do vs. something actually booked or committed to. A real
+       boolean once set; a document from before v2.5 carries none, so infer it the same way the
+       form pre-ticks it — deterministic, so every device infers the same value and the merge
+       sees no change. */
+    reserved: typeof it.reserved === "boolean" ? it.reserved : inferReserved(it),
   };
+}
+
+/* Flights and hotels are bookings by nature; anything else counts once it has a day or a
+   confirmation number (Isaac, v2.5.0: "day or confirmation"). Only a default — the switch in
+   the item form can always say otherwise. */
+function inferReserved(it) {
+  return it.type === "flight" || it.type === "hotel" || Boolean(it.date) || Boolean(String(it.confirmation || "").trim());
 }
 
 function normalizeTripMeta(trip) {
@@ -4926,6 +4953,8 @@ function openItemDialog(tripId, item = null, defaults = {}) {
     form.type.value = defaults.type || "attraction";
     form.date.value = defaults.date || "";
   }
+  form.reserved.checked = item ? item.reserved : inferReserved({ type: form.type.value, date: form.date.value });
+  form._reservedTouched = false;
 
   buildTripChoice(defaults.chooseTrip ? tripId : null);
   syncItemTypeFields();
@@ -4933,6 +4962,21 @@ function openItemDialog(tripId, item = null, defaults = {}) {
   /* The day can change while the dialog is open, and the positions belong to the
      day you are actually filing this under. */
   form.date.addEventListener("change", onItemDateChangedForPosition);
+  if (!form._reservedWired) {
+    form._reservedWired = true;
+    form.reserved.addEventListener("change", () => { form._reservedTouched = true; });
+    /* Getting a day, a confirmation, or becoming a flight/hotel ticks it — once, and never
+       over a choice you made in this dialog. Clearing them never unticks: that is yours to do. */
+    const autoTick = () => {
+      if (form._reservedTouched || form.reserved.checked) return;
+      const conf = form.type.value === "flight" ? form.confirmationF.value : form.confirmation.value;
+      if (inferReserved({ type: form.type.value, date: form.date.value, confirmation: conf })) form.reserved.checked = true;
+    };
+    form.date.addEventListener("change", autoTick);
+    form.confirmation.addEventListener("input", autoTick);
+    form.confirmationF.addEventListener("input", autoTick);
+    form.type.addEventListener("change", autoTick); // the chips dispatch a non-bubbling change
+  }
   openDialog($("dialog-item"));
   /* showModal() lands on the first focusable control — Flight — so editing a Hotel had the
      keyboard on the wrong chip while Hotel was the one highlighted. */
@@ -5053,6 +5097,7 @@ function handleItemSubmit(e) {
     },
     confirmation: (isFlight ? form.confirmationF.value : form.confirmation.value).trim(),
     notes: form.notes.value.trim(),
+    reserved: form.reserved.checked,
   });
   if (!item || !item.title) return; // v2.1.0: a day is optional — undated places sit in Unscheduled
 
@@ -5075,6 +5120,7 @@ function handleItemSubmit(e) {
   if (existing) Object.assign(existing, item);
   else state.items.push(item);
   bookingsGroupOpen.set(tripId, true); // what you just added or edited must be visible on Bookings
+  bookingsSectionOpen.add(`${tripId}:${item.reserved ? "reserved" : "ideas"}`); // v2.5.0: and its section
 
   /* The Position picker. Applied AFTER the item is in state.items, because
      placeItemAtIndex reads the day's rendered order to work out the new
@@ -6251,6 +6297,7 @@ const NAV = [
 let itineraryTripId = null;
 let itinerarySubTab = "timeline"; // "timeline" | "maps"
 let mapDayFilter = "all";
+const bookingsSectionOpen = new Set(); // v2.5.0: "<tripId>:reserved" / "<tripId>:ideas" the user unfolded
 let bookingsFilter = "all"; // all | flight | hotel | other
 let expenseFilter = "all";  // all | unpaid | paid | unsettled — Budget expense rows (v1.15.0, v2.0)
 /* Remembered like expensesFoldOpen: re-rendering the Budget screen must not reopen a
@@ -8659,6 +8706,7 @@ function pickDayFor(trip, item) {
     const live = state.items.find((i) => i.id === item.id);
     if (!live || live.date) return; // scheduled elsewhere meanwhile — do not move it
     live.date = iso;
+    live.reserved = true; // v2.5.0: a day counts as committed
     if (!live.startTime) live.sortIndex = nextDayPosition(trip.id, iso);
     saveState();
     renderItinerary();
@@ -9141,8 +9189,7 @@ function renderBookings() {
         (a.date || "").localeCompare(b.date || "") || (a.startTime || "").localeCompare(b.startTime || "")
       );
       if (items.length === 0) return "";
-      const cards = items
-        .map((it) => {
+      const cardHtml = (it) => {
           const icon = itemTypeIcon(it.type);
           const exp = linkedExpense(it);
           const when = [parseISO(it.date) ? fmtDay(parseISO(it.date)) : "", fmtTimeRange(it)].filter(Boolean).join(" · ");
@@ -9180,15 +9227,27 @@ function renderBookings() {
               </div>
               <button type="button" class="icon-btn booking__more" data-booking-more="${escapeHtml(it.id)}" aria-label="More actions for ${escapeHtml(it.title)}" title="More"><svg viewBox="0 0 24 24" fill="none"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg></button>
             </div>`;
-        })
-        .join("");
+        };
+      /* v2.5.0: ideas are not bookings. Both stay here — an idea may be the next thing to book —
+         but in their own section, and only reserved ones count. Both sections start folded
+         (Isaac) and remember what you opened, per trip. */
+      const reserved = items.filter((it) => it.reserved);
+      const ideas = items.filter((it) => !it.reserved);
+      const section = (kind, label, list, hint) => list.length ? `
+          <details class="booking-section" data-booking-section="${escapeHtml(trip.id)}:${kind}" ${bookingsSectionOpen.has(`${trip.id}:${kind}`) ? "open" : ""}>
+            <summary><span>${label}</span> <span class="badge">${list.length}</span></summary>
+            ${hint ? `<p class="booking-section__hint">${hint}</p>` : ""}
+            <div class="booking-list">${list.map(cardHtml).join("")}</div>
+          </details>` : "";
+      const cards = section("reserved", "Reserved", reserved, "")
+        + section("ideas", "Ideas", ideas, "Not booked yet. Give one a day or a confirmation number, or tick Reserved, and it moves up.");
       /* v1.15.0: one collapsible group per trip. Open by default only for the trip you are on
          (else the next upcoming one); every render remembers what you opened or closed. */
       const open = bookingsGroupOpen.get(trip.id) === true;
       return `
         <details class="booking-group" data-trip-group="${escapeHtml(trip.id)}" ${open ? "open" : ""}>
-          <summary><h2 class="booking-group__title">${nameWithCity(trip)} <span class="badge">${items.length} booking${items.length === 1 ? "" : "s"}</span></h2></summary>
-          <div class="booking-list">${cards}</div>
+          <summary><h2 class="booking-group__title">${nameWithCity(trip)} <span class="badge">${reserved.length} booking${reserved.length === 1 ? "" : "s"}${ideas.length ? ` · ${ideas.length} idea${ideas.length === 1 ? "" : "s"}` : ""}</span></h2></summary>
+          ${cards}
         </details>`;
     };
   /* v1.14.0: past and cancelled trips' bookings fold away. The chips above still count them —
@@ -9249,6 +9308,12 @@ function renderBookings() {
   $("bookings-past")?.addEventListener("toggle", (e) => { bookingsPastOpen = e.target.open; });
   body.querySelectorAll("[data-trip-group]").forEach((d) =>
     d.addEventListener("toggle", () => bookingsGroupOpen.set(d.getAttribute("data-trip-group"), d.open))
+  );
+  body.querySelectorAll("[data-booking-section]").forEach((d) =>
+    d.addEventListener("toggle", () => {
+      const key = d.getAttribute("data-booking-section");
+      if (d.open) bookingsSectionOpen.add(key); else bookingsSectionOpen.delete(key);
+    })
   );
   body.querySelectorAll("[data-add-expense]").forEach((b) =>
     b.addEventListener("click", () => {
@@ -9783,7 +9848,7 @@ function diffStates(prevRaw, nextRaw) {
   const out = [];
 
   diffCollection(prev.items, next.items,
-    ["type", "title", "details", "date", "endDate", "startTime", "endTime", "location", "confirmation", "notes", "flightNo", "departAirport", "arrivalAirport", "visitedAt"],
+    ["type", "title", "details", "date", "endDate", "startTime", "endTime", "location", "confirmation", "notes", "flightNo", "departAirport", "arrivalAirport", "visitedAt", "reserved"],
     changeItemLabel, ["itinerary", "bookings"], out);
 
   const prevChk = new Map(prev.checklist.map((c) => [c.id, c]));
