@@ -58,8 +58,23 @@ for country in fallbacks['countries']:
 fallback_html = html.replace('TravelHub · A softer way to see the world', 'TravelHub · European country fallback art')
 fallback_html = fallback_html.replace('A softer way<br>to see the world.', 'Europe, one landmark<br>at a time.')
 fallback_html = fallback_html.replace('A collection of pastel travel paintings. Familiar landmarks, sun-warmed architecture and the quiet romance of a vintage postcard.', 'Country-level fallback paintings for European destinations without dedicated city art. Each design centers one recognizable landmark.')
-fallback_html = fallback_html.replace('<p><a href="country-fallbacks.html">Review all European country fallbacks →</a></p>', '<p><a href="index.html">← Return to the destination gallery</a></p>')
+fallback_html = fallback_html.replace('<p><a href="country-fallbacks.html">Review all European country fallbacks →</a></p>', '<p><a href="index.html">← Return to the destination gallery</a> · <a href="region-fallbacks.html">View regional fallback prototype →</a></p>')
 fallback_html = fallback_html.replace('\n'.join(cards), '\n'.join(fallback_cards))
 fallback_html = fallback_html.replace('21 destination artworks + one legacy fallback · Click any painting to open the full artwork.<br>Original blueprint comparison is available where a blueprint exists.', f"{fallbacks['count']} European country fallbacks · City art is chosen first, then country art, then the legacy generic fallback.")
 (root / 'country-fallbacks.html').write_text(fallback_html)
-print(f"Built {len(cities)} destination artworks and {fallbacks['count']} country fallbacks.")
+
+regions = json.loads((root / 'region-fallbacks.json').read_text())
+region_cards = []
+for region in regions['regions']:
+    region_cards.append(f'''<article class="card" data-name="{escape((region['label'] + ' ' + region['landmark']).lower())}">
+      <a class="art" href="{escape(region['src'])}" target="_blank" aria-label="Open {escape(region['label'])} regional fallback artwork"><img src="{escape(region['src'])}" alt="Pastel regional fallback illustration for {escape(region['label'])}"></a>
+      <div class="caption"><div><h2>{escape(region['label'])}</h2><p>{escape(region['landmark'])}</p></div><span class="number">{len(region_cards)+1:02}</span></div>
+    </article>''')
+region_html = html.replace('TravelHub · A softer way to see the world', 'TravelHub · Regional fallback prototype')
+region_html = region_html.replace('A softer way<br>to see the world.', 'A region, its character<br>and its country.')
+region_html = region_html.replace('A collection of pastel travel paintings. Familiar landmarks, sun-warmed architecture and the quiet romance of a vintage postcard.', 'A regional fallback combines a recognizable landmark, scenery the region is famous for, and a subtle national flag in the same pastel design language.')
+region_html = region_html.replace('<p><a href="country-fallbacks.html">Review all European country fallbacks →</a></p>', '<p><a href="country-fallbacks.html">← Return to country fallbacks</a></p>')
+region_html = region_html.replace('\n'.join(cards), '\n'.join(region_cards))
+region_html = region_html.replace('21 destination artworks + one legacy fallback · Click any painting to open the full artwork.<br>Original blueprint comparison is available where a blueprint exists.', 'Regional fallback prototype · City art remains the first choice, followed by region, country and then the legacy generic fallback.')
+(root / 'region-fallbacks.html').write_text(region_html)
+print(f"Built {len(cities)} destination artworks, {fallbacks['count']} country fallbacks and {len(regions['regions'])} regional prototype.")
