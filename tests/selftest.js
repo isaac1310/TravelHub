@@ -153,6 +153,7 @@
       releaseV230();
       releaseV240();
       releaseV250();
+      releaseV252();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -4773,7 +4774,7 @@
         normalizeItem({ id: "v240-a", tripId: "v240-trip2", type: "attraction", title: "A", date: "2026-09-17", location: { name: "" } }),
         normalizeItem({ id: "v240-b", tripId: "v240-trip2", type: "attraction", title: "B", date: "", location: { name: "" } }),
       ];
-      window.saveState = () => {}; window.renderItinerary = () => {}; window.showToast = () => {};
+      window.saveState = () => {}; window.renderItinerary = () => {}; window.showToast = () => {}; window.__realRender = window.render; window.__realLand = window.landOnDay; window.render = () => {}; window.landOnDay = () => {};
       try {
         const b = state.items.find((i) => i.id === "v240-b");
         withStubs((opts) => { if (opts.length !== 4) throw new Error(`offered ${opts.length} days`); return "2026-09-17"; }, () => pickDayFor(trip, b));
@@ -4784,7 +4785,7 @@
         withStubs("2026-09-18", () => pickDayFor(trip, b));
         return eq(b.date, "2026-09-17", "stale pick");
       } finally {
-        state.items = bi; state.trips = bt; window.saveState = realSave; window.renderItinerary = realRender; window.showToast = realToast;
+        state.items = bi; state.trips = bt; window.saveState = realSave; window.renderItinerary = realRender; window.showToast = realToast; window.render = window.__realRender; window.landOnDay = window.__realLand;
       }
     });
 
@@ -4916,11 +4917,79 @@
       const bt = state.trips, bi = state.items, realPick = window.appPick, realSave = window.saveState, realR = window.renderItinerary, realT = window.showToast;
       state.trips = [trip];
       state.items = [normalizeItem({ id: "v251-u", tripId: "v251-as", type: "attraction", title: "U", date: "", location: { name: "" } })];
-      window.appPick = (t, o, cb) => cb("2026-09-17"); window.saveState = () => {}; window.renderItinerary = () => {}; window.showToast = () => {};
+      window.appPick = (t, o, cb) => cb("2026-09-17"); window.saveState = () => {}; window.renderItinerary = () => {}; window.showToast = () => {}; window.__realRender = window.render; window.__realLand = window.landOnDay; window.render = () => {}; window.landOnDay = () => {};
       try {
         pickDayFor(trip, state.items[0]);
         return eq(itemStatus(state.items[0]), "planned", "status after assigning a day");
-      } finally { state.trips = bt; state.items = bi; window.appPick = realPick; window.saveState = realSave; window.renderItinerary = realR; window.showToast = realT; }
+      } finally { state.trips = bt; state.items = bi; window.appPick = realPick; window.saveState = realSave; window.renderItinerary = realR; window.showToast = realT; window.render = window.__realRender; window.landOnDay = window.__realLand; }
+    });
+  }
+
+  /* ===== v2.5.2 — Assign-to-day refresh, regional covers, the Reserved flag ===== */
+  function releaseV252() {
+    group("v2.5.2");
+
+    check("Assign to day refreshes like Save: render() and land on the chosen day", () => {
+      const trip = makeTrip({ id: "v252-as" });
+      const bt = state.trips, bi = state.items, bSub = itinerarySubTab;
+      const real = { pick: window.appPick, save: window.saveState, render: window.render, land: window.landOnDay, toast: window.showToast };
+      const calls = [];
+      state.trips = [trip];
+      state.items = [normalizeItem({ id: "v252-u", tripId: "v252-as", type: "attraction", title: "U", date: "", location: { name: "" } })];
+      itinerarySubTab = "timeline";
+      window.appPick = (t, o, cb) => cb("2026-09-18"); window.saveState = () => {}; window.showToast = () => {};
+      window.render = () => calls.push("render"); window.landOnDay = (iso, o) => calls.push(`land:${iso}:${o && o.chosen}`);
+      try {
+        pickDayFor(trip, state.items[0]);
+        return eq(calls.join(","), "render,land:2026-09-18:true", "refresh calls");
+      } finally {
+        state.trips = bt; state.items = bi; itinerarySubTab = bSub;
+        window.appPick = real.pick; window.saveState = real.save; window.render = real.render; window.landOnDay = real.land; window.showToast = real.toast;
+      }
+    });
+
+    check("regions borrow their own painting: Bavaria, Munich, Tuscany, Florence", () => {
+      const t = (d) => ({ name: "x", destination: d, destinations: [d] });
+      const expected = [
+        ["Bavaria", "region/bavaria.jpg"], ["Munich, Germany", "region/bavaria.jpg"], ["München", "region/bavaria.jpg"],
+        ["Florence, Italy", "region/tuscany.jpg"], ["Siena", "region/tuscany.jpg"],
+        ["Berlin, Germany", "berlin.jpg"], ["Rome, Italy", "rome.jpg"], ["Hamburg, Germany", "country/germany.jpg"],
+      ];
+      for (const [d, file] of expected) {
+        if (coverFileFor(t(d)) !== file) return `${d} → ${coverFileFor(t(d))}, not ${file}`;
+      }
+      return true;
+    });
+
+    check("a reserved item carries a visible Reserved flag; booked, planned and ideas do not", () => {
+      const mk = (over) => normalizeItem(Object.assign({ id: "v252-f", tripId: "v252-t", type: "attraction", title: "F", date: "2026-09-17", location: { name: "" } }, over));
+      if (!/class="flag-reserved">Reserved</.test(itemCard({ item: mk({ reservation: true }) }, 1))) return "timeline card has no flag";
+      if (/flag-reserved/.test(itemCard({ item: mk({}) }, 1))) return "a planned item is flagged";
+      if (/flag-reserved/.test(itemCard({ item: mk({ type: "hotel", reservation: true }) }, 0))) return "a hotel is flagged";
+      if (/flag-reserved/.test(itemCard({ item: mk({ type: "hotel", reservation: true, endDate: "2026-09-18" }), checkout: true }, 0))) return "a checkout row is flagged";
+      const bt = state.trips, bi = state.items;
+      state.trips = [makeTrip({ id: "v252-t" })];
+      state.items = [mk({ id: "v252-r", tripId: "v252-t", reservation: true })];
+      bookingsGroupOpen.set("v252-t", true);
+      try {
+        renderBookings();
+        const card = document.querySelector('#bookings-body [data-item="v252-r"]');
+        return card && card.querySelector(".flag-reserved") ? true : "Bookings card has no flag";
+      } finally { state.trips = bt; state.items = bi; bookingsGroupOpen.delete("v252-t"); renderBookings(); }
+    });
+
+    check("the Reserved flag is readable (≥ 4.5:1)", () => {
+      const probe = document.createElement("span");
+      probe.className = "flag-reserved"; probe.textContent = "Reserved";
+      document.body.appendChild(probe);
+      try {
+        const cs = getComputedStyle(probe);
+        const rgb = (c) => { const p = document.createElement("i"); p.style.color = c; document.body.appendChild(p); const m = getComputedStyle(p).color.match(/[\d.]+/g).slice(0, 3).map(Number); p.remove(); return m; };
+        const lum = (c) => { const [r, g, b] = rgb(c).map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+        const a = lum(cs.color), b = lum(cs.backgroundColor);
+        const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        return ratio >= 4.5 ? true : `${ratio.toFixed(2)}:1`;
+      } finally { probe.remove(); }
     });
   }
 
@@ -5872,8 +5941,10 @@
          region IS the destination. */
       const t = (d) => ({ name: "x", destination: d, destinations: [d] });
       const expected = [
-        ["Tuscany", "country/italy.jpg"],
-        ["Toscana", "country/italy.jpg"],
+        // v2.5.2: Tuscany has its own regional painting now.
+        ["Tuscany", "region/tuscany.jpg"],
+        ["Toscana", "region/tuscany.jpg"],
+        ["Umbria", "country/italy.jpg"],
         ["Provence", "country/france.jpg"],
         ["Santorini", "country/greece.jpg"],
         ["Cotswolds", "country/united-kingdom.jpg"],
