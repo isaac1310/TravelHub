@@ -19,6 +19,11 @@ The images are wide, full-bleed artwork with a target aspect ratio of 2.1:1, mat
 - `country-fallbacks.html`: searchable review gallery for every European country fallback.
 - `country-fallbacks.json`: country names, aliases, landmarks, and image mapping.
 - `country-fallback-prompts.json`: exact prompts for newly generated country art.
+- `region-fallbacks.html`: review gallery for the regional fallback concept.
+- `region-fallbacks.json`: regional prototype metadata and artwork mapping.
+- `region-fallback-prompts.json`: exact prompt used for the regional prototype.
+- `region-fallbacks/tuscany.png`: Tuscany example with the Florence Duomo, Tuscan landscape and Italian flag.
+- `region-fallbacks/bavaria.png`: Bavaria example with Neuschwanstein Castle, the Alps and German flag.
 - `build-gallery.py`: rebuilds the gallery and manifest from the existing blueprint catalog.
 
 Generation used the built-in `image_gen` tool. All final artwork is stored here in the project; there are no external image dependencies.

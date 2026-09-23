@@ -1,0 +1,7 @@
+{
+  "generator": "built-in image_gen",
+  "prompts": {
+    "tuscany": "Wide 2.1:1 pastel travel-poster painting for Tuscany, Italy. Florence Cathedral's terracotta dome and Giotto's Campanile are the dominant recognizable landmark, surrounded by rolling hills, vineyards, ochre roofs and cypress trees at a warm peach-and-rose sunset. A small accurate Italian tricolor flag is naturally integrated on a balcony. Refined gouache and watercolor texture in blush, apricot, cream, terracotta, sage and slate blue. No text, labels, borders, logos or watermark.",
+    "bavaria": "Wide 2.1:1 pastel travel-poster painting for Bavaria, Germany. Neuschwanstein Castle is the dominant recognizable landmark, surrounded by the Bavarian Alps, an alpine lake, meadows, wildflowers, fir trees and traditional farmhouses at a warm peach-and-rose sunset. A small accurate German flag is naturally integrated on a castle terrace. Refined gouache and watercolor texture in blush, apricot, cream, alpine green, sage and slate blue. No text, labels, borders, logos or watermark."
+  }
+}

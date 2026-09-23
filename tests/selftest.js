@@ -150,6 +150,7 @@
       releaseV1153();
       releaseV222();
       releaseV210();
+      releaseV230();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -4550,6 +4551,151 @@
         form.requestSubmit();
         return eq(state.items[0].location.url, FULL, "url survives an unrelated edit");
       } finally { if (document.getElementById("dialog-item").open) closeDialog(document.getElementById("dialog-item")); state.items = bi; saveState(); render(); }
+    });
+  }
+
+  /* ===== v2.3.0 — clarity fixes from the 23 Sept UX sweep ===== */
+  function releaseV230() {
+    group("v2.3.0");
+    const lum = (c) => {
+      const probe = document.createElement("span");
+      probe.style.color = c; document.body.appendChild(probe);
+      const m = getComputedStyle(probe).color.match(/-?[\d.]+/g); probe.remove();
+      const [r, g, b] = m.slice(0, 3).map((v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+
+    check("legLabel states straight-line distance and invents no minutes or travel mode", () => {
+      const near = legLabel({ lat: 48.8584, lng: 2.2945 }, { lat: 48.8606, lng: 2.3376 });
+      const far = legLabel({ lat: 48.8584, lng: 2.2945 }, { lat: 48.8049, lng: 2.1204 });
+      for (const l of [near, far]) {
+        if (!/^\d+(\.\d)? km straight-line$/.test(l)) return `got "${l}"`;
+      }
+      return true;
+    });
+
+    check("tripHotelForDay returns null for an uncovered night, keeps an undated hotel", () => {
+      const trip = makeTrip({ id: "v230-trip" });
+      const hotel = { id: "v230-hotel", tripId: "v230-trip", type: "hotel", title: "H", date: "2026-09-16", endDate: "2026-09-17", location: { name: "", lat: null, lng: null } };
+      const bi = state.items;
+      state.items = [normalizeItem(hotel)];
+      try {
+        const inside = tripHotelForDay(trip, "2026-09-17");
+        const outside = tripHotelForDay(trip, "2026-09-19");
+        if (!inside || inside.id !== "v230-hotel") return "the covering hotel was not found";
+        if (outside !== null) return `uncovered night got ${outside.id}`;
+        // An undated hotel claims no night, so it stays the trip's hotel rather than vanishing.
+        state.items.push(normalizeItem({ id: "v230-hotel-undated", tripId: "v230-trip", type: "hotel", title: "U", date: "", location: { name: "", lat: null, lng: null } }));
+        return eq(tripHotelForDay(trip, "2026-09-19")?.id, "v230-hotel-undated", "undated hotel");
+      } finally { state.items = bi; }
+    });
+
+    check("folded overview line says 'short' for a shortfall and 'Funds not set' for an empty pot", () => {
+      const bf = state.currentFunds, bh = state.fundHistory, bt = state.trips;
+      const note = document.getElementById("global-summary-note");
+      if (!note) return skip("no overview panel in this build");
+      try {
+        state.trips = [makeTrip({ id: "v230-t", budget: 500, expenses: [makeExpense({ id: "v230-e", amount: 300, currency: "ILS" })] })];
+        state.currentFunds = 100; state.fundHistory = [{ id: "v230-f", amount: 100, date: "2026-01-01" }];
+        layoutBudgetForTrip(true);
+        const shortTxt = note.textContent;
+        if (/to spare/.test(shortTxt) || /[−-]/.test(shortTxt) || !/short/.test(shortTxt)) return `shortfall read "${shortTxt}"`;
+        state.currentFunds = 0; state.fundHistory = [];
+        layoutBudgetForTrip(true);
+        return eq(note.textContent, "Funds not set", "empty pot");
+      } finally {
+        state.currentFunds = bf; state.fundHistory = bh; state.trips = bt;
+        layoutBudgetForTrip(false);
+      }
+    });
+
+    check("selected chips and the FAB keep readable labels on coral", () => {
+      const host = document.createElement("div");
+      host.innerHTML = `
+        <button class="daychip is-active">1</button>
+        <span class="filter-chips"><button class="filter-chip is-active">All</button></span>
+        <div class="trip-choice"><button aria-pressed="true">Paris</button></div>
+        <button class="fab">+</button>`;
+      document.body.appendChild(host);
+      try {
+        const bad = [...host.querySelectorAll("button")].map((b) => {
+          const cs = getComputedStyle(b);
+          const min = b.classList.contains("fab") ? 3 : 4.5; // the FAB carries an icon, not text
+          const r = contrast(cs.color, cs.backgroundColor);
+          return r < min ? `${b.className || "trip-choice"} ${r.toFixed(2)}:1` : "";
+        }).filter(Boolean);
+        return bad.length ? bad.join(", ") : true;
+      } finally { host.remove(); }
+    });
+
+    check("the header Add funds button opens a NEW fund addition, not an edit", () => {
+      const btn = document.getElementById("btn-add-funds");
+      if (!btn) return skip("no Add funds button");
+      btn.click();
+      const form = document.getElementById("form-funds");
+      const dlg = document.getElementById("dialog-funds");
+      try {
+        if (form.fundId.value) return `fundId was "${form.fundId.value}" — the click event was taken for an entry`;
+        return eq(document.getElementById("funds-title").textContent, "Add to vacation funds", "dialog title");
+      } finally { dlg.close?.(); dlg.removeAttribute?.("open"); }
+    });
+
+    check("the selected day chip's weekday label is dark on coral too", () => {
+      const host = document.createElement("div");
+      host.innerHTML = `<button class="daychip is-active"><span class="dc-dow">Mon</span><span class="dc-num">1</span></button>`;
+      document.body.appendChild(host);
+      try {
+        const chip = host.firstElementChild, dow = chip.querySelector(".dc-dow");
+        const r = contrast(getComputedStyle(dow).color, getComputedStyle(chip).backgroundColor);
+        return r >= 4.5 ? true : `weekday label ${r.toFixed(2)}:1`;
+      } finally { host.remove(); }
+    });
+
+    check("Maps links with an encoded comma (%2C) keep their pin and never become the name", () => {
+      const bare = parseMapsPaste("https://www.google.com/maps/search/?api=1&query=48.8584%2C2.2945");
+      const named = parseMapsPaste("https://www.google.com/maps/search/?api=1&query=Eiffel%20Tower%2C48.8584%2C2.2945");
+      if (bare?.kind !== "coords" || bare.lat !== 48.8584) return `bare: ${JSON.stringify(bare)}`;
+      if (named?.kind !== "place" || named.name !== "Eiffel Tower" || named.lng !== 2.2945) return `named: ${JSON.stringify(named)}`;
+      return true;
+    });
+
+    check("a pin-only import row asks for a name instead of using the coordinates", () => {
+      const row = bulkRowFromLink("https://www.google.com/maps/@48.8584,2.2945,15z", "", "");
+      if (row.name || row.title) return `row named "${row.name || row.title}"`;
+      return /type a name to import it/.test(String(renderBulkRows)) ? true : "preview gives no naming hint";
+    });
+
+    check("booking cards contain no nested interactive controls", () => {
+      const trip = makeTrip({ id: "v230-bk" });
+      const bt = state.trips, bi = state.items;
+      state.trips = [trip];
+      state.items = [normalizeItem({ id: "v230-bk-item", tripId: "v230-bk", type: "hotel", title: "Hotel V", date: "2026-09-16", location: { name: "", lat: null, lng: null } })];
+      bookingsGroupOpen.set("v230-bk", true);
+      try {
+        renderBookings();
+        const cards = [...document.querySelectorAll("#bookings-body .booking")];
+        if (!cards.length) return "no booking card rendered";
+        if (cards.some((c) => c.getAttribute("role") === "button" || c.hasAttribute("tabindex"))) return "card is still an interactive wrapper";
+        if (document.querySelector("#bookings-body button button, #bookings-body [role=button] button")) return "a button sits inside a button";
+        return truthy(cards[0].querySelector("button[data-booking-open]"), "keyboard way to open the booking");
+      } finally { state.trips = bt; state.items = bi; bookingsGroupOpen.delete("v230-bk"); renderBookings(); }
+    });
+
+    check("map day chips expose pressed state and the stops sheet uses a real expander", () => {
+      const f = String(renderMapsTab);
+      if (!/aria-pressed="\$\{mapDayFilter === iso\}"/.test(f)) return "day chips carry no aria-pressed";
+      if (!/aria-pressed="\$\{mapDayFilter === "all"\}"/.test(f)) return "the All chip carries no aria-pressed";
+      if (!/map-list__toggle[^`]*aria-expanded/.test(f)) return "stops sheet expander is not a button with aria-expanded";
+      return /querySelector\("\.map-list__title"\)\?\.addEventListener/.test(f) ? "click handler still sits on the heading" : true;
+    });
+
+    check("Budget + adds an expense when a trip is on, and member actions name the person", () => {
+      const nav = String(router);
+      if (!/budget:\s*activeExpenseTrip\(state\.trips\)\s*\?\s*"Add expense"/.test(nav)) return "budget + still labelled Add funds";
+      if (!/aria-label="Rename \$\{escapeHtml\(name\)\}"/.test(String(renderFamily))) return "Rename has no name";
+      if (!/aria-label="Remove \$\{escapeHtml\(name\)\}"/.test(String(renderFamily))) return "Remove has no name";
+      return document.getElementById("btn-add-funds")?.classList.contains("btn--primary") ? "Add funds is still the primary button" : true;
     });
   }
 

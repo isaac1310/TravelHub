@@ -1,0 +1,22 @@
+{
+  "style": "pastel-vintage-travel",
+  "aspectRatio": "2.1:1",
+  "generator": "built-in image_gen",
+  "status": "prototype",
+  "regions": [
+    {
+      "key": "tuscany",
+      "label": "Tuscany, Italy",
+      "country": "Italy",
+      "landmark": "Florence Duomo · Tuscan hills · Italian tricolor",
+      "src": "region-fallbacks/tuscany.png"
+    },
+    {
+      "key": "bavaria",
+      "label": "Bavaria, Germany",
+      "country": "Germany",
+      "landmark": "Neuschwanstein Castle · Bavarian Alps · German flag",
+      "src": "region-fallbacks/bavaria.png"
+    }
+  ]
+}
