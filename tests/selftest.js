@@ -148,6 +148,7 @@
       releaseV1151();
       releaseV1152();
       releaseV1153();
+      releaseV222();
       releaseV210();
       dialogBehaviour();
       trustBoundary();
@@ -4919,6 +4920,51 @@
         if (!document.getElementById("import-copy-prompt")) return "no Copy prompt button";
         return /JSON array/.test(A.__aiImportPrompt) ? true : "prompt does not ask for JSON";
       } finally { closeDialog(dlg); }
+    });
+  }
+
+  /* ===== v2.2.2 — the Add funds button did nothing ===== */
+  function releaseV222() {
+    group("v2.2.2");
+
+    check("the Add funds button opens a NEW addition, and saving it adds to the pot", () => {
+      /* It opened "Edit fund addition" with fundId = "undefined" — the click event was taken for
+         the entry to edit — and Save silently found nothing to save. Driven through the real
+         button, because calling openFundsDialog() directly always worked. */
+      const btn = document.getElementById("btn-add-funds");
+      const dlg = document.getElementById("dialog-funds");
+      const form = document.getElementById("form-funds");
+      if (!btn) return "#btn-add-funds missing";
+      const before = Number(state.currentFunds) || 0;
+      const beforeHistory = (state.fundHistory || []).length;
+      const snapshot = structuredClone(state);
+      try {
+        btn.click();
+        if (!dlg.open) return "the dialog did not open";
+        if (form.fundId.value !== "") return `fundId is ${JSON.stringify(form.fundId.value)}, not empty`;
+        const t = document.getElementById("funds-title").textContent;
+        if (!/^Add/.test(t)) return `the dialog is titled "${t}"`;
+        form.amount.value = "250";
+        form.requestSubmit(document.getElementById("funds-submit"));
+        if (dlg.open) return "Save left the dialog open — nothing was saved";
+        const r = [
+          eq(Number(state.currentFunds), before + 250, "pot grew by the amount"),
+          eq(state.fundHistory.length, beforeHistory + 1, "one history line added"),
+        ].find((x) => x !== true);
+        return r || true;
+      } finally {
+        if (dlg.open) closeDialog(dlg);
+        state = snapshot; saveState(); render();
+      }
+    });
+
+    check("openFundsDialog ignores anything that is not a fund entry", () => {
+      const form = document.getElementById("form-funds");
+      const dlg = document.getElementById("dialog-funds");
+      try {
+        openFundsDialog(new MouseEvent("click"));
+        return eq(form.fundId.value, "", "an Event opens a new addition, not an edit");
+      } finally { if (dlg.open) closeDialog(dlg); }
     });
   }
 
