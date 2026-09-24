@@ -154,6 +154,7 @@
       releaseV240();
       releaseV250();
       releaseV252();
+      releaseV253();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -661,14 +662,13 @@
   function polishV19() {
     group("v1.9.0");
 
-    check("gmapsLink opens the place at its coordinates when the stop is geocoded", () => {
-      /* v1.15.2: a /maps/place/<name>/@lat,lng URL, not a bare coordinate search — the pin alone
-         opened lat/lng with no card. The coordinates still anchor it so the right branch opens. */
+    check("gmapsLink opens the place by name via the documented search URL, never a viewport", () => {
+      /* v2.5.3: the Google Maps app now reads /maps/place/<name>/@lat,lng as just the @viewport
+         (Isaac: "opens the last bounding box"). The documented api=1 search opens the card. */
       const item = { title: "Hotel Ibis", location: { name: "Hotel Ibis", lat: 48.8629, lng: 2.3364 } };
       const url = gmapsLink(item, { destination: "Paris, France" });
-      if (!url.includes("@48.8629,2.3364")) return "did not anchor at the coordinates: " + url;
-      if (!/\/maps\/place\/Hotel%20Ibis\//.test(url)) return "not a place URL with the name: " + url;
-      return url.includes("/search/") ? "still a bare coordinate search: " + url : true;
+      if (url.includes("@")) return "still carries a viewport: " + url;
+      return url === "https://www.google.com/maps/search/?api=1&query=Hotel%20Ibis%2C%20Paris" ? true : "unexpected: " + url;
     });
 
     check("gmapsLink falls back to a name search without coordinates", () => {
@@ -4049,8 +4049,9 @@
       /* v2.4.0: the row offers Directions (a button → gdirLink) rather than the place card.
          Directions must go to the coordinates, not a name that could match another branch. */
       if (!/data-today-dir=/.test(html)) return "no Directions button in the Now row";
-      return /destination=48\.8606%2C2\.3376/.test(gdirLink({ title: "Louvre", location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } }, null, "walking"))
-        ? true : "directions do not use the coordinates";
+      // v2.5.3: by name — coordinates made Google route to a dropped pin, not the place.
+      return /destination=Louvre&/.test(gdirLink({ title: "Louvre", location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } }, null, "walking"))
+        ? true : "directions do not go to the place by name";
     });
   }
 
@@ -4533,8 +4534,10 @@
       return [
         eq(good.location.url, FULL, "kept"),
         eq(bad.location.url, "", "foreign URL dropped"),
-        eq(gmapsLink(good, { destination: "Paris" }), FULL, "gmapsLink returns the pasted URL"),
-        /\/maps\/place\/x\/@1,2,17z/.test(gmapsLink(bad, { destination: "Paris" })) ? true : "without a URL it should be place@coords: " + gmapsLink(bad, {}),
+        // v2.5.3: FULL is a place URL with only a viewport (data=!3m1) — the bounding-box bug —
+        // so it is no longer reused; a URL carrying Google's feature id still is.
+        /api=1&query=x%2C%20Paris$/.test(gmapsLink(good, { destination: "Paris" })) ? true : "a viewport-only URL was reused: " + gmapsLink(good, {}),
+        (() => { const id = FULL.replace("data=!3m1", "data=!4m6!3m5!1s0x47e66e2964e34e2d:0x8ddca9ee380ef7e0"); const it = normalizeItem({ id: "g2", tripId: "t", type: "attraction", title: "x", location: { name: "x", url: id } }); return eq(gmapsLink(it, {}), id, "a place URL with a feature id is reused"); })(),
       ].filter((x) => x !== true).join("; ") || true;
     });
 
@@ -4718,15 +4721,16 @@
       try { return fn(opened); } finally { window.appPick = realPick; window.open = realOpen; }
     };
 
-    check("gdirLink builds a Google directions URL: coordinates first, mode validated", () => {
+    check("gdirLink builds a Google directions URL: by name, mode validated", () => {
       const trip = makeTrip();
       const at = { title: "Louvre", location: { name: "Louvre", lat: 48.8606, lng: 2.3376 } };
       const named = { title: "Le Comptoir", location: { name: "Le Comptoir", lat: null, lng: null } };
       const a = gdirLink(at, trip, "transit");
-      if (a !== "https://www.google.com/maps/dir/?api=1&destination=48.8606%2C2.3376&travelmode=transit") return `coords: ${a}`;
+      // v2.5.3: name + city, not coordinates (a lat,lng destination is a dropped pin).
+      if (a !== "https://www.google.com/maps/dir/?api=1&destination=Louvre%2C%20Paris&travelmode=transit") return `named: ${a}`;
       if (!/travelmode=walking$/.test(gdirLink(at, trip, "teleport"))) return "an unknown mode was passed through";
       const b = gdirLink(named, trip, "driving");
-      return /destination=Le%20Comptoir%2C%20Paris%2C%20France&travelmode=driving$/.test(b) ? true : `name: ${b}`;
+      return /destination=Le%20Comptoir%2C%20Paris&travelmode=driving$/.test(b) ? true : `name: ${b}`;
     });
 
     check("Directions offers the three modes, last-used first, and remembers the choice", () => {
@@ -4990,6 +4994,44 @@
         const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
         return ratio >= 4.5 ? true : `${ratio.toFixed(2)}:1`;
       } finally { probe.remove(); }
+    });
+  }
+
+  /* ===== v2.5.3 — Maps links open the place, not the last bounding box ===== */
+  function releaseV253() {
+    group("v2.5.3");
+    const trip = { destination: "Rome, Italy" };
+    const it = (title, loc) => ({ title, location: Object.assign({ name: "", lat: null, lng: null, url: "" }, loc) });
+
+    check("no link the app builds carries a viewport (@lat,lng)", () => {
+      const cases = [it("Pantheon", { name: "Pantheon", lat: 41.8986, lng: 12.4769 }), it("Dinner", { name: "Roscioli, Via dei Giubbonari 21", lat: 41.89, lng: 12.47 })];
+      for (const c of cases) {
+        for (const u of [gmapsLink(c, trip), gdirLink(c, trip, "walking")]) if (/@-?\d/.test(u)) return `viewport in ${u}`;
+      }
+      return true;
+    });
+
+    check("the query says the place once, adds the city only when missing", () => {
+      const q = (t, l) => placeQuery(it(t, l), trip);
+      const cases = [
+        [["Pantheon", { name: "Pantheon" }], "Pantheon, Rome"],
+        [["Hotel Artemide", { name: "Via Nazionale 22" }], "Hotel Artemide, Via Nazionale 22, Rome"],
+        [["Dinner", { name: "Roscioli, Via dei Giubbonari 21" }], "Dinner, Roscioli, Via dei Giubbonari 21"],
+        [["Colosseum", { name: "Colosseum Rome" }], "Colosseum Rome"],
+        [["", { lat: 41.9, lng: 12.5 }], "41.9,12.5"],
+      ];
+      for (const [[t, l], want] of cases) { const got = q(t, l); if (got !== want) return `${t}/${l.name || "coords"} → "${got}", wanted "${want}"`; }
+      return true;
+    });
+
+    check("a saved link is reused only when it identifies a place", () => {
+      const view = "https://www.google.com/maps/@41.8986,12.4769,15z";
+      const search = "https://www.google.com/maps/search/Pantheon/@41.8986,12.4769,15z";
+      const pin = "https://www.google.com/maps/place/Pantheon/@41.89,12.47,17z/data=!3m1!4b1!4m6!3m5!8m2!3d41.8986!4d12.4769";
+      const fid = "https://www.google.com/maps/place/Pantheon/@41.89,12.47,17z/data=!4m6!3m5!1s0x132f604f678640a9:0xcad165fa2036ce2c";
+      if (isPlaceUrl(view) || isPlaceUrl(search)) return "a viewport or search link counted as a place";
+      if (!isPlaceUrl(pin) || !isPlaceUrl(fid)) return "a real place link was rejected";
+      return eq(gmapsLink(it("Pantheon", { name: "Pantheon", url: search }), trip), "https://www.google.com/maps/search/?api=1&query=Pantheon%2C%20Rome", "search link replaced by name");
     });
   }
 

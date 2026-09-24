@@ -2739,7 +2739,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.5.2";
+const APP_VERSION = "v2.5.3";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
    other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
@@ -8679,32 +8679,54 @@ function tripHotelForDay(trip, iso) {
    name alone is last because "Hotel Ibis, Paris" can land on a different branch. */
 function gmapsLink(item, trip) {
   const loc = item.location || {};
-  if (loc.url) return loc.url;
-  const hasCoords = loc.lat != null && loc.lng != null;
-  const name = (loc.name || item.title || "").trim();
-  if (hasCoords && name) {
-    return `https://www.google.com/maps/place/${encodeURIComponent(name)}/@${loc.lat},${loc.lng},17z`;
-  }
-  if (hasCoords) {
-    return `https://www.google.com/maps/search/?api=1&query=${loc.lat},${loc.lng}`;
-  }
-  const q = `${loc.name || item.title || ""}, ${trip?.destination || ""}`.replace(/,\s*$/, "").replace(/^,\s*/, "");
+  /* v2.5.3 (Isaac: every link opened "the last bounding box" on his phone). The Google Maps app
+     stopped honouring the undocumented /maps/place/<name>/@lat,lng,17z form — it reads only
+     the @viewport and shows that frame. So: a pasted link is reused only when it carries
+     Google's own place data (a feature id or the place pin); a link that is just a map view or a
+     search is exactly the bounding box, and is ignored. Everything else goes through the
+     DOCUMENTED api=1 search, by name and address, which opens the place card. */
+  if (isPlaceUrl(loc.url)) return loc.url;
+  const q = placeQuery(item, trip);
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
 }
 
+/* A Maps URL that identifies one place, not a viewport: "!1s0x…:0x…" is Google's feature id,
+   "!3d<lat>!4d<lng>" the place's own pin (as opposed to "@lat,lng", the camera). */
+function isPlaceUrl(url) {
+  return typeof url === "string" && /\/maps\/place\//.test(url) && /!1s0x[0-9a-f]+:0x[0-9a-f]+|!3d-?\d/.test(url);
+}
+
+/* What to search for: the item's name and its address/place line (deduplicated), plus the
+   trip's city when neither already says where. Coordinates only when there is no name at all —
+   Google turns a bare lat,lng into a dropped pin, not the place. */
+function placeQuery(item, trip) {
+  const loc = item.location || {};
+  const title = String(item.title || "").trim();
+  const place = String(loc.name || "").trim();
+  const low = (x) => x.toLowerCase();
+  // An imported place is titled after its location: say it once, the longer spelling winning.
+  const parts = !title ? [place] : !place ? [title]
+    : low(place).includes(low(title)) ? [place]
+    : low(title).includes(low(place)) ? [title]
+    : [title, place];
+  parts.splice(0, parts.length, ...parts.filter(Boolean));
+  if (!parts.length) return loc.lat != null && loc.lng != null ? `${loc.lat},${loc.lng}` : String(trip?.destination || "");
+  const city = String(trip?.destination || "").split(",")[0].trim();
+  if (city && !parts.some((x) => x.includes(",") || x.toLowerCase().includes(city.toLowerCase()))) parts.push(city);
+  return parts.join(", ");
+}
+
 /* v2.4.0: directions, not the place card. Google's documented Maps URL (no API key): with no
-   origin it starts from wherever the phone is. Coordinates when we have them — a name alone can
-   resolve to another branch — else the name biased by the trip's destination. */
+   origin it starts from wherever the phone is. Destination by name and address (placeQuery). */
 const TRAVEL_MODES = [
   { value: "walking", label: "Walking" },
   { value: "transit", label: "Transit" },
   { value: "driving", label: "Driving" },
 ];
 function gdirLink(item, trip, mode) {
-  const loc = item.location || {};
-  const dest = loc.lat != null && loc.lng != null
-    ? `${loc.lat},${loc.lng}`
-    : `${loc.name || item.title || ""}, ${trip?.destination || ""}`.replace(/,\s*$/, "").replace(/^,\s*/, "");
+  /* v2.5.3: by name and address, like the place card — a bare lat,lng made Google route to a
+     dropped pin instead of the place. */
+  const dest = placeQuery(item, trip);
   const m = TRAVEL_MODES.some((t) => t.value === mode) ? mode : "walking";
   return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}&travelmode=${m}`;
 }
