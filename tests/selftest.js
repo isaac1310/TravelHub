@@ -155,6 +155,7 @@
       releaseV250();
       releaseV252();
       releaseV253();
+      releaseV254();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -4804,14 +4805,10 @@
       } finally { state.items = bi; }
     });
 
-    check("the import sheet leads with links; AI/JSON and the saved-list note are folded away", () => {
-      const dlg = document.getElementById("dialog-import-places");
-      const ta = dlg.querySelector("textarea[name=links]");
-      if (/title/.test(ta.getAttribute("placeholder"))) return "JSON example still in the main box";
-      const more = dlg.querySelector("details.import-more");
-      if (!more || !more.querySelector("#import-copy-prompt")) return "Copy prompt is not under More import options";
-      if (/can't be shared/.test(dlg.textContent)) return "the absolute saved-list claim is back";
-      return /saved-list link directly yet/.test(more.textContent) ? true : "no precise saved-list note";
+    // v2.5.4 superseded v2.4.0's fold: Isaac wants both ways in plain sight (see releaseV254).
+    check("the import sheet keeps a JSON example out of the main box", () => {
+      const ta = document.querySelector("#dialog-import-places textarea[name=links]");
+      return /title/.test(ta.getAttribute("placeholder")) ? "JSON example in the main box" : true;
     });
 
     check("views are named Day by Day / Route, and All-days pins carry their weekday", () => {
@@ -5032,6 +5029,397 @@
       if (isPlaceUrl(view) || isPlaceUrl(search)) return "a viewport or search link counted as a place";
       if (!isPlaceUrl(pin) || !isPlaceUrl(fid)) return "a real place link was rejected";
       return eq(gmapsLink(it("Pantheon", { name: "Pantheon", url: search }), trip), "https://www.google.com/maps/search/?api=1&query=Pantheon%2C%20Rome", "search link replaced by name");
+    });
+  }
+
+  /* ===== v2.5.4 — re-import, place types, hotel as the day's start, hidden pins, scroll on edit ===== */
+  function releaseV254() {
+    group("v2.5.4");
+    const A = window.VacationApp;
+    // Isaac's real Bratislava–Vienna list (pre-v2.5.4 prompt: no "type"), trimmed to the rows that matter.
+    const LIST = [
+      { title: "BEIGLI Hotel & Garden", address: "Baštová 4, Bratislava", note: "מלון בברטיסלבה; לינה בתחילת הטיול ובחזרה מווינה.", date: "2026-12-11" },
+      { title: "Michael’s Gate", address: "Michalská, Bratislava", note: "שער מיכאל, סיור בעיר העתיקה.", date: "2026-12-11" },
+      { title: "Koliba Kamzík Zelená", address: "Zelená, Bratislava", note: "ארוחת צהריים 12:15–13:30, אוכל סלובקי מסורתי.", date: "2026-12-11" },
+      { title: "Slovak Pub", address: "Obchodná 62, Bratislava", note: "ארוחת צהריים 12:00–13:15, אוכל סלובקי מסורתי.", date: "2026-12-12" },
+      { title: "Aupark Bratislava", address: "Einsteinova 18, Bratislava", note: "קניון חובה בתוכנית, בסביבות 15:00–17:00.", date: "2026-12-12" },
+      { title: "UFO Observation Deck", address: "Most SNP, Bratislava", note: "אזור מגדל UFO וגשר SNP.", date: "2026-12-12" },
+      { title: "Hotel City Central", address: "Taborstraße 8, Vienna", note: "מלון בווינה; השארת מזוודות ומנוחה.", date: "2026-12-13" },
+      { title: "Stephansplatz", address: "Stephansplatz, Vienna", note: "הקתדרלה, הכיכר המרכזית ושוק חג המולד.", date: "2026-12-13" },
+      { title: "Demel", address: "Kohlmarkt 14, Vienna", note: "קפה וקינוח, במיוחד אפל שטרודל.", date: "2026-12-13" },
+      { title: "Wien Hauptbahnhof", address: "Am Hauptbahnhof 1, Vienna", note: "רכבת לברטיסלבה בסביבות 16:00.", date: "2026-12-15" },
+      { title: "Bratislava Airport", address: "Ivanská cesta, Bratislava", note: "יציאה לשדה התעופה.", date: "2026-12-16" },
+    ];
+
+    check("a list with no type no longer imports as all attractions — hotels, meals, shops, stations are recognised", () => {
+      const rows = parseBulkPlaces(JSON.stringify(LIST));
+      const want = { "BEIGLI Hotel & Garden": "hotel", "Michael’s Gate": "attraction", "Koliba Kamzík Zelená": "restaurant", "Slovak Pub": "restaurant",
+        "Aupark Bratislava": "store", "UFO Observation Deck": "attraction", "Hotel City Central": "hotel", Stephansplatz: "attraction",
+        Demel: "cafe", "Wien Hauptbahnhof": "transport", "Bratislava Airport": "transport" };
+      for (const r of rows) if (r.type !== want[r.title]) return `${r.title} → ${r.type}, wanted ${want[r.title]}`;
+      return true;
+    });
+
+    check("a stated type wins over the guess, aliases are read, an unknown one falls back to the guess", () => {
+      const rows = parseBulkPlaces(JSON.stringify([
+        { title: "Hotel Sacher", type: "restaurant" }, { title: "Naschmarkt", type: "Shopping" },
+        { title: "Casa X", type: "lodging" }, { title: "Pub Y", type: "spaceship" },
+      ]));
+      return [eq(rows[0].type, "restaurant", "stated"), eq(rows[1].type, "store", "alias"), eq(rows[2].type, "hotel", "lodging"), eq(rows[3].type, "restaurant", "unknown → guess")].find((x) => x !== true) || true;
+    });
+
+    check("an open hotel stay closes at the next hotel's check-in; a stated checkout is kept", () => {
+      const rows = parseBulkPlaces(JSON.stringify(LIST));
+      const beigli = rows.find((r) => r.title.startsWith("BEIGLI"));
+      const central = rows.find((r) => r.title === "Hotel City Central");
+      if (beigli.endDate !== "2026-12-13") return `BEIGLI checkout ${beigli.endDate}`;
+      if (central.endDate !== "") return `last stay got ${central.endDate} before the trip is known`;
+      const stated = parseBulkPlaces(JSON.stringify([{ title: "Hotel A", type: "hotel", date: "2026-12-11", checkout: "2026-12-12" }, { title: "Hotel B", type: "hotel", date: "2026-12-13" }]));
+      return eq(stated[0].endDate, "2026-12-12", "stated checkout");
+    });
+
+    check("review fixes: accented words count, 'Apartments' is not a hotel, a note only decides by its opening words", () => {
+      const cases = [["Café Central", "", "cafe"], ["Sisi Museum & Imperial Apartments", "", "attraction"], ["Aéroport Nice", "", "transport"],
+        ["Naschmarkt", "שוק ליד הקניון", "attraction"], ["Am Hof", "ליד המלון, לינה לא כאן", "attraction"], ["Stationery shop", "", "attraction"]];
+      for (const [t, n, want] of cases) { const got = guessPlaceType(t, n); if (got !== want) return `${t} / "${n}" → ${got}, wanted ${want}`; }
+      return true;
+    });
+
+    check("inferred checkouts are recomputed when a stay moves; a checkout not after check-in is dropped", () => {
+      const rows = parseBulkPlaces(JSON.stringify([
+        { title: "Hotel A", type: "hotel", date: "2026-12-11" }, { title: "Hotel B", type: "hotel", date: "2026-12-13" },
+        { title: "Hotel C", type: "hotel", date: "2026-12-15", checkout: "2026-12-14" },
+      ]));
+      if (rows[0].endDate !== "2026-12-13") return `A first ${rows[0].endDate}`;
+      if (rows[2].endDate !== "") return `C kept a checkout before its check-in: ${rows[2].endDate}`;
+      rows[0].date = "2026-12-14";
+      inferHotelCheckouts(rows);
+      if (rows[0].endDate === "2026-12-13") return "A kept a checkout from before it moved";
+      return eq(rows[1].endDate, "2026-12-14", "B now closes at A");
+    });
+
+    check("Update never lets a keyword guess overwrite a deliberate type — only an import's old 'attraction'", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const iso = getMeta(trip).startDate;
+      const bi = state.items.slice(); const bUndo = undoAction;
+      try {
+        const sacher = normalizeItem({ id: "probe-v254-sacher", tripId: trip.id, type: "hotel", title: "Probe Sacher", date: iso, endDate: getMeta(trip).endDate, confirmation: "X1", location: { name: "Probe Sacher" } });
+        state.items.push(sacher);
+        const rows = parseBulkPlaces(JSON.stringify([{ title: "Probe Sacher", note: "cake" }])); // no type → guessed attraction
+        matchExistingPlaces(trip.id, rows);
+        if (rows[0].type !== "hotel") return `preview shows ${rows[0].type}, not the type that will be kept`;
+        A.__importBulkRows(trip.id, rows, { onExisting: "update" });
+        const after = state.items.find((i) => i.id === sacher.id);
+        if (after.type !== "hotel") return `the booked hotel became ${after.type}`;
+        if (after.notes !== "cake") return "the note was not updated";
+        const picked = parseBulkPlaces(JSON.stringify([{ title: "Probe Sacher", type: "cafe" }])); // stated → wins
+        A.__importBulkRows(trip.id, picked, { onExisting: "update" });
+        return eq(state.items.find((i) => i.id === sacher.id).type, "cafe", "a stated type");
+      } finally { state.items = bi; undoAction = bUndo; saveState(); render(); }
+    });
+
+    check("the AI prompt asks for a type and a hotel checkout, one entry per stay", () => {
+      const p = A.__aiImportPrompt;
+      if (!/"type": "one of: hotel, restaurant, cafe, attraction, store, transport, other"/.test(p)) return "no type field";
+      if (!/"checkout"/.test(p)) return "no checkout field";
+      return /once per stay/.test(p) ? true : "no rule for a hotel stayed at twice";
+    });
+
+    check("geocode fallback drops the leading name but never searches a bare city", () => {
+      const f = geocodeFallbacks("UFO Observation Deck, Most SNP, Bratislava");
+      if (f.join(" | ") !== "UFO Observation Deck, Most SNP, Bratislava | Most SNP, Bratislava") return f.join(" | ");
+      if (geocodeFallbacks("Stephansplatz, Vienna").length !== 1) return "a 'name, city' place fell back to the city alone";
+      return eq(geocodeFallbacks("Louvre").join("|"), "Louvre", "single name");
+    });
+
+    check("pins at one spot fan out side by side; pins apart stay put", () => {
+      const at = (lat, lng) => ({ lat, lng });
+      const same = pinFanOffsets([{ loc: at(48.20799, 16.36639), w: 30 }, { loc: at(48.20799, 16.36639), w: 30 }]);
+      if (same[0] === same[1]) return `stacked: ${same}`;
+      if (same[0] + same[1] !== 0) return `not centred: ${same}`;
+      const apart = pinFanOffsets([{ loc: at(48.2085, 16.3721), w: 30 }, { loc: at(48.2079, 16.3664), w: 30 }]); // Stephansplatz vs Michaelerplatz
+      return apart.every((d) => d === 0) ? true : `moved pins 400 m apart: ${apart}`;
+    });
+
+    check("the hotel is the day's start, never a numbered stop — and on a move day it is the new hotel", () => {
+      const trip = makeTrip({ id: "probe-v254-trip", startDate: "2026-12-11", endDate: "2026-12-16", destination: "Bratislava, Slovakia" });
+      const bi = state.items.slice(), bt = state.trips.slice();
+      try {
+        state.trips.push(trip);
+        const mk = (id, type, date, endDate, title) => normalizeItem({ id, tripId: trip.id, type, title, date, endDate, location: { name: title, lat: 48.1, lng: 17.1 } });
+        const h1 = mk("probe-v254-h1", "hotel", "2026-12-11", "", "Beigli");
+        const h2 = mk("probe-v254-h2", "hotel", "2026-12-13", "", "City Central");
+        const a = mk("probe-v254-a", "attraction", "2026-12-11", "", "Michael's Gate");
+        state.items.push(h1, h2, a);
+        if (tripHotelForDay(trip, "2026-12-12")?.id !== h1.id) return "day 12 should start at the first hotel";
+        if (tripHotelForDay(trip, "2026-12-14")?.id !== h2.id) return "an open-ended first stay shadowed the second";
+        h1.endDate = "2026-12-13"; h2.endDate = "2026-12-16";
+        if (tripHotelForDay(trip, "2026-12-13")?.id !== h2.id) return "move day should start at the hotel you check into";
+        const nums = stopNumbers(trip, "2026-12-11");
+        if (nums.has(h1.id)) return "the hotel got a stop number";
+        return eq(nums.get(a.id), "1", "first sight is stop 1");
+      } finally { state.items = bi; state.trips = bt; }
+    });
+
+    check("re-import: matching places are skipped by default, updated on request, new ones added, Undo restores", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const iso = getMeta(trip).startDate;
+      const bi = state.items.slice(); const bUndo = undoAction;
+      try {
+        const old = normalizeItem({ id: "probe-v254-gate", tripId: trip.id, type: "attraction", title: "Michael's Gate", notes: "mine", date: iso,
+          startTime: "10:00", visitedAt: "2026-12-11T10:00:00Z", location: { name: "Michalská brána", lat: 48.1451, lng: 17.1067 } });
+        const hotel = normalizeItem({ id: "probe-v254-beigli", tripId: trip.id, type: "attraction", title: "BEIGLI Hotel & Garden", date: iso, location: { name: "BEIGLI Hotel & Garden, Baštová 4", lat: null, lng: null } });
+        state.items.push(old, hotel);
+        const rows = () => parseBulkPlaces(JSON.stringify([
+          { title: "Michael’s Gate", address: "Michalská, Bratislava", note: "from the list", date: "" },
+          { title: "beigli hotel & garden", address: "Baštová 4, Bratislava", note: "מלון", date: iso },
+          { title: "Probe New Place", address: "Somewhere 1, Bratislava", date: iso },
+        ]));
+        const before = state.items.length;
+        const skipRun = A.__importBulkRows(trip.id, rows());
+        if (skipRun.created.length !== 1 || skipRun.updated.length !== 0) return `skip: created ${skipRun.created.length}, updated ${skipRun.updated.length}`;
+        if (state.items.length !== before + 1) return "skip mode duplicated a place";
+        if (old.notes !== "mine" || hotel.type !== "attraction") return "skip mode changed an existing place";
+        undoAction(); // takes the new place back out
+        if (state.items.length !== before) return "Undo did not remove the added place";
+
+        const upd = A.__importBulkRows(trip.id, rows(), { onExisting: "update" });
+        if (upd.updated.length !== 2 || upd.created.length !== 1) return `update: created ${upd.created.length}, updated ${upd.updated.length}`;
+        const gate = state.items.find((i) => i.id === old.id);
+        if (gate.notes !== "from the list") return "the list's note did not replace the old one";
+        if (gate.date !== iso) return "an empty date in the list unscheduled the place";
+        if (!gate.visitedAt || gate.startTime !== "10:00") return "visited tick or time lost";
+        if (gate.location.lat !== 48.1451) return "a hand-placed pin was replaced by an address";
+        const h = state.items.find((i) => i.id === hotel.id);
+        if (h.type !== "hotel") return `the hotel stayed ${h.type}`;
+        if (h.endDate !== getMeta(trip).endDate) return `last stay should end with the trip, got "${h.endDate}"`;
+        undoAction();
+        const back = state.items.find((i) => i.id === hotel.id);
+        if (back.type !== "attraction" || state.items.find((i) => i.id === old.id).notes !== "mine") return "Undo did not restore the updated places";
+        return state.items.length === before ? true : "Undo left the added place";
+      } finally { state.items = bi; undoAction = bUndo; saveState(); render(); }
+    });
+
+    check("the dialog offers Skip/Update only when something matches, and the button says what will happen", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const bi = state.items.slice();
+      const dlg = document.getElementById("dialog-import-places");
+      try {
+        state.items.push(normalizeItem({ id: "probe-v254-dupe", tripId: trip.id, type: "attraction", title: "Probe Dupe", date: "", location: { name: "Probe Dupe" } }));
+        A.__openImportPlaces(trip.id);
+        bulkRows = parseBulkPlaces(JSON.stringify([{ title: "Probe Fresh" }]));
+        renderBulkRows();
+        if (!document.getElementById("import-existing-field").hidden) return "choice shown with nothing to match";
+        bulkRows = parseBulkPlaces(JSON.stringify([{ title: "Probe Fresh" }, { title: "probe dupe" }]));
+        renderBulkRows();
+        if (document.getElementById("import-existing-field").hidden) return "choice hidden although a row matches";
+        const btn = document.getElementById("import-places-submit");
+        if (btn.textContent !== "Add 1 place") return `skip label "${btn.textContent}"`;
+        document.querySelector('[data-import-existing="update"]').click();
+        if (btn.textContent !== "Add 1, update 1") return `update label "${btn.textContent}"`;
+        if (!document.querySelector('#import-rows [data-row-type="0"]')) return "no type picker on the row";
+        return true;
+      } finally { setImportExisting("skip"); closeDialog(dlg); bulkRows = []; state.items = bi; saveState(); render(); }
+    });
+
+    check("Import places lives in Edit trip (dated trips only); the timeline button and ⋯ entry are gone", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const dlg = document.getElementById("dialog-trip");
+      try {
+        openTripDialog(trip);
+        if (document.getElementById("trip-import-field").hidden) return "no Import places in Edit trip";
+        closeDialog(dlg);
+        openTripDialog(null);
+        if (!document.getElementById("trip-import-field").hidden) return "New trip offers an import before it has days";
+      } finally { if (dlg.open) closeDialog(dlg); }
+      if (document.querySelector('[data-overflow="import-places"]')) return "the ⋯ entry is still there";
+      const bId = itineraryTripId, bTab = itinerarySubTab;
+      try {
+        setItineraryTrip(trip.id); itinerarySubTab = "timeline"; renderItinerary();
+        return document.querySelector("#itinerary-view [data-import-places]") ? "the timeline button is still there" : true;
+      } finally { itineraryTripId = bId; itinerarySubTab = bTab; render(); }
+    });
+
+    check("dates changed in Edit trip bound the import's day pickers at once — no save-and-reopen", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate && getMeta(t).endDate);
+      if (!trip) return skip("no dated trip");
+      const tripDlg = document.getElementById("dialog-trip");
+      const imp = document.getElementById("dialog-import-places");
+      const before = { start: trip.startDate, end: trip.endDate };
+      const later = isoOf(new Date(parseISO(getMeta(trip).endDate).getTime() + 3 * 86400000));
+      try {
+        openTripDialog(trip);
+        document.getElementById("form-trip").endDate.value = later;
+        document.getElementById("trip-import-places").click();
+        if (tripDlg.open) return "Edit trip still open — the change was not saved";
+        if (trip.endDate !== later) return `trip end ${trip.endDate}, wanted ${later}`;
+        if (!imp.open) return "the import did not open";
+        bulkRows = parseBulkPlaces(JSON.stringify([{ title: "Probe Late", date: later }]));
+        renderBulkRows();
+        const input = document.querySelector('#import-rows [data-row-date="0"]');
+        if (input.max !== later) return `day picker max ${input.max}, wanted ${later}`;
+        return input.checkValidity() ? true : "the new last day is still rejected";
+      } finally {
+        if (imp.open) closeDialog(imp);
+        if (tripDlg.open) closeDialog(tripDlg);
+        bulkRows = [];
+        trip.startDate = before.start; trip.endDate = before.end; saveState(); render();
+      }
+    });
+
+    check("the import dialog shows both ways — links and the AI list — with nothing folded, and names its trip", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const dlg = document.getElementById("dialog-import-places");
+      A.__openImportPlaces(trip.id);
+      try {
+        if (dlg.querySelector("details")) return "something is still folded away";
+        const ways = [...dlg.querySelectorAll(".import-way__title")].map((h) => h.textContent);
+        if (ways.length !== 2 || !/One place/.test(ways[0]) || !/whole list/.test(ways[1])) return `ways: ${ways.join(" / ")}`;
+        if (!dlg.querySelector(".import-way #import-copy-prompt")) return "Copy prompt is not in the list section";
+        if (!document.getElementById("import-trip-field").hidden) return "trip picker shown although the trip is known";
+        return document.getElementById("import-places-title").textContent.includes(trip.name) ? true : "title does not name the trip";
+      } finally { closeDialog(dlg); }
+    });
+
+    check("after an import, a paper-plane strip says the places are being found — then what was not found", () => {
+      const trip = state.trips.find((t) => getMeta(t).startDate);
+      if (!trip) return skip("no dated trip");
+      const bi = state.items.slice(); const bUndo = undoAction; const bGeo = geoProgress;
+      const realFetch = window.fetch; window.fetch = () => new Promise(() => {}); // lookups never answer: the run stays "in progress"
+      const bId = itineraryTripId, bTab = itinerarySubTab;
+      try {
+        setItineraryTrip(trip.id); itinerarySubTab = "timeline";
+        A.__importBulkRows(trip.id, parseBulkPlaces(JSON.stringify([{ title: "Probe Geo A", address: "Street 1, Vienna" }, { title: "Probe Geo B" }])));
+        if (!geoProgress || geoProgress.total !== 2) return `progress ${JSON.stringify(geoProgress)}`;
+        renderItinerary();
+        const strip = document.querySelector("#itinerary-view [data-geo-progress]");
+        if (!strip) return "no strip on Day by Day";
+        if (!strip.querySelector(".geo-progress__plane")) return "no paper plane in the strip";
+        if (!/Finding places on the map… 0 of 2/.test(strip.textContent)) return `strip says "${strip.textContent.trim()}"`;
+        const plane = strip.querySelector(".geo-progress__plane");
+        geoProgress.done = 1; paintGeoProgress();
+        const same = document.querySelector("#itinerary-view [data-geo-progress]");
+        if (!/1 of 2/.test(same.textContent)) return "the count did not update";
+        if (same.querySelector(".geo-progress__plane") !== plane) return "the plane was rebuilt (its flight restarts every place)";
+        geoProgress.done = 2; geoProgress.missed = 1; geoProgress.finished = true; paintGeoProgress();
+        const done = document.querySelector("#itinerary-view [data-geo-progress]");
+        if (done.querySelector(".geo-progress__plane")) return "the plane is still flying after the run";
+        if (!/1 place not found — tap Locate on it in Route/.test(done.textContent)) return `final "${done.textContent.trim()}"`;
+        if (geoProgressHtml("some-other-trip") !== "") return "the strip showed on another trip";
+        geoProgress = null; paintGeoProgress();
+        return document.querySelector("[data-geo-progress]") ? "the strip outlived the run" : true;
+      } finally {
+        window.fetch = realFetch; geoProgress = bGeo; undoAction = bUndo;
+        state.items = bi; itineraryTripId = bId; itinerarySubTab = bTab; saveState(); render();
+      }
+    });
+
+    check("Route list drag reorders the day — across a flight it does not show — and the map pins follow", () => {
+      const trip = makeTrip({ id: "probe-v254-route", startDate: "2026-12-11", endDate: "2026-12-12", destination: "Vienna, Austria", destinations: ["Vienna, Austria"] });
+      const bi = state.items.slice(), bt = state.trips.slice(), bId = itineraryTripId, bTab = itinerarySubTab, bDay = mapDayFilter, bHash = location.hash;
+      const iso = "2026-12-11";
+      const mk = (id, type, title, sortIndex, lat) => normalizeItem({ id, tripId: trip.id, type, title, date: iso, sortIndex, location: { name: title, lat, lng: lat == null ? null : 16.37 } });
+      try {
+        state.trips.push(trip);
+        state.items.push(
+          mk("probe-rt-hotel", "hotel", "Probe Hotel", 1000, 48.20),
+          mk("probe-rt-a", "attraction", "Probe A", 1100, 48.21),
+          normalizeItem({ id: "probe-rt-flight", tripId: trip.id, type: "flight", title: "Probe Flight", date: iso, sortIndex: 1200, arrivalAirport: "VIE", location: { name: "VIE" } }),
+          mk("probe-rt-b", "attraction", "Probe B", 1300, 48.22),
+          mk("probe-rt-c", "attraction", "Probe C", 1400, 48.23),
+        );
+        location.hash = "#itinerary"; router();
+        setItineraryTrip(trip.id); itinerarySubTab = "maps"; mapDayFilter = iso; renderItinerary();
+        const row = (id) => document.querySelector(`#map-list .mapstop[data-stop-item="${id}"]`);
+        if (!row("probe-rt-c")) return "no draggable Route row for a stop";
+        if (document.querySelector('#map-list .mapstop[data-stop-item="probe-rt-hotel"]')) return "the hotel (start of the day) became draggable";
+        const handle = row("probe-rt-c").querySelector(".mapstop__focus");
+        const r = handle.getBoundingClientRect();
+        const pe = (type, y) => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 9, isPrimary: true, pointerType: "touch", button: 0, clientX: r.left + 20, clientY: y });
+        handle.dispatchEvent(pe("pointerdown", r.top + r.height / 2));
+        if (!dragCtx) return "a press on the row did not start a drag";
+        activateDrag(); // stands in for the 450 ms hold
+        const bTop = row("probe-rt-b").getBoundingClientRect().top;
+        window.dispatchEvent(pe("pointermove", bTop + 2));
+        window.dispatchEvent(pe("pointerup", bTop + 2));
+        const day = itemsForDay(trip, iso).filter((e) => !e.checkout).map((e) => e.item.title.replace("Probe ", "")).join(",");
+        if (day !== "Hotel,A,Flight,C,B") return `day order ${day} — wanted Hotel,A,Flight,C,B (the drop landed by list count, not beside B)`;
+        const list = [...document.querySelectorAll("#map-list .mapstop[data-stop-item]")].map((n) => n.querySelector(".mapstop__pin").textContent.trim() + n.querySelector(".act__title").textContent.trim().replace("Probe ", "")).join(",");
+        if (list !== "1A,2C,3B") return `Route list ${list}`;
+        if (typeof L === "undefined" || !leafletMap) return skip("map library not loaded — list and day order verified, pins not");
+        const pins = {};
+        leafletMap.eachLayer((l) => { const h = l.options?.icon?.options?.html || ""; const m = l.getPopup?.()?.getContent?.(); if (m && /Probe [ABC]/.test(m)) pins[m.match(/Probe ([ABC])/)[1]] = h.replace(/<[^>]+>/g, "").trim(); });
+        return pins.A === "1" && pins.C === "2" && pins.B === "3" ? true : `pins ${JSON.stringify(pins)} — wanted A=1, C=2, B=3`;
+      } finally {
+        if (dragCtx) endDrag(false);
+        state.items = bi; state.trips = bt; itineraryTripId = bId; itinerarySubTab = bTab; mapDayFilter = bDay;
+        location.hash = bHash || "#trips"; router(); saveState(); render();
+      }
+    });
+
+    check("a mouse drags on the first move; a finger still needs the hold (a quick swipe is a scroll)", () => {
+      const trip = makeTrip({ id: "probe-v254-mouse", startDate: "2026-12-11", endDate: "2026-12-12" });
+      const bi = state.items.slice(), bt = state.trips.slice(), bId = itineraryTripId, bTab = itinerarySubTab, bHash = location.hash;
+      try {
+        state.trips.push(trip);
+        ["A", "B"].forEach((t, i) => state.items.push(normalizeItem({ id: `probe-ms-${t}`, tripId: trip.id, type: "attraction", title: `Probe ${t}`, date: "2026-12-11", sortIndex: 1100 + i * 100, location: { name: "" } })));
+        location.hash = "#itinerary"; router();
+        setItineraryTrip(trip.id); itinerarySubTab = "timeline"; renderItinerary();
+        const body = () => document.querySelector('#day-2026-12-11 [data-item="probe-ms-B"] .act__body');
+        const press = (kind) => {
+          const r = body().getBoundingClientRect();
+          const pe = (type, dy) => new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 11, isPrimary: true, pointerType: kind, button: 0, clientX: r.left + 10, clientY: r.top + 5 + dy });
+          body().dispatchEvent(pe("pointerdown", 0));
+          window.dispatchEvent(pe("pointermove", -20)); // straight away, no hold
+          const state_ = dragCtx ? (dragCtx.active ? "dragging" : "pending") : "cancelled";
+          if (dragCtx) endDrag(false);
+          return state_;
+        };
+        const mouse = press("mouse");
+        if (mouse !== "dragging") return `mouse click-and-pull: ${mouse}`;
+        renderItinerary();
+        const touch = press("touch");
+        return touch === "cancelled" ? true : `finger swipe without a hold: ${touch} (it would block scrolling)`;
+      } finally {
+        if (dragCtx) endDrag(false);
+        state.items = bi; state.trips = bt; itineraryTripId = bId; itinerarySubTab = bTab;
+        location.hash = bHash || "#trips"; router(); saveState(); render();
+      }
+    });
+
+    check("editing a booking on the Bookings screen keeps the scroll position", () => {
+      const item = state.items.find((i) => i.date && state.trips.some((t) => t.id === i.tripId && getMeta(t).startDate));
+      if (!item) return skip("no dated booking");
+      const realRaf = window.requestAnimationFrame;
+      const bi = JSON.parse(JSON.stringify(state.items));
+      const prevHash = location.hash;
+      const bId = itineraryTripId, bTab = itinerarySubTab;
+      try {
+        /* The bug needs the item's day to exist in the (hidden) timeline — that is what landOnDay
+           chased — and a page long enough to scroll; the seed data alone is neither. */
+        setItineraryTrip(item.tripId); itinerarySubTab = "timeline"; renderItinerary();
+        document.body.style.minHeight = "4000px";
+        location.hash = "#bookings";
+        router();
+        if (!document.getElementById(`day-${item.date}`)) return skip("the item's day is not in the timeline");
+        window.scrollTo(0, 200);
+        if (Math.abs(window.scrollY - 200) > 2) return skip(`page would not scroll (scrollY ${window.scrollY})`);
+        window.requestAnimationFrame = (cb) => { cb(0); return 0; }; // landOnDay's settle loop runs now, not next frame
+        openItemDialog(item.tripId, item);
+        document.getElementById("form-item").requestSubmit();
+        return Math.abs(window.scrollY - 200) <= 2 ? true : `jumped to ${window.scrollY}`;
+      } finally {
+        window.requestAnimationFrame = realRaf;
+        if (document.getElementById("dialog-item").open) closeDialog(document.getElementById("dialog-item"));
+        document.body.style.minHeight = "";
+        itineraryTripId = bId; itinerarySubTab = bTab;
+        state.items = bi.map(normalizeItem); saveState(); location.hash = prevHash || "#trips"; router(); window.scrollTo(0, 0);
+      }
     });
   }
 
@@ -5353,7 +5741,7 @@
           { kind: "place", title: "Selftest B", name: "Selftest B", lat: 48.87, lng: 2.34, url: "", date: "", note: "later" },
           { kind: "list", error: "list", title: "", name: "" },
         ];
-        const created = A.__importBulkRows(trip.id, rows);
+        const { created } = A.__importBulkRows(trip.id, rows);
         if (created.length !== 2) return `created ${created.length}`;
         const b = created.find((i) => i.title === "Selftest B");
         if (b.date !== "") return "undated row got a date";
