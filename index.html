@@ -2788,7 +2788,7 @@ input:disabled, select:disabled { background: var(--cream-2); opacity: 0.7; }
 /* ============================================================
    BUDGET ENGINE  — preserved verbatim from the original app
    ============================================================ */
-const APP_VERSION = "v2.5.4";
+const APP_VERSION = "v2.5.5";
 const STORAGE_KEY = "vacation-budget-planner-v1";
 /* v2.1.0: ONE backup entry, newest wins. The two per-cause keys below used to shadow each
    other — a pre-join snapshot left behind for months would hide the snapshot taken seconds
@@ -5481,13 +5481,38 @@ function parseBulkPlaces(text) {
   return rows;
 }
 
+/* v2.5.5 (Isaac: pasted on the phone, the days were lost). Copying an AI answer on a phone takes
+   the whole message — the ```json fence, a sentence before or after — and keyboards swap " for
+   “ ” and spaces for no-break spaces. Any of these made JSON.parse fail, the text fell through to
+   the one-place-per-line reader, and every row came in as a bare name with no day. So: cut to the
+   outermost [ … ] (or { … }), straighten double curly quotes (a single ’ is left alone — it is
+   inside names like "Michael’s Gate"), and turn no-break spaces back into spaces. */
+function jsonFromPaste(src) {
+  const t = String(src || "").replace(/[\u00a0\u202f\u2007]/g, " ").replace(/[\u200b-\u200d\ufeff]/g, "");
+  const a = t.indexOf("["), o = t.indexOf("{");
+  const open = a >= 0 && (o < 0 || a < o) ? "[" : o >= 0 ? "{" : "";
+  if (!open) return null;
+  const close = open === "[" ? "]" : "}";
+  const end = t.lastIndexOf(close);
+  if (end < t.indexOf(open)) return undefined; // cut off before its closing bracket
+  const body = t.slice(t.indexOf(open), end + 1);
+  for (const candidate of [body, body.replace(/[“”„‟″]/g, '"')]) {
+    try { return JSON.parse(candidate); } catch { /* try the next repair */ }
+  }
+  return undefined; // looked like JSON, could not be read
+}
+
 function parseBulkJson(src) {
-  const t = src.trim();
-  if (!/^[\[{]/.test(t)) return null;
-  let data;
-  try { data = JSON.parse(t); } catch { return null; }
+  const data = jsonFromPaste(src);
+  if (data === null) return null; // no JSON here at all — links or names, one per line
+  if (data === undefined) {
+    // Never fall through to the line reader: it would turn each line of the JSON into a "place".
+    if (/"(title|name)"\s*:|“(title|name)”\s*:/.test(src)) return [Object.assign(bulkRowFromLink("", "", ""), { kind: "bad", error: "This looks like the AI's list but couldn't be read. Copy it again with the Copy button under the AI's answer, or try on a computer." })];
+    return null;
+  }
   const list = Array.isArray(data) ? data : Array.isArray(data?.places) ? data.places : null;
-  if (!list) return null;
+  // "Louvre [1]" is a name with a bracket in it, not a list of places.
+  if (!list || !list.length || !list.every((p) => typeof p === "string" || (p && typeof p === "object"))) return null;
   const rows = list.map((p) => {
     if (typeof p === "string") { const r = bulkRowFromLink("", p.trim(), ""); r.type = r.typeGuess = guessPlaceType(r.title, ""); return r; }
     const title = String(p?.title ?? p?.name ?? "").trim();

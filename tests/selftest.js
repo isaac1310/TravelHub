@@ -156,6 +156,7 @@
       releaseV252();
       releaseV253();
       releaseV254();
+      releaseV255();
       dialogBehaviour();
       trustBoundary();
       budgetMath();
@@ -5029,6 +5030,41 @@
       if (isPlaceUrl(view) || isPlaceUrl(search)) return "a viewport or search link counted as a place";
       if (!isPlaceUrl(pin) || !isPlaceUrl(fid)) return "a real place link was rejected";
       return eq(gmapsLink(it("Pantheon", { name: "Pantheon", url: search }), trip), "https://www.google.com/maps/search/?api=1&query=Pantheon%2C%20Rome", "search link replaced by name");
+    });
+  }
+
+  /* ===== v2.5.5 — a list pasted on the phone kept its days ===== */
+  function releaseV255() {
+    group("v2.5.5");
+    const ok = (rows, label) => {
+      if (!rows || rows.length !== 2) return `${label}: ${rows ? rows.length : "no"} rows`;
+      if (rows[0].date !== "2026-12-11" || rows[1].date !== "2026-12-12") return `${label}: days ${rows.map((r) => r.date || "—").join(",")}`;
+      if (rows[0].title !== "Michael’s Gate") return `${label}: title "${rows[0].title}"`;
+      return rows[1].type === "hotel" ? true : `${label}: type ${rows[1].type}`;
+    };
+    const J = '[{"title":"Michael’s Gate","address":"Michalská, Bratislava","date":"2026-12-11"},{"title":"BEIGLI Hotel","type":"hotel","date":"2026-12-12"}]';
+
+    check("phone-style pastes still read as the list, days included", () => {
+      const cases = {
+        "a ```json fence": "```json\n" + J + "\n```",
+        "prose around it": "Here is your list:\n\n" + J + "\n\nEnjoy the trip!",
+        "curly double quotes": J.replace(/"/g, (m, i) => (J.slice(0, i).split('"').length % 2 ? "“" : "”")),
+        "no-break spaces": J.replace(/,/g, ",\u00a0").replace("[", "[\u00a0\u00a0"),
+        "everything at once": "Sure!\n```json\n" + J.replace(/"/g, "“").replace(/,/g, ",\u00a0") + "\n```",
+      };
+      for (const [label, text] of Object.entries(cases)) { const r = ok(parseBulkPlaces(text), label); if (r !== true) return r; }
+      return true;
+    });
+
+    check("a broken AI list says so in one row instead of importing each JSON line as a place", () => {
+      const rows = parseBulkPlaces('[{"title":"Louvre","date":"2026-12-11"},{"title":"Orsay",');
+      if (rows.length !== 1) return `${rows.length} rows — the JSON lines became places`;
+      return rows[0].error && !bulkRowImportable(rows[0]) ? true : "no error on the row";
+    });
+
+    check("plain names with brackets are still names, one per line", () => {
+      const rows = parseBulkPlaces("Louvre [1]\nMusée d'Orsay");
+      return rows.length === 2 && rows[0].title === "Louvre [1]" ? true : JSON.stringify(rows.map((r) => r.title));
     });
   }
 
